@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { collection, getDocs } from "firebase/firestore";
-import { db } from "../lib/firebase"; // your firebase init
+import { db } from "@/lib/firebase"; // your firebase init
 
 export default function useUsers() {
   const [users, setUsers] = useState([]);

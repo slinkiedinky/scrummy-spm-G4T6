@@ -29,16 +29,16 @@ export function ProjectCard({ project }: ProjectCardProps) {
     }
   }
 
+  // ✅ Priority colors: high=red, medium=yellow, low=green (using your CSS vars)
   const getPriorityColor = (priority: string) => {
     switch (priority) {
       case "urgent":
-        return "bg-destructive text-destructive-foreground"
       case "high":
-        return "bg-accent text-accent-foreground"
+        return "bg-chart-6 text-white"      // red
       case "medium":
-        return "bg-chart-4 text-white"
+        return "bg-chart-7 text-white"      // yellow
       case "low":
-        return "bg-chart-5 text-white"
+        return "bg-green-500 text-white"      // green (same tone as low risk)
       default:
         return "bg-muted text-muted-foreground"
     }

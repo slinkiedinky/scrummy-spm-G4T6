@@ -3,7 +3,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import { Calendar, Clock, Target, TrendingUp } from "lucide-react"
+import { Calendar, Clock, Target, TrendingUp, AlertTriangle } from "lucide-react"
 import type { Project } from "@/types/project"
 
 interface ProjectOverviewProps {
@@ -17,6 +17,22 @@ export function ProjectOverview({ project }: ProjectOverviewProps) {
   const overdueTasks = project.tasks.filter(
     (task) => new Date(task.dueDate) < new Date() && task.status !== "completed",
   ).length
+
+  const getUpcomingDeadlines = () => {
+    const today = new Date()
+    const upcomingTasks = project.tasks
+      .filter((task) => task.status !== "completed")
+      .map((task) => ({
+        ...task,
+        daysUntilDue: Math.ceil((new Date(task.dueDate).getTime() - today.getTime()) / (1000 * 60 * 60 * 24)),
+      }))
+      .sort((a, b) => a.daysUntilDue - b.daysUntilDue)
+      .slice(0, 5) // Show top 5 most urgent
+
+    return upcomingTasks
+  }
+
+  const upcomingDeadlines = getUpcomingDeadlines()
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString("en-US", {
@@ -88,6 +104,54 @@ export function ProjectOverview({ project }: ProjectOverviewProps) {
           </CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <AlertTriangle className="h-5 w-5 text-accent" />
+            Upcoming Deadlines
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {upcomingDeadlines.length === 0 ? (
+            <p className="text-muted-foreground text-sm">No upcoming deadlines</p>
+          ) : (
+            <div className="space-y-3">
+              {upcomingDeadlines.map((task) => (
+                <div
+                  key={task.id}
+                  className="flex items-center justify-between p-3 rounded-lg border border-border bg-background/50"
+                >
+                  <div className="flex-1">
+                    <h4 className="font-medium text-foreground">{task.title}</h4>
+                    <p className="text-sm text-muted-foreground">Due: {formatDate(task.dueDate)}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge
+                      variant={task.daysUntilDue < 0 ? "destructive" : task.daysUntilDue <= 1 ? "default" : "secondary"}
+                      className={
+                        task.daysUntilDue < 0
+                          ? "bg-destructive text-destructive-foreground"
+                          : task.daysUntilDue <= 1
+                            ? "bg-accent text-accent-foreground"
+                            : ""
+                      }
+                    >
+                      {task.daysUntilDue < 0
+                        ? `${Math.abs(task.daysUntilDue)} days overdue`
+                        : task.daysUntilDue === 0
+                          ? "Due today"
+                          : task.daysUntilDue === 1
+                            ? "Due tomorrow"
+                            : `${task.daysUntilDue} days left`}
+                    </Badge>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Project Details */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

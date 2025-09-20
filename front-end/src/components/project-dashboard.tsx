@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
-import { Search, Plus, Filter } from "lucide-react"
+import { Search, Plus, Filter, TrendingDown } from "lucide-react"
 import type { Project } from "@/types/project"
 
 export function ProjectDashboard() {
@@ -30,6 +30,29 @@ export function ProjectDashboard() {
     return projects.filter((p) => p.status === status).length
   }
 
+  const getMedianDaysOverdue = () => {
+    const today = new Date()
+    const allOverdueTasks = projects
+      .flatMap((project) => project.tasks)
+      .filter((task) => task.status !== "completed" && new Date(task.dueDate) < today)
+      .map((task) => {
+        const daysOverdue = Math.ceil((today.getTime() - new Date(task.dueDate).getTime()) / (1000 * 60 * 60 * 24))
+        return daysOverdue
+      })
+      .sort((a, b) => a - b)
+
+    if (allOverdueTasks.length === 0) return 0
+
+    const middle = Math.floor(allOverdueTasks.length / 2)
+    if (allOverdueTasks.length % 2 === 0) {
+      return Math.round((allOverdueTasks[middle - 1] + allOverdueTasks[middle]) / 2)
+    } else {
+      return allOverdueTasks[middle]
+    }
+  }
+
+  const medianDaysOverdue = getMedianDaysOverdue()
+
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
@@ -46,7 +69,7 @@ export function ProjectDashboard() {
         </div>
 
         {/* Stats Overview */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
           <div className="bg-background rounded-lg p-4 border border-border">
             <div className="flex items-center justify-between">
               <div>
@@ -84,6 +107,22 @@ export function ProjectDashboard() {
               </div>
               <Badge className="bg-chart-3 text-white">Completed</Badge>
             </div>
+          </div>
+          <div className="bg-background rounded-lg p-4 border border-border">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Median Days Overdue</p>
+                <p className={`text-2xl font-bold ${medianDaysOverdue > 0 ? "text-destructive" : "text-foreground"}`}>
+                  {medianDaysOverdue}
+                </p>
+              </div>
+              <TrendingDown
+                className={`h-4 w-4 ${medianDaysOverdue > 0 ? "text-destructive" : "text-muted-foreground"}`}
+              />
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              {medianDaysOverdue === 0 ? "No overdue tasks" : "Across all projects"}
+            </p>
           </div>
         </div>
 

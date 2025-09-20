@@ -25,7 +25,7 @@ export function TaskBoard({ project }: TaskBoardProps) {
       task.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
       task.description.toLowerCase().includes(searchTerm.toLowerCase())
     const matchesPriority = priorityFilter === "all" || task.priority === priorityFilter
-    const matchesAssignee = assigneeFilter === "all" || task.assignee.id === assigneeFilter
+    const matchesAssignee = assigneeFilter === "all" || task.assignee === assigneeFilter
 
     return matchesSearch && matchesPriority && matchesAssignee
   })

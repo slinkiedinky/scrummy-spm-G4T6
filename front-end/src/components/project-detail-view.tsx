@@ -5,6 +5,7 @@ import { mockProjects } from "@/lib/mock-data"
 import { TaskBoard } from "@/components/task-board"
 import { ProjectHeader } from "@/components/project-header"
 import { ProjectOverview } from "@/components/project-overview"
+import { ProjectTeamView } from "@/components/project-team-view"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
 import { ArrowLeft } from "lucide-react"
@@ -68,8 +69,8 @@ export function ProjectDetailView({ projectId }: ProjectDetailViewProps) {
               <ProjectOverview project={project} />
             </TabsContent>
 
-            <TabsContent value="team" className="h-full m-0 p-6">
-              <div className="text-center text-muted-foreground">Team management coming soon...</div>
+            <TabsContent value="team" className="h-full m-0 p-6 overflow-auto">
+              <ProjectTeamView project={project} />
             </TabsContent>
           </div>
         </Tabs>

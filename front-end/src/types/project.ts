@@ -6,14 +6,16 @@ export interface TeamMember {
     role: string
     department: string
   }
+
+  export type TaskStatus = "todo" | "in-progress" | "blocked" | "completed"
   
   export interface Task {
     id: string
     title: string
     description: string
-    status: "todo" | "in-progress" | "review" | "completed" | "blocked"
+    status: TaskStatus
     priority: "low" | "medium" | "high" | "urgent"
-    assignee: TeamMember
+    assignee: string
     dueDate: string
     createdAt: string
     updatedAt: string

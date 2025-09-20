@@ -12,7 +12,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Search, Plus, Filter, TrendingDown, X, ArrowUpDown, ArrowUp, ArrowDown, CalendarIcon } from "lucide-react"
 import { format } from "date-fns"
 import type { Project } from "@/types/project"
-import type { DateRange } from "react-day-picker"     // ✅ import DateRange type
+import type { DateRange } from "react-day-picker"
 
 type SortField = "overdue" | "completion" | "deadline"
 type SortOrder = "asc" | "desc"
@@ -32,15 +32,15 @@ export function ProjectDashboard() {
   const [employeeFilter, setEmployeeFilter] = useState<string>("all")
   const [taskStatusFilter, setTaskStatusFilter] = useState<string>("all")
 
-  // ✅ Correct DateRange state (can be undefined until user selects)
+  // date range + popover
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined)
+  const [dateOpen, setDateOpen] = useState(false)
 
   const [sortField, setSortField] = useState<SortField>("deadline")
   const [sortOrder, setSortOrder] = useState<SortOrder>("asc")
 
   const activeFilters = useMemo((): ActiveFilter[] => {
     const filters: ActiveFilter[] = []
-
     if (projectFilter !== "all") {
       const project = projects.find((p) => p.id === projectFilter)
       filters.push({ type: "project", value: projectFilter, label: `Project: ${project?.name || projectFilter}` })
@@ -59,7 +59,6 @@ export function ProjectDashboard() {
       const toStr = dateRange?.to ? format(dateRange.to, "MMM dd") : "End"
       filters.push({ type: "dateRange", value: "dateRange", label: `Date: ${fromStr} - ${toStr}` })
     }
-
     return filters
   }, [projectFilter, departmentFilter, employeeFilter, taskStatusFilter, dateRange, projects])
 
@@ -79,7 +78,6 @@ export function ProjectDashboard() {
       const matchesTaskStatus =
         taskStatusFilter === "all" || project.tasks.some((task) => task.status === taskStatusFilter)
 
-      // ✅ Robust date-range check
       const due = new Date(project.dueDate)
       const fromOk = dateRange?.from ? due >= dateRange.from : true
       const toOk = dateRange?.to ? due <= dateRange.to : true
@@ -93,7 +91,6 @@ export function ProjectDashboard() {
     filtered.sort((a, b) => {
       let aValue: number
       let bValue: number
-
       switch (sortField) {
         case "overdue":
           aValue = a.overduePercentage || 0
@@ -110,7 +107,6 @@ export function ProjectDashboard() {
         default:
           return 0
       }
-
       const result = aValue - bValue
       return sortOrder === "asc" ? result : -result
     })
@@ -136,7 +132,7 @@ export function ProjectDashboard() {
         setTaskStatusFilter("all")
         break
       case "dateRange":
-        setDateRange(undefined)   // ✅ use undefined, not {}
+        setDateRange(undefined)
         break
     }
   }
@@ -146,14 +142,13 @@ export function ProjectDashboard() {
     setDepartmentFilter("all")
     setEmployeeFilter("all")
     setTaskStatusFilter("all")
-    setDateRange(undefined)       // ✅ use undefined, not {}
+    setDateRange(undefined)
     setSearchTerm("")
   }
 
   const handleSort = (field: SortField) => {
-    if (sortField === field) {
-      setSortOrder(sortOrder === "asc" ? "desc" : "asc")
-    } else {
+    if (sortField === field) setSortOrder(sortOrder === "asc" ? "desc" : "asc")
+    else {
       setSortField(field)
       setSortOrder("asc")
     }
@@ -198,6 +193,7 @@ export function ProjectDashboard() {
 
         {/* Stats Overview */}
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
+          {/* Active Projects — tag removed */}
           <div className="bg-background rounded-lg p-4 border border-border">
             <div className="flex items-center justify-between">
               <div>
@@ -206,9 +202,10 @@ export function ProjectDashboard() {
                   {projects.filter((p) => p.status === "active").length}
                 </p>
               </div>
-              <Badge variant="default" className="bg-primary text-primary-foreground">Active</Badge>
             </div>
           </div>
+
+          {/* Planning — tag removed */}
           <div className="bg-background rounded-lg p-4 border border-border">
             <div className="flex items-center justify-between">
               <div>
@@ -217,9 +214,10 @@ export function ProjectDashboard() {
                   {projects.filter((p) => p.status === "planning").length}
                 </p>
               </div>
-              <Badge variant="secondary">Planning</Badge>
             </div>
           </div>
+
+          {/* On Hold — left without a tag */}
           <div className="bg-background rounded-lg p-4 border border-border">
             <div className="flex items-center justify-between">
               <div>
@@ -228,9 +226,10 @@ export function ProjectDashboard() {
                   {projects.filter((p) => p.status === "on-hold").length}
                 </p>
               </div>
-              <Badge variant="outline">On Hold</Badge>
             </div>
           </div>
+
+          {/* Completed — tag removed */}
           <div className="bg-background rounded-lg p-4 border border-border">
             <div className="flex items-center justify-between">
               <div>
@@ -239,9 +238,10 @@ export function ProjectDashboard() {
                   {projects.filter((p) => p.status === "completed").length}
                 </p>
               </div>
-              <Badge className="bg-chart-3 text-white">Completed</Badge>
             </div>
           </div>
+
+          {/* Median Days Overdue */}
           <div className="bg-background rounded-lg p-4 border border-border">
             <div className="flex items-center justify-between">
               <div>
@@ -258,6 +258,7 @@ export function ProjectDashboard() {
           </div>
         </div>
 
+        {/* Filters */}
         <div className="space-y-4">
           <div className="flex flex-col lg:flex-row gap-4">
             <div className="relative flex-1">
@@ -323,9 +324,14 @@ export function ProjectDashboard() {
                 </SelectContent>
               </Select>
 
-              <Popover>
+              {/* Date Range (click to open calendar) */}
+              <Popover open={dateOpen} onOpenChange={setDateOpen}>
                 <PopoverTrigger asChild>
-                  <Button variant="outline" className="w-[180px] justify-start text-left font-normal bg-transparent">
+                  <Button
+                    variant="outline"
+                    className="w-[180px] justify-start text-left font-normal bg-transparent"
+                    onClick={() => setDateOpen((o) => !o)}
+                  >
                     <CalendarIcon className="mr-2 h-4 w-4" />
                     {dateRange?.from ? (
                       dateRange?.to ? (
@@ -340,13 +346,16 @@ export function ProjectDashboard() {
                     )}
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
+                <PopoverContent className="w-auto p-0 z-50" align="start">
                   <Calendar
                     initialFocus
                     mode="range"
-                    defaultMonth={dateRange?.from}
+                    defaultMonth={dateRange?.from ?? new Date()}
                     selected={dateRange}
-                    onSelect={setDateRange}
+                    onSelect={(range) => {
+                      setDateRange(range)
+                      if (range?.from && range?.to) setDateOpen(false)
+                    }}
                     numberOfMonths={2}
                   />
                 </PopoverContent>

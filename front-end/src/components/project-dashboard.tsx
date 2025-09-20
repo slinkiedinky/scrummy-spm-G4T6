@@ -32,9 +32,8 @@ export function ProjectDashboard() {
   const [employeeFilter, setEmployeeFilter] = useState<string>("all")
   const [taskStatusFilter, setTaskStatusFilter] = useState<string>("all")
 
-  // date range + popover
+  // Date range state (uncontrolled Popover handles open/close)
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined)
-  const [dateOpen, setDateOpen] = useState(false)
 
   const [sortField, setSortField] = useState<SortField>("deadline")
   const [sortOrder, setSortOrder] = useState<SortOrder>("asc")
@@ -78,6 +77,7 @@ export function ProjectDashboard() {
       const matchesTaskStatus =
         taskStatusFilter === "all" || project.tasks.some((task) => task.status === taskStatusFilter)
 
+      // Date range filter (inclusive)
       const due = new Date(project.dueDate)
       const fromOk = dateRange?.from ? due >= dateRange.from : true
       const toOk = dateRange?.to ? due <= dateRange.to : true
@@ -117,23 +117,20 @@ export function ProjectDashboard() {
   const uniqueDepartments = useMemo(() => [...new Set(projects.map((p) => p.department).filter(Boolean))], [projects])
   const uniqueEmployees = useMemo(() => [...new Set(projects.flatMap((p) => p.team.map((t) => t.name)))], [projects])
 
-  const removeFilter = (filterToRemove: ActiveFilter) => {
-    switch (filterToRemove.type) {
+  // Helper used by the chip "×" to actually clear a filter
+  type FilterType = ActiveFilter["type"]
+  function removeFilterByType(type: FilterType) {
+    switch (type) {
       case "project":
-        setProjectFilter("all")
-        break
+        setProjectFilter("all"); break
       case "department":
-        setDepartmentFilter("all")
-        break
+        setDepartmentFilter("all"); break
       case "employee":
-        setEmployeeFilter("all")
-        break
+        setEmployeeFilter("all"); break
       case "taskStatus":
-        setTaskStatusFilter("all")
-        break
+        setTaskStatusFilter("all"); break
       case "dateRange":
-        setDateRange(undefined)
-        break
+        setDateRange(undefined); break
     }
   }
 
@@ -325,12 +322,11 @@ export function ProjectDashboard() {
               </Select>
 
               {/* Date Range (click to open calendar) */}
-              <Popover open={dateOpen} onOpenChange={setDateOpen}>
+              <Popover>
                 <PopoverTrigger asChild>
                   <Button
                     variant="outline"
                     className="w-[180px] justify-start text-left font-normal bg-transparent"
-                    onClick={() => setDateOpen((o) => !o)}
                   >
                     <CalendarIcon className="mr-2 h-4 w-4" />
                     {dateRange?.from ? (
@@ -346,16 +342,14 @@ export function ProjectDashboard() {
                     )}
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-auto p-0 z-50" align="start">
+
+                <PopoverContent className="w-auto p-0 z-[1000]">
                   <Calendar
                     initialFocus
                     mode="range"
                     defaultMonth={dateRange?.from ?? new Date()}
                     selected={dateRange}
-                    onSelect={(range) => {
-                      setDateRange(range)
-                      if (range?.from && range?.to) setDateOpen(false)
-                    }}
+                    onSelect={setDateRange}
                     numberOfMonths={2}
                   />
                 </PopoverContent>
@@ -366,13 +360,25 @@ export function ProjectDashboard() {
           {activeFilters.length > 0 && (
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-sm text-muted-foreground">Active filters:</span>
-              {activeFilters.map((filter, index) => (
-                <Badge key={index} variant="secondary" className="flex items-center gap-1">
+              {activeFilters.map((filter) => (
+                <Badge key={`${filter.type}-${filter.value}`} variant="secondary" className="flex items-center gap-1">
                   {filter.label}
-                  <X className="h-3 w-3 cursor-pointer hover:text-destructive" onClick={() => removeFilter(filter)} />
+                  <button
+                    type="button"
+                    aria-label={`Remove ${filter.type} filter`}
+                    className="rounded p-0.5 hover:text-destructive"
+                    onClick={() => removeFilterByType(filter.type)}
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
                 </Badge>
               ))}
-              <Button variant="ghost" size="sm" onClick={clearAllFilters} className="text-muted-foreground hover:text-foreground">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={clearAllFilters}
+                className="text-muted-foreground hover:text-foreground"
+              >
                 Clear all
               </Button>
             </div>

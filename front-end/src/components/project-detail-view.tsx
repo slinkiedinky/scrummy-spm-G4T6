@@ -18,6 +18,12 @@ interface ProjectDetailViewProps {
   projectId: string
 }
 
+/** Point the frontend to Flask. Create .env.local with:
+ *  NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:5000
+ */
+const API_BASE =
+  process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") || "http://127.0.0.1:5000"
+
 type RawProject = any
 type RawTask = any
 
@@ -50,13 +56,12 @@ const toISO = (v: any) => {
     if (typeof v === "object" && "seconds" in v) return new Date(v.seconds * 1000).toISOString()
     if (v instanceof Date) return v.toISOString()
     return String(v)
-  } catch { return "" }
+  } catch {
+    return ""
+  }
 }
 
-const deriveRiskLevel = (
-  explicit: any,
-  overduePercentage: number
-): Project["riskLevel"] => {
+const deriveRiskLevel = (explicit: any, overduePercentage: number): Project["riskLevel"] => {
   const r = String(explicit ?? "").toLowerCase()
   if (r === "low" || r === "medium" || r === "high") return r as Project["riskLevel"]
   if (overduePercentage >= 50) return "high"
@@ -71,6 +76,18 @@ const median = (nums: number[]) => {
   return sorted.length % 2 ? sorted[mid] : Math.round((sorted[mid - 1] + sorted[mid]) / 2)
 }
 
+async function fetchUsersMap(ids: string[]) {
+  if (!ids.length) return {} as Record<string, any>
+  const res = await fetch(`${API_BASE}/api/users?ids=${encodeURIComponent(ids.join(","))}`, {
+    cache: "no-store",
+  })
+  if (!res.ok) return {}
+  const arr = await res.json()
+  const map: Record<string, any> = {}
+  for (const u of arr) map[u.id] = u
+  return map
+}
+
 // ---------- component ----------
 export function ProjectDetailView({ projectId }: ProjectDetailViewProps) {
   const [project, setProject] = useState<Project | null>(null)
@@ -82,33 +99,62 @@ export function ProjectDetailView({ projectId }: ProjectDetailViewProps) {
     ;(async () => {
       try {
         setLoading(true)
+
+        // Fetch from Flask
         const [projRes, taskRes] = await Promise.all([
-          fetch(`/api/projects/${projectId}`, { cache: "no-store" }),
-          fetch(`/api/projects/${projectId}/tasks`, { cache: "no-store" }),
+          fetch(`${API_BASE}/api/projects/${projectId}`, { cache: "no-store" }),
+          fetch(`${API_BASE}/api/projects/${projectId}/tasks`, { cache: "no-store" }),
         ])
         if (!projRes.ok) throw new Error(`Project ${projectId} not found`)
         const rawProject: RawProject = await projRes.json()
         const rawTasks: RawTask[] = taskRes.ok ? await taskRes.json() : []
 
-        // Department (your TeamMember type likely requires it)
         const projectDepartment =
           Array.isArray(rawProject.department) ? (rawProject.department[0] ?? "") : (rawProject.department ?? "")
 
-        // Build team from teamIds
-        const teamIds: string[] = Array.isArray(rawProject.teamIds) ? rawProject.teamIds : []
-        const team: TeamMember[] = teamIds.map((id: string) => ({
-          id,
-          name: `User ${id.slice(0, 4)}`,
-          role: "Member",
-          email: "",
-          avatar: "",
-          department: projectDepartment || "General",
-        }))
+        // Prefer backend-hydrated team (already from users). If missing or placeholder, enrich.
+        let team: TeamMember[] = Array.isArray(rawProject.team) ? rawProject.team : []
+        if (!team.length) {
+          const ids: string[] = Array.isArray(rawProject.teamIds) ? rawProject.teamIds : []
+          team = ids.map((id) => ({
+            id,
+            name: `User ${id.slice(0, 4)}`,
+            role: "Member",
+            email: "",
+            avatar: "",
+            department: projectDepartment || "General",
+          }))
+        }
+
+        // If any looks like a placeholder, hydrate from /api/users
+        const idsNeedingLookup = team
+          .filter((m) => !m.name || m.name.startsWith("User ") || m.role === "Member")
+          .map((m) => m.id)
+        if (idsNeedingLookup.length) {
+          const userMap = await fetchUsersMap(Array.from(new Set(idsNeedingLookup)))
+          team = team.map((m) => {
+            const u = userMap[m.id]
+            return u
+              ? {
+                  ...m,
+                  name: u.name || m.name,
+                  role: u.role || m.role,
+                  email: u.email || m.email,
+                  avatar: u.avatar || m.avatar,
+                }
+              : m
+          })
+        }
+
+        // Lookup for task assignees
+        const teamLookup: Record<string, TeamMember> = {}
+        team.forEach((m) => {
+          teamLookup[m.id] = m
+        })
 
         const overduePercentage = Number(rawProject.overduePercentage ?? 0)
         const progress = Number(rawProject.progress ?? rawProject.completionPercentage ?? 0)
 
-        // Provide required fields: riskLevel, completionPercentage, medianDaysOverdue
         const normalizedProject: Project = {
           id: rawProject.id,
           name: rawProject.name ?? "Untitled",
@@ -116,7 +162,7 @@ export function ProjectDetailView({ projectId }: ProjectDetailViewProps) {
           client: rawProject.client ?? "",
           status: canonStatus(rawProject.status),
           priority: canonPriority(rawProject.priority),
-          progress, // keep if your UI reads it
+          progress,
           completionPercentage: Number(rawProject.completionPercentage ?? progress),
           overduePercentage,
           riskLevel: deriveRiskLevel(rawProject.riskLevel, overduePercentage),
@@ -125,16 +171,19 @@ export function ProjectDetailView({ projectId }: ProjectDetailViewProps) {
           budget: rawProject.budget,
           department: projectDepartment,
           team,
-          tasks: [], // filled after tasks normalized
+          tasks: [],
           createdAt: toISO(rawProject.createdAt),
           updatedAt: toISO(rawProject.updatedAt),
         }
 
         const normalizedTasks: Task[] = rawTasks.map((t: any) => {
           const assigneeId = t.assigneeId || t.assignee?.id || ""
+          const fromLookup = teamLookup[assigneeId]
           const assigneeObj =
-            typeof t.assignee === "object" && t.assignee
+            (typeof t.assignee === "object" && t.assignee?.name)
               ? t.assignee
+              : fromLookup
+              ? { id: fromLookup.id, name: fromLookup.name, role: fromLookup.role, avatar: fromLookup.avatar }
               : { id: assigneeId, name: `User ${String(assigneeId).slice(0, 4)}`, role: "Member", avatar: "" }
 
           return {
@@ -165,12 +214,14 @@ export function ProjectDetailView({ projectId }: ProjectDetailViewProps) {
     })()
   }, [projectId])
 
-  // When tasks load, recompute completion + median overdue to keep UI accurate
+  // Recompute completion & median overdue from tasks
   const composedProject: Project | null = useMemo(() => {
     if (!project) return null
     const total = tasks.length
     const completed = tasks.filter((t) => t.status === "completed").length
-    const completionFromTasks = total ? Math.round((completed / total) * 100) : project.completionPercentage ?? project.progress ?? 0
+    const completionFromTasks = total
+      ? Math.round((completed / total) * 100)
+      : project.completionPercentage ?? project.progress ?? 0
 
     const today = new Date()
     const overdueDays = tasks
@@ -179,17 +230,9 @@ export function ProjectDetailView({ projectId }: ProjectDetailViewProps) {
       .filter((d) => d > 0)
 
     const medianOverdue = median(overdueDays)
-
-    // If risk not explicitly set, derive from overdue %
     const risk = project.riskLevel ?? deriveRiskLevel(undefined, project.overduePercentage ?? 0)
 
-    return {
-      ...project,
-      tasks,
-      completionPercentage: completionFromTasks,
-      medianDaysOverdue: medianOverdue,
-      riskLevel: risk,
-    }
+    return { ...project, tasks, completionPercentage: completionFromTasks, medianDaysOverdue: medianOverdue, riskLevel: risk }
   }, [project, tasks])
 
   if (loading) {
@@ -241,8 +284,11 @@ export function ProjectDetailView({ projectId }: ProjectDetailViewProps) {
               <TaskBoard project={composedProject} />
             </TabsContent>
 
-            <TabsContent value="overview" className="h-full m-0 p-6">
-              <ProjectOverview project={composedProject} />
+            {/* Scrollable Overview */}
+            <TabsContent value="overview" className="h-full m-0">
+              <div className="h-full overflow-auto p-6">
+                <ProjectOverview project={composedProject} />
+              </div>
             </TabsContent>
 
             <TabsContent value="team" className="h-full m-0 p-6 overflow-auto">

@@ -1,5 +1,5 @@
 # back-end/app.py
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from flask_cors import CORS
 from firebase import db  # from back-end/firebase.py
 import datetime as dt
@@ -65,6 +65,26 @@ def _canon_status(s: str) -> str:
 def _canon_priority(p: str) -> str:
     q = (p or "medium").strip().lower()
     return q if q in {"low", "medium", "high"} else "medium"
+
+def _read_users(ids):
+    """Return {userId: {name, role, email, avatar}} for a list of IDs."""
+    out = {}
+    for uid in ids:
+        try:
+            d = db.collection("users").document(uid).get()
+            if d.exists:
+                u = d.to_dict() or {}
+                out[uid] = {
+                    "name": u.get("name") or f"User {uid[:4]}",
+                    "role": u.get("role") or "Member",
+                    "email": u.get("email") or "",
+                    "avatar": u.get("avatar") or "",
+                }
+            else:
+                out[uid] = {"name": f"User {uid[:4]}", "role": "Member", "email": "", "avatar": ""}
+        except Exception:
+            out[uid] = {"name": f"User {uid[:4]}", "role": "Member", "email": "", "avatar": ""}
+    return out
 
 def _normalize_project(doc):
     data = doc.to_dict() or {}
@@ -133,6 +153,26 @@ def get_project_tasks(project_id):
     tasks_snap = db.collection("projects").document(project_id).collection("tasks").order_by("createdAt").stream()
     tasks = [_normalize_task(d, team_lookup) for d in tasks_snap]
     return jsonify(tasks)
+
+@app.get("/api/users")
+def get_users():
+    ids = request.args.get("ids", "")
+    id_list = [x for x in ids.split(",") if x]
+    out = []
+    for uid in id_list:
+        doc = db.collection("users").document(uid).get()
+        if doc.exists:
+            d = doc.to_dict() or {}
+            out.append({
+                "id": uid,
+                "name": d.get("name") or f"User {uid[:4]}",
+                "role": d.get("role") or "Member",
+                "email": d.get("email") or "",
+                "avatar": d.get("avatar") or "",
+            })
+        else:
+            out.append({"id": uid, "name": f"User {uid[:4]}", "role": "Member", "email": "", "avatar": ""})
+    return jsonify(out)
 
 
 if __name__ == "__main__":

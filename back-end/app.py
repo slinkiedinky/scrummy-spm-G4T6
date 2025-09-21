@@ -2,6 +2,7 @@
 from flask import Flask, jsonify
 from flask_cors import CORS
 from firebase import db  # from back-end/firebase.py
+import datetime as dt
 
 app = Flask(__name__)
 CORS(app, resources={r"/api/*": {"origins": "*"}})
@@ -45,6 +46,94 @@ def list_projects():
     # Sort newest updated first if available
     items.sort(key=lambda x: x.get("updatedAt", ""), reverse=True)
     return jsonify(items)
+
+
+def _to_iso(v):
+    try:
+        if hasattr(v, "to_datetime"):
+            return v.to_datetime().isoformat()
+        if isinstance(v, dict) and "seconds" in v:
+            return dt.datetime.utcfromtimestamp(v["seconds"]).isoformat()
+        return str(v)
+    except Exception:
+        return str(v)
+
+def _canon_status(s: str) -> str:
+    t = (s or "active").strip().lower().replace("_", "-")
+    return "on-hold" if t in {"on hold", "onhold"} else t
+
+def _canon_priority(p: str) -> str:
+    q = (p or "medium").strip().lower()
+    return q if q in {"low", "medium", "high"} else "medium"
+
+def _normalize_project(doc):
+    data = doc.to_dict() or {}
+    for k in ("dueDate", "createdAt", "updatedAt"):
+        if k in data and data[k] is not None:
+            data[k] = _to_iso(data[k])
+    data["status"] = _canon_status(data.get("status"))
+    data["priority"] = _canon_priority(data.get("priority"))
+    data.setdefault("teamIds", [])
+    data.setdefault("department", [])
+    data.setdefault("progress", 0)
+    data.setdefault("overduePercentage", 0)
+    return {"id": doc.id, **data}
+
+def _normalize_task(doc, team_lookup):
+    t = doc.to_dict() or {}
+    for k in ("dueDate", "createdAt", "updatedAt"):
+        if k in t and t[k] is not None:
+            t[k] = _to_iso(t[k])
+    # Canonicalize
+    status = (t.get("status") or "todo").strip().lower().replace(" ", "-")
+    priority = (t.get("priority") or "medium").strip().lower()
+    assignee_id = t.get("assigneeId") or t.get("assignee") or ""
+    # Build an assignee object for the modal
+    assignee_obj = {
+        "id": assignee_id,
+        "name": team_lookup.get(assignee_id, f"User {assignee_id[:4] or '—'}"),
+        "role": "Member",
+        "avatar": "",
+    }
+    return {
+        "id": doc.id,
+        "title": t.get("title") or t.get("name") or "Untitled task",
+        "description": t.get("description") or "",
+        "status": status,
+        "priority": priority,
+        "dueDate": t.get("dueDate") or "",
+        "createdAt": t.get("createdAt") or "",
+        "updatedAt": t.get("updatedAt") or "",
+        "tags": t.get("tags") or [],
+        # make both available: string id for filters & object for modal
+        "assignee": assignee_obj,
+        "assigneeId": assignee_id,
+        "comments": [],      # you can fill these later
+        "attachments": [],   # you can fill these later
+    }
+
+@app.get("/api/projects/<project_id>")
+def get_project(project_id):
+    ref = db.collection("projects").document(project_id).get()
+    if not ref.exists:
+        return jsonify({"error": "not found"}), 404
+    project = _normalize_project(ref)
+    return jsonify(project)
+
+@app.get("/api/projects/<project_id>/tasks")
+def get_project_tasks(project_id):
+    # Optional: build a simple name lookup from users collection if you have it.
+    team_lookup = {}
+    proj_ref = db.collection("projects").document(project_id).get()
+    if proj_ref.exists:
+        data = proj_ref.to_dict() or {}
+        for tid in data.get("teamIds", []):
+            team_lookup[tid] = f"User {tid[:4]}"  # replace with real names if you have a users collection
+
+    tasks_snap = db.collection("projects").document(project_id).collection("tasks").order_by("createdAt").stream()
+    tasks = [_normalize_task(d, team_lookup) for d in tasks_snap]
+    return jsonify(tasks)
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)

@@ -1,12 +1,14 @@
 "use client"
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { TaskColumn } from "@/components/task-column"
 import { TaskDetailModal } from "@/components/task-detail-modal"
+
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Plus, Search, Filter } from "lucide-react"
+
 import type { Project, Task } from "@/types/project"
 
 interface TaskBoardProps {
@@ -14,25 +16,33 @@ interface TaskBoardProps {
 }
 
 export function TaskBoard({ project }: TaskBoardProps) {
-  const [tasks] = useState<Task[]>(project.tasks)
   const [selectedTask, setSelectedTask] = useState<Task | null>(null)
   const [searchTerm, setSearchTerm] = useState("")
   const [priorityFilter, setPriorityFilter] = useState<string>("all")
   const [assigneeFilter, setAssigneeFilter] = useState<string>("all")
 
-  const filteredTasks = tasks.filter((task) => {
-    const matchesSearch =
-      task.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      task.description.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesPriority = priorityFilter === "all" || task.priority === priorityFilter
-    const matchesAssignee = assigneeFilter === "all" || task.assignee === assigneeFilter
+  const tasks = project.tasks ?? []
 
-    return matchesSearch && matchesPriority && matchesAssignee
-  })
+  const filteredTasks = useMemo(() => {
+    return tasks.filter((task: any) => {
+      const matchesSearch =
+        (task.title || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (task.description || "").toLowerCase().includes(searchTerm.toLowerCase())
 
-  const getTasksByStatus = (status: string) => {
-    return filteredTasks.filter((task) => task.status === status)
-  }
+      const matchesPriority = priorityFilter === "all" || task.priority === priorityFilter
+
+      // Support either a string id or an { id, name } object
+      const assigneeId = typeof task.assignee === "string" ? task.assignee : (task.assignee?.id ?? task.assigneeId)
+      const matchesAssignee = assigneeFilter === "all" || assigneeId === assigneeFilter
+
+      return matchesSearch && matchesPriority && matchesAssignee
+    })
+  }, [tasks, searchTerm, priorityFilter, assigneeFilter])
+
+  const getTasksByStatus = (status: string) =>
+    filteredTasks.filter(
+      (task: any) => (task.status || "").toLowerCase().replace(" ", "-") === status
+    )
 
   const columns = [
     { id: "todo", title: "To Do", status: "todo", color: "bg-muted" },
@@ -43,7 +53,7 @@ export function TaskBoard({ project }: TaskBoardProps) {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Header with Filters */}
+      {/* Header w/ Filters */}
       <div className="border-b border-border p-6 space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-2xl font-bold text-foreground">Tasks</h2>
@@ -53,10 +63,9 @@ export function TaskBoard({ project }: TaskBoardProps) {
           </Button>
         </div>
 
-        {/* Filters */}
         <div className="flex flex-col sm:flex-row gap-4">
           <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder="Search tasks..."
               value={searchTerm}
@@ -64,6 +73,7 @@ export function TaskBoard({ project }: TaskBoardProps) {
               className="pl-10"
             />
           </div>
+
           <Select value={priorityFilter} onValueChange={setPriorityFilter}>
             <SelectTrigger className="w-full sm:w-[180px]">
               <Filter className="h-4 w-4 mr-2" />
@@ -71,21 +81,21 @@ export function TaskBoard({ project }: TaskBoardProps) {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Priority</SelectItem>
-              <SelectItem value="urgent">Urgent</SelectItem>
               <SelectItem value="high">High</SelectItem>
               <SelectItem value="medium">Medium</SelectItem>
               <SelectItem value="low">Low</SelectItem>
             </SelectContent>
           </Select>
+
           <Select value={assigneeFilter} onValueChange={setAssigneeFilter}>
             <SelectTrigger className="w-full sm:w-[180px]">
               <SelectValue placeholder="Filter by assignee" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Assignees</SelectItem>
-              {project.team.map((member) => (
-                <SelectItem key={member.id} value={member.id}>
-                  {member.name}
+              {project.team.map((m) => (
+                <SelectItem key={m.id} value={m.id}>
+                  {m.name}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -93,24 +103,28 @@ export function TaskBoard({ project }: TaskBoardProps) {
         </div>
       </div>
 
-      {/* Task Board */}
+      {/* Board */}
       <div className="flex-1 overflow-auto p-6">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 h-full">
-          {columns.map((column) => (
+          {columns.map((col) => (
             <TaskColumn
-              key={column.id}
-              title={column.title}
-              tasks={getTasksByStatus(column.status)}
-              color={column.color}
+              key={col.id}
+              title={col.title}
+              color={col.color}
+              tasks={getTasksByStatus(col.status)}
               onTaskClick={setSelectedTask}
             />
           ))}
         </div>
       </div>
 
-      {/* Task Detail Modal */}
+      {/* Modal */}
       {selectedTask && (
-        <TaskDetailModal task={selectedTask} isOpen={!!selectedTask} onClose={() => setSelectedTask(null)} />
+        <TaskDetailModal
+          task={selectedTask}
+          isOpen={!!selectedTask}
+          onClose={() => setSelectedTask(null)}
+        />
       )}
     </div>
   )

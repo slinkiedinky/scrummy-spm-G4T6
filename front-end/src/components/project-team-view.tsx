@@ -28,12 +28,16 @@ export function ProjectTeamView({ project }: ProjectTeamViewProps) {
     const memberTaskMap = new Map<string, MemberRow>()
 
     project.team.forEach((member: TeamMember) => {
-      // Compare id-to-id because Task.assignee is a string id
-      const memberTasks: Task[] = project.tasks.filter((task: Task) => task.assignee === member.id)
+      // Accept either string id OR object { id, ... }
+      const memberTasks: Task[] = (project.tasks || []).filter((task: any) => {
+        const assigneeId = typeof task.assignee === "string" ? task.assignee : (task.assignee?.id ?? task.assigneeId)
+        return assigneeId === member.id
+      })
+
       const completedTasks = memberTasks.filter((t) => t.status === "completed")
       const inProgressTasks = memberTasks.filter((t) => t.status === "in-progress")
       const overdueTasks = memberTasks.filter(
-        (t) => new Date(t.dueDate) < new Date() && t.status !== "completed",
+        (t) => t.dueDate && new Date(t.dueDate) < new Date() && t.status !== "completed",
       )
 
       memberTaskMap.set(member.id, {
@@ -71,6 +75,7 @@ export function ProjectTeamView({ project }: ProjectTeamViewProps) {
 
   const getTaskUrgency = (dueDate: string, status: TaskStatus): Urgency => {
     if (status === "completed") return "completed"
+    if (!dueDate) return "normal"
     const today = new Date()
     const due = new Date(dueDate)
     const daysUntilDue = Math.ceil((due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
@@ -101,7 +106,7 @@ export function ProjectTeamView({ project }: ProjectTeamViewProps) {
             <CheckCircle className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{project.tasks.length}</div>
+            <div className="text-2xl font-bold">{(project.tasks || []).length}</div>
             <p className="text-xs text-muted-foreground">Assigned to team</p>
           </CardContent>
         </Card>
@@ -114,7 +119,7 @@ export function ProjectTeamView({ project }: ProjectTeamViewProps) {
           <CardContent>
             <div className="text-2xl font-bold">
               {Math.round(
-                (teamMemberData.reduce((acc, m) => acc + m.completionRate, 0) / teamMemberData.length) || 0,
+                (teamMemberData.reduce((acc, m) => acc + m.completionRate, 0) / (teamMemberData.length || 1)) || 0,
               )}
               %
             </div>
@@ -185,7 +190,6 @@ export function ProjectTeamView({ project }: ProjectTeamViewProps) {
                   <h4 className="font-medium text-sm text-muted-foreground mb-3">Assigned Tasks</h4>
                   {memberData.tasks
                     .sort((a: Task, b: Task) => {
-                      // Sort by urgency: overdue first, then by due date
                       const urgencyA = getTaskUrgency(a.dueDate, a.status)
                       const urgencyB = getTaskUrgency(b.dueDate, b.status)
                       if (urgencyA === "overdue" && urgencyB !== "overdue") return -1
@@ -206,8 +210,8 @@ export function ProjectTeamView({ project }: ProjectTeamViewProps) {
                           <div className="flex-1">
                             <h5 className="font-medium text-sm">{task.title}</h5>
                             <p className="text-xs text-muted-foreground">
-                              Due: {formatDate(task.dueDate)}
-                              {urgency === "overdue" && (
+                              Due: {task.dueDate ? formatDate(task.dueDate) : "—"}
+                              {urgency === "overdue" && task.dueDate && (
                                 <span className="text-destructive font-medium ml-2">
                                   ({Math.abs(Math.ceil(
                                     (new Date(task.dueDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)

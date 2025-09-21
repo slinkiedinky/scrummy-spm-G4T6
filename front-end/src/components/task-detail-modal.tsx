@@ -15,16 +15,26 @@ interface TaskDetailModalProps {
 }
 
 export function TaskDetailModal({ task, isOpen, onClose }: TaskDetailModalProps) {
+  // Fallback if task.assignee is just an id string
+  const assignee =
+    typeof (task as any).assignee === "object" && (task as any).assignee
+      ? (task as any).assignee
+      : {
+          id: String((task as any).assignee || (task as any).assigneeId || ""),
+          name: `User ${String((task as any).assignee || "").slice(0, 4)}`,
+          role: "Member",
+          avatar: "",
+        }
+
+  // Priority colors: low=green, medium=yellow, high=red
   const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case "urgent":
-        return "bg-destructive text-destructive-foreground"
-      case "high":
-        return "bg-accent text-accent-foreground"
-      case "medium":
-        return "bg-chart-4 text-white"
+    switch ((priority || "medium").toLowerCase()) {
       case "low":
-        return "bg-chart-5 text-white"
+        return "bg-green-100 text-green-700 border border-green-200"
+      case "medium":
+        return "bg-yellow-100 text-yellow-800 border border-yellow-200"
+      case "high":
+        return "bg-red-100 text-red-700 border border-red-200"
       default:
         return "bg-muted text-muted-foreground"
     }
@@ -46,6 +56,7 @@ export function TaskDetailModal({ task, isOpen, onClose }: TaskDetailModalProps)
   }
 
   const formatDate = (dateString: string) => {
+    if (!dateString) return "—"
     return new Date(dateString).toLocaleDateString("en-US", {
       month: "long",
       day: "numeric",
@@ -55,7 +66,7 @@ export function TaskDetailModal({ task, isOpen, onClose }: TaskDetailModalProps)
     })
   }
 
-  const isOverdue = new Date(task.dueDate) < new Date() && task.status !== "completed"
+  const isOverdue = !!task.dueDate && new Date(task.dueDate) < new Date() && task.status !== "completed"
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -91,7 +102,7 @@ export function TaskDetailModal({ task, isOpen, onClose }: TaskDetailModalProps)
           {/* Description */}
           <div>
             <h3 className="font-semibold text-foreground mb-2">Description</h3>
-            <p className="text-muted-foreground leading-relaxed">{task.description}</p>
+            <p className="text-muted-foreground leading-relaxed">{task.description || "—"}</p>
           </div>
 
           <Separator />
@@ -105,17 +116,17 @@ export function TaskDetailModal({ task, isOpen, onClose }: TaskDetailModalProps)
                   <p className="text-sm font-medium text-foreground">Assigned to</p>
                   <div className="flex items-center gap-2 mt-1">
                     <Avatar className="h-6 w-6">
-                      <AvatarImage src={task.assignee.avatar || "/placeholder.svg"} alt={task.assignee.name} />
+                      <AvatarImage src={assignee.avatar || "/placeholder.svg"} alt={assignee.name} />
                       <AvatarFallback className="text-xs">
-                        {task.assignee.name
+                        {assignee.name
                           .split(" ")
-                          .map((n) => n[0])
+                          .map((n: string) => n[0])
                           .join("")}
                       </AvatarFallback>
                     </Avatar>
                     <div>
-                      <p className="text-sm text-foreground">{task.assignee.name}</p>
-                      <p className="text-xs text-muted-foreground">{task.assignee.role}</p>
+                      <p className="text-sm text-foreground">{assignee.name}</p>
+                      <p className="text-xs text-muted-foreground">{assignee.role}</p>
                     </div>
                   </div>
                 </div>
@@ -177,26 +188,26 @@ export function TaskDetailModal({ task, isOpen, onClose }: TaskDetailModalProps)
             <div className="flex items-center gap-2 mb-3">
               <MessageSquare className="h-4 w-4 text-muted-foreground" />
               <h3 className="font-semibold text-foreground">Comments</h3>
-              <Badge variant="secondary">{task.comments.length}</Badge>
+              <Badge variant="secondary">{(task.comments || []).length}</Badge>
             </div>
-            {task.comments.length === 0 ? (
+            {(task.comments || []).length === 0 ? (
               <p className="text-sm text-muted-foreground">No comments yet</p>
             ) : (
               <div className="space-y-3">
-                {task.comments.map((comment) => (
+                {(task.comments || []).map((comment: any) => (
                   <div key={comment.id} className="flex gap-3 p-3 bg-muted rounded-lg">
                     <Avatar className="h-8 w-8">
-                      <AvatarImage src={comment.author.avatar || "/placeholder.svg"} alt={comment.author.name} />
+                      <AvatarImage src={comment.author?.avatar || "/placeholder.svg"} alt={comment.author?.name || "User"} />
                       <AvatarFallback className="text-xs">
-                        {comment.author.name
+                        {(comment.author?.name || "U")
                           .split(" ")
-                          .map((n) => n[0])
+                          .map((n: string) => n[0])
                           .join("")}
                       </AvatarFallback>
                     </Avatar>
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-1">
-                        <p className="text-sm font-medium text-foreground">{comment.author.name}</p>
+                        <p className="text-sm font-medium text-foreground">{comment.author?.name || "User"}</p>
                         <p className="text-xs text-muted-foreground">{formatDate(comment.createdAt)}</p>
                       </div>
                       <p className="text-sm text-muted-foreground">{comment.content}</p>
@@ -208,17 +219,17 @@ export function TaskDetailModal({ task, isOpen, onClose }: TaskDetailModalProps)
           </div>
 
           {/* Attachments */}
-          {task.attachments.length > 0 && (
+          {(task.attachments || []).length > 0 && (
             <>
               <Separator />
               <div>
                 <div className="flex items-center gap-2 mb-3">
                   <Paperclip className="h-4 w-4 text-muted-foreground" />
                   <h3 className="font-semibold text-foreground">Attachments</h3>
-                  <Badge variant="secondary">{task.attachments.length}</Badge>
+                  <Badge variant="secondary">{(task.attachments || []).length}</Badge>
                 </div>
                 <div className="space-y-2">
-                  {task.attachments.map((attachment, index) => (
+                  {(task.attachments || []).map((attachment: string, index: number) => (
                     <div key={index} className="flex items-center gap-2 p-2 bg-muted rounded">
                       <Paperclip className="h-4 w-4 text-muted-foreground" />
                       <span className="text-sm text-foreground">{attachment}</span>

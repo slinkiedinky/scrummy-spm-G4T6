@@ -22,30 +22,42 @@ interface ActiveFilter {
   label: string
 }
 
-// Fetch helper (no separate api.ts needed)
+// --- API (proxy to Flask via next.config) ---
 async function fetchProjects() {
   const res = await fetch("/api/projects", { cache: "no-store" })
   if (!res.ok) throw new Error(`Failed to fetch projects: ${res.status}`)
   return (await res.json()) as any[]
 }
 
-// Normalize backend → UI shape the card & filters expect
-function normalize(p: any): Project {
-  const toISO = (v: any) => {
-    try {
-      if (!v) return ""
-      // If already ISO or string date
-      if (typeof v === "string") return v
-      // If Firestore {seconds}
-      if (typeof v === "object" && "seconds" in v) return new Date(v.seconds * 1000).toISOString()
-      // If Date
-      if (v instanceof Date) return v.toISOString()
-      return String(v)
-    } catch {
-      return ""
-    }
+// --- Helpers ---
+const toISO = (v: any) => {
+  try {
+    if (!v) return ""
+    if (typeof v === "string") return v
+    if (typeof v === "object" && "seconds" in v) return new Date(v.seconds * 1000).toISOString()
+    if (v instanceof Date) return v.toISOString()
+    return String(v)
+  } catch {
+    return ""
   }
+}
 
+const canonicalStatus = (raw: any): Project["status"] => {
+  const s = String(raw ?? "active").trim().toLowerCase().replace(/_/g, "-")
+  if (s === "on hold" || s === "onhold") return "on-hold"
+  if (s === "in-progress") return "active" // just in case
+  if (["active", "planning", "on-hold", "completed"].includes(s)) return s as Project["status"]
+  return "active"
+}
+
+const canonicalPriority = (raw: any): Project["priority"] => {
+  const p = String(raw ?? "medium").trim().toLowerCase()
+  if (["low", "medium", "high"].includes(p)) return p as Project["priority"]
+  return "medium"
+}
+
+// Normalize backend → UI shape expected by card & filters
+function normalize(p: any): Project {
   const dept =
     Array.isArray(p.department) && p.department.length > 0
       ? p.department[0]
@@ -65,8 +77,8 @@ function normalize(p: any): Project {
     name: p.name ?? "Untitled",
     description: p.description ?? "",
     client: p.client ?? "",
-    status: (p.status ?? "active") as Project["status"],
-    priority: (p.priority ?? "medium") as Project["priority"],
+    status: canonicalStatus(p.status),
+    priority: canonicalPriority(p.priority),
     progress: Number(p.progress ?? 0),
     overduePercentage: Number(p.overduePercentage ?? 0),
     dueDate: toISO(p.dueDate),
@@ -91,7 +103,7 @@ export function ProjectDashboard() {
   const [taskStatusFilter, setTaskStatusFilter] = useState<string>("all")
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined)
 
-  const [sortField, setSortField] = useState<SortField>("deadline")
+  const [sortField, setSortField] = useState<SortField>("completion")
   const [sortOrder, setSortOrder] = useState<SortOrder>("asc")
 
   useEffect(() => {
@@ -108,6 +120,31 @@ export function ProjectDashboard() {
     })()
   }, [])
 
+  // ---- Accurate counters (based on canonical statuses) ----
+  const { activeCount, planningCount, onHoldCount, completedCount, medianDaysOverdue } = useMemo(() => {
+    const active = projects.filter((p) => p.status === "active").length
+    const planning = projects.filter((p) => p.status === "planning").length
+    const onHold = projects.filter((p) => p.status === "on-hold").length
+    const completed = projects.filter((p) => p.status === "completed").length
+
+    const today = new Date()
+    const overdueDays = projects
+      .flatMap((project) => project.tasks ?? [])
+      .filter((t: any) => t?.dueDate && t.status !== "completed" && new Date(t.dueDate) < today)
+      .map((t: any) => Math.ceil((today.getTime() - new Date(t.dueDate).getTime()) / (1000 * 60 * 60 * 24)))
+      .sort((a: number, b: number) => a - b)
+
+    const median =
+      overdueDays.length === 0
+        ? 0
+        : overdueDays.length % 2
+        ? overdueDays[Math.floor(overdueDays.length / 2)]
+        : Math.round((overdueDays[overdueDays.length / 2 - 1] + overdueDays[overdueDays.length / 2]) / 2)
+
+    return { activeCount: active, planningCount: planning, onHoldCount: onHold, completedCount: completed, medianDaysOverdue: median }
+  }, [projects])
+
+  // ---- Filters & sorting (unchanged logic, works with normalized data) ----
   const activeFilters = useMemo((): ActiveFilter[] => {
     const filters: ActiveFilter[] = []
     if (projectFilter !== "all") {
@@ -175,28 +212,13 @@ export function ProjectDashboard() {
     return filtered
   }, [projects, searchTerm, projectFilter, departmentFilter, employeeFilter, taskStatusFilter, dateRange, sortField, sortOrder])
 
-  const uniqueDepartments = useMemo(() => {
-    const depts = projects
-      .map((p) => (Array.isArray(p.department) ? p.department[0] : p.department))
-      .filter(Boolean)
-    return [...new Set(depts)]
-  }, [projects])
-
-  const uniqueEmployees = useMemo(() => [...new Set(projects.flatMap((p) => (p.team ?? []).map((t: any) => t.name)))], [projects])
-
-  type FilterType = ActiveFilter["type"]
-  function removeFilterByType(type: FilterType) {
+  function removeFilterByType(type: ActiveFilter["type"]) {
     switch (type) {
-      case "project":
-        setProjectFilter("all"); break
-      case "department":
-        setDepartmentFilter("all"); break
-      case "employee":
-        setEmployeeFilter("all"); break
-      case "taskStatus":
-        setTaskStatusFilter("all"); break
-      case "dateRange":
-        setDateRange(undefined); break
+      case "project": setProjectFilter("all"); break
+      case "department": setDepartmentFilter("all"); break
+      case "employee": setEmployeeFilter("all"); break
+      case "taskStatus": setTaskStatusFilter("all"); break
+      case "dateRange": setDateRange(undefined); break
     }
   }
 
@@ -211,49 +233,15 @@ export function ProjectDashboard() {
 
   const handleSort = (field: SortField) => {
     if (sortField === field) setSortOrder(sortOrder === "asc" ? "desc" : "asc")
-    else {
-      setSortField(field)
-      setSortOrder("asc")
-    }
+    else { setSortField(field); setSortOrder("asc") }
   }
 
-  const getSortIcon = (field: SortField) => {
-    if (sortField !== field) return <ArrowUpDown className="h-4 w-4" />
-    return sortOrder === "asc" ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />
-  }
+  const getSortIcon = (field: SortField) =>
+    sortField !== field ? <ArrowUpDown className="h-4 w-4" /> : (sortOrder === "asc" ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />)
 
-  const getMedianDaysOverdue = () => {
-    const today = new Date()
-    const allOverdueTasks = projects
-      .flatMap((project) => project.tasks ?? [])
-      .filter((task: any) => task.status !== "completed" && new Date(task.dueDate) < today)
-      .map((task: any) => Math.ceil((today.getTime() - new Date(task.dueDate).getTime()) / (1000 * 60 * 60 * 24)))
-      .sort((a: number, b: number) => a - b)
-
-    if (allOverdueTasks.length === 0) return 0
-    const middle = Math.floor(allOverdueTasks.length / 2)
-    return allOverdueTasks.length % 2 === 0
-      ? Math.round((allOverdueTasks[middle - 1] + allOverdueTasks[middle]) / 2)
-      : allOverdueTasks[middle]
-  }
-
-  const medianDaysOverdue = getMedianDaysOverdue()
-
-  // Loading & Error states
-  if (loading) {
-    return (
-      <div className="flex-1 overflow-auto p-6">
-        <div className="h-64 grid place-items-center text-muted-foreground">Loading projects…</div>
-      </div>
-    )
-  }
-  if (error) {
-    return (
-      <div className="flex-1 overflow-auto p-6">
-        <div className="h-64 grid place-items-center text-destructive">Error: {error}</div>
-      </div>
-    )
-  }
+  // Loading / Error
+  if (loading) return <div className="flex-1 overflow-auto p-6"><div className="h-64 grid place-items-center text-muted-foreground">Loading projects…</div></div>
+  if (error)   return <div className="flex-1 overflow-auto p-6"><div className="h-64 grid place-items-center text-destructive">Error: {error}</div></div>
 
   return (
     <div className="flex flex-col h-full">
@@ -270,48 +258,34 @@ export function ProjectDashboard() {
           </Button>
         </div>
 
-        {/* Stats Overview */}
+        {/* Stats Overview (now accurate) */}
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
           <div className="bg-background rounded-lg p-4 border border-border">
             <p className="text-sm text-muted-foreground">Active Projects</p>
-            <p className="text-2xl font-bold text-foreground">
-              {projects.filter((p) => p.status === "active").length}
-            </p>
+            <p className="text-2xl font-bold text-foreground">{activeCount}</p>
           </div>
-
           <div className="bg-background rounded-lg p-4 border border-border">
             <p className="text-sm text-muted-foreground">Planning</p>
-            <p className="text-2xl font-bold text-foreground">
-              {projects.filter((p) => p.status === "planning").length}
-            </p>
+            <p className="text-2xl font-bold text-foreground">{planningCount}</p>
           </div>
-
           <div className="bg-background rounded-lg p-4 border border-border">
             <p className="text-sm text-muted-foreground">On Hold</p>
-            <p className="text-2xl font-bold text-foreground">
-              {projects.filter((p) => p.status === "on-hold").length}
-            </p>
+            <p className="text-2xl font-bold text-foreground">{onHoldCount}</p>
           </div>
-
           <div className="bg-background rounded-lg p-4 border border-border">
             <p className="text-sm text-muted-foreground">Completed</p>
-            <p className="text-2xl font-bold text-foreground">
-              {projects.filter((p) => p.status === "completed").length}
-            </p>
+            <p className="text-2xl font-bold text-foreground">{completedCount}</p>
           </div>
-
           <div className="bg-background rounded-lg p-4 border border-border">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Median Days Overdue</p>
-                <p className={`text-2xl font-bold ${getMedianDaysOverdue() > 0 ? "text-destructive" : "text-foreground"}`}>
-                  {getMedianDaysOverdue()}
-                </p>
+                <p className={`text-2xl font-bold ${medianDaysOverdue > 0 ? "text-destructive" : "text-foreground"}`}>{medianDaysOverdue}</p>
               </div>
-              <TrendingDown className={`h-4 w-4 ${getMedianDaysOverdue() > 0 ? "text-destructive" : "text-muted-foreground"}`} />
+              <TrendingDown className={`h-4 w-4 ${medianDaysOverdue > 0 ? "text-destructive" : "text-muted-foreground"}`} />
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              {getMedianDaysOverdue() === 0 ? "No overdue tasks" : "Across all projects"}
+              {medianDaysOverdue === 0 ? "No overdue tasks" : "Across all projects"}
             </p>
           </div>
         </div>
@@ -320,7 +294,7 @@ export function ProjectDashboard() {
         <div className="space-y-4">
           <div className="flex flex-col lg:flex-row gap-4">
             <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Search projects or clients..."
                 value={searchTerm}
@@ -351,8 +325,8 @@ export function ProjectDashboard() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Departments</SelectItem>
-                  {uniqueDepartments.map((dept) => (
-                    <SelectItem key={dept} value={dept}>{dept}</SelectItem>
+                  {[...new Set(projects.map((p) => p.department).filter(Boolean))].map((dept) => (
+                    <SelectItem key={dept} value={dept as string}>{dept as string}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -363,7 +337,7 @@ export function ProjectDashboard() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Employees</SelectItem>
-                  {uniqueEmployees.map((employee) => (
+                  {[...new Set(projects.flatMap((p) => (p.team ?? []).map((t: any) => t.name)))].map((employee) => (
                     <SelectItem key={employee} value={employee}>{employee}</SelectItem>
                   ))}
                 </SelectContent>
@@ -382,7 +356,6 @@ export function ProjectDashboard() {
                 </SelectContent>
               </Select>
 
-              {/* Date Range */}
               <Popover>
                 <PopoverTrigger asChild>
                   <Button variant="outline" className="w-[180px] justify-start text-left font-normal bg-transparent">

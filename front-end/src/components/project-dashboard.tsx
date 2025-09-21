@@ -1,7 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
-import { mockProjects } from "@/lib/mock-data"
+import { useEffect, useMemo, useState } from "react"
 import { ProjectCard } from "@/components/project-card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -9,10 +8,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Search, Plus, Filter, TrendingDown, X, ArrowUpDown, ArrowUp, ArrowDown, CalendarIcon } from "lucide-react"
+import { Search, Plus, Filter, TrendingDown, X, ArrowUpDown, ArrowUp, ArrowDown, Calendar as CalendarIcon } from "lucide-react"
 import { format } from "date-fns"
-import type { Project } from "@/types/project"
 import type { DateRange } from "react-day-picker"
+import type { Project } from "@/types/project"
 
 type SortField = "overdue" | "completion" | "deadline"
 type SortOrder = "asc" | "desc"
@@ -23,20 +22,91 @@ interface ActiveFilter {
   label: string
 }
 
-export function ProjectDashboard() {
-  const [projects] = useState<Project[]>(mockProjects)
-  const [searchTerm, setSearchTerm] = useState("")
+// Fetch helper (no separate api.ts needed)
+async function fetchProjects() {
+  const res = await fetch("/api/projects", { cache: "no-store" })
+  if (!res.ok) throw new Error(`Failed to fetch projects: ${res.status}`)
+  return (await res.json()) as any[]
+}
 
+// Normalize backend → UI shape the card & filters expect
+function normalize(p: any): Project {
+  const toISO = (v: any) => {
+    try {
+      if (!v) return ""
+      // If already ISO or string date
+      if (typeof v === "string") return v
+      // If Firestore {seconds}
+      if (typeof v === "object" && "seconds" in v) return new Date(v.seconds * 1000).toISOString()
+      // If Date
+      if (v instanceof Date) return v.toISOString()
+      return String(v)
+    } catch {
+      return ""
+    }
+  }
+
+  const dept =
+    Array.isArray(p.department) && p.department.length > 0
+      ? p.department[0]
+      : typeof p.department === "string"
+      ? p.department
+      : ""
+
+  const team =
+    Array.isArray(p.team) && p.team.length
+      ? p.team
+      : Array.isArray(p.teamIds)
+      ? p.teamIds.map((id: string) => ({ id, name: `User ${id.slice(0, 4)}` }))
+      : []
+
+  return {
+    id: p.id,
+    name: p.name ?? "Untitled",
+    description: p.description ?? "",
+    client: p.client ?? "",
+    status: (p.status ?? "active") as Project["status"],
+    priority: (p.priority ?? "medium") as Project["priority"],
+    progress: Number(p.progress ?? 0),
+    overduePercentage: Number(p.overduePercentage ?? 0),
+    dueDate: toISO(p.dueDate),
+    budget: p.budget,
+    department: dept,
+    team,
+    tasks: Array.isArray(p.tasks) ? p.tasks : [],
+    createdAt: toISO(p.createdAt),
+    updatedAt: toISO(p.updatedAt),
+  } as Project
+}
+
+export function ProjectDashboard() {
+  const [projects, setProjects] = useState<Project[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  const [searchTerm, setSearchTerm] = useState("")
   const [projectFilter, setProjectFilter] = useState<string>("all")
   const [departmentFilter, setDepartmentFilter] = useState<string>("all")
   const [employeeFilter, setEmployeeFilter] = useState<string>("all")
   const [taskStatusFilter, setTaskStatusFilter] = useState<string>("all")
-
-  // Date range state (uncontrolled Popover handles open/close)
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined)
 
   const [sortField, setSortField] = useState<SortField>("deadline")
   const [sortOrder, setSortOrder] = useState<SortOrder>("asc")
+
+  useEffect(() => {
+    ;(async () => {
+      try {
+        setLoading(true)
+        const data = await fetchProjects()
+        setProjects(data.map(normalize))
+      } catch (e: any) {
+        setError(e?.message ?? "Failed to load projects")
+      } finally {
+        setLoading(false)
+      }
+    })()
+  }, [])
 
   const activeFilters = useMemo((): ActiveFilter[] => {
     const filters: ActiveFilter[] = []
@@ -44,15 +114,9 @@ export function ProjectDashboard() {
       const project = projects.find((p) => p.id === projectFilter)
       filters.push({ type: "project", value: projectFilter, label: `Project: ${project?.name || projectFilter}` })
     }
-    if (departmentFilter !== "all") {
-      filters.push({ type: "department", value: departmentFilter, label: `Department: ${departmentFilter}` })
-    }
-    if (employeeFilter !== "all") {
-      filters.push({ type: "employee", value: employeeFilter, label: `Employee: ${employeeFilter}` })
-    }
-    if (taskStatusFilter !== "all") {
-      filters.push({ type: "taskStatus", value: taskStatusFilter, label: `Task Status: ${taskStatusFilter}` })
-    }
+    if (departmentFilter !== "all") filters.push({ type: "department", value: departmentFilter, label: `Department: ${departmentFilter}` })
+    if (employeeFilter !== "all") filters.push({ type: "employee", value: employeeFilter, label: `Employee: ${employeeFilter}` })
+    if (taskStatusFilter !== "all") filters.push({ type: "taskStatus", value: taskStatusFilter, label: `Task Status: ${taskStatusFilter}` })
     if (dateRange?.from || dateRange?.to) {
       const fromStr = dateRange?.from ? format(dateRange.from, "MMM dd") : "Start"
       const toStr = dateRange?.to ? format(dateRange.to, "MMM dd") : "End"
@@ -65,27 +129,24 @@ export function ProjectDashboard() {
     const filtered = projects.filter((project) => {
       const matchesSearch =
         project.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        project.client?.toLowerCase().includes(searchTerm.toLowerCase())
+        (project.client ?? "").toLowerCase().includes(searchTerm.toLowerCase())
 
       const matchesProject = projectFilter === "all" || project.id === projectFilter
       const matchesDepartment = departmentFilter === "all" || project.department === departmentFilter
-
       const matchesEmployee =
         employeeFilter === "all" ||
-        project.team.some((member) => member.name.toLowerCase().includes(employeeFilter.toLowerCase()))
+        project.team?.some((m) => (m.name ?? "").toLowerCase().includes(employeeFilter.toLowerCase()))
 
       const matchesTaskStatus =
-        taskStatusFilter === "all" || project.tasks.some((task) => task.status === taskStatusFilter)
+        taskStatusFilter === "all" || (project.tasks ?? []).some((t: any) => t.status === taskStatusFilter)
 
-      // Date range filter (inclusive)
-      const due = new Date(project.dueDate)
-      const fromOk = dateRange?.from ? due >= dateRange.from : true
-      const toOk = dateRange?.to ? due <= dateRange.to : true
+      // Date range (inclusive)
+      const due = project.dueDate ? new Date(project.dueDate) : null
+      const fromOk = dateRange?.from ? (due ? due >= dateRange.from : false) : true
+      const toOk = dateRange?.to ? (due ? due <= dateRange.to : false) : true
       const matchesDateRange = fromOk && toOk
 
-      return (
-        matchesSearch && matchesProject && matchesDepartment && matchesEmployee && matchesTaskStatus && matchesDateRange
-      )
+      return matchesSearch && matchesProject && matchesDepartment && matchesEmployee && matchesTaskStatus && matchesDateRange
     })
 
     filtered.sort((a, b) => {
@@ -101,8 +162,8 @@ export function ProjectDashboard() {
           bValue = b.progress
           break
         case "deadline":
-          aValue = new Date(a.dueDate).getTime()
-          bValue = new Date(b.dueDate).getTime()
+          aValue = a.dueDate ? new Date(a.dueDate).getTime() : Number.POSITIVE_INFINITY
+          bValue = b.dueDate ? new Date(b.dueDate).getTime() : Number.POSITIVE_INFINITY
           break
         default:
           return 0
@@ -114,10 +175,15 @@ export function ProjectDashboard() {
     return filtered
   }, [projects, searchTerm, projectFilter, departmentFilter, employeeFilter, taskStatusFilter, dateRange, sortField, sortOrder])
 
-  const uniqueDepartments = useMemo(() => [...new Set(projects.map((p) => p.department).filter(Boolean))], [projects])
-  const uniqueEmployees = useMemo(() => [...new Set(projects.flatMap((p) => p.team.map((t) => t.name)))], [projects])
+  const uniqueDepartments = useMemo(() => {
+    const depts = projects
+      .map((p) => (Array.isArray(p.department) ? p.department[0] : p.department))
+      .filter(Boolean)
+    return [...new Set(depts)]
+  }, [projects])
 
-  // Helper used by the chip "×" to actually clear a filter
+  const uniqueEmployees = useMemo(() => [...new Set(projects.flatMap((p) => (p.team ?? []).map((t: any) => t.name)))], [projects])
+
   type FilterType = ActiveFilter["type"]
   function removeFilterByType(type: FilterType) {
     switch (type) {
@@ -159,10 +225,10 @@ export function ProjectDashboard() {
   const getMedianDaysOverdue = () => {
     const today = new Date()
     const allOverdueTasks = projects
-      .flatMap((project) => project.tasks)
-      .filter((task) => task.status !== "completed" && new Date(task.dueDate) < today)
-      .map((task) => Math.ceil((today.getTime() - new Date(task.dueDate).getTime()) / (1000 * 60 * 60 * 24)))
-      .sort((a, b) => a - b)
+      .flatMap((project) => project.tasks ?? [])
+      .filter((task: any) => task.status !== "completed" && new Date(task.dueDate) < today)
+      .map((task: any) => Math.ceil((today.getTime() - new Date(task.dueDate).getTime()) / (1000 * 60 * 60 * 24)))
+      .sort((a: number, b: number) => a - b)
 
     if (allOverdueTasks.length === 0) return 0
     const middle = Math.floor(allOverdueTasks.length / 2)
@@ -172,6 +238,22 @@ export function ProjectDashboard() {
   }
 
   const medianDaysOverdue = getMedianDaysOverdue()
+
+  // Loading & Error states
+  if (loading) {
+    return (
+      <div className="flex-1 overflow-auto p-6">
+        <div className="h-64 grid place-items-center text-muted-foreground">Loading projects…</div>
+      </div>
+    )
+  }
+  if (error) {
+    return (
+      <div className="flex-1 overflow-auto p-6">
+        <div className="h-64 grid place-items-center text-destructive">Error: {error}</div>
+      </div>
+    )
+  }
 
   return (
     <div className="flex flex-col h-full">
@@ -190,67 +272,46 @@ export function ProjectDashboard() {
 
         {/* Stats Overview */}
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
-          {/* Active Projects — tag removed */}
           <div className="bg-background rounded-lg p-4 border border-border">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Active Projects</p>
-                <p className="text-2xl font-bold text-foreground">
-                  {projects.filter((p) => p.status === "active").length}
-                </p>
-              </div>
-            </div>
+            <p className="text-sm text-muted-foreground">Active Projects</p>
+            <p className="text-2xl font-bold text-foreground">
+              {projects.filter((p) => p.status === "active").length}
+            </p>
           </div>
 
-          {/* Planning — tag removed */}
           <div className="bg-background rounded-lg p-4 border border-border">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Planning</p>
-                <p className="text-2xl font-bold text-foreground">
-                  {projects.filter((p) => p.status === "planning").length}
-                </p>
-              </div>
-            </div>
+            <p className="text-sm text-muted-foreground">Planning</p>
+            <p className="text-2xl font-bold text-foreground">
+              {projects.filter((p) => p.status === "planning").length}
+            </p>
           </div>
 
-          {/* On Hold — left without a tag */}
           <div className="bg-background rounded-lg p-4 border border-border">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">On Hold</p>
-                <p className="text-2xl font-bold text-foreground">
-                  {projects.filter((p) => p.status === "on-hold").length}
-                </p>
-              </div>
-            </div>
+            <p className="text-sm text-muted-foreground">On Hold</p>
+            <p className="text-2xl font-bold text-foreground">
+              {projects.filter((p) => p.status === "on-hold").length}
+            </p>
           </div>
 
-          {/* Completed — tag removed */}
           <div className="bg-background rounded-lg p-4 border border-border">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Completed</p>
-                <p className="text-2xl font-bold text-foreground">
-                  {projects.filter((p) => p.status === "completed").length}
-                </p>
-              </div>
-            </div>
+            <p className="text-sm text-muted-foreground">Completed</p>
+            <p className="text-2xl font-bold text-foreground">
+              {projects.filter((p) => p.status === "completed").length}
+            </p>
           </div>
 
-          {/* Median Days Overdue */}
           <div className="bg-background rounded-lg p-4 border border-border">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Median Days Overdue</p>
-                <p className={`text-2xl font-bold ${medianDaysOverdue > 0 ? "text-destructive" : "text-foreground"}`}>
-                  {medianDaysOverdue}
+                <p className={`text-2xl font-bold ${getMedianDaysOverdue() > 0 ? "text-destructive" : "text-foreground"}`}>
+                  {getMedianDaysOverdue()}
                 </p>
               </div>
-              <TrendingDown className={`h-4 w-4 ${medianDaysOverdue > 0 ? "text-destructive" : "text-muted-foreground"}`} />
+              <TrendingDown className={`h-4 w-4 ${getMedianDaysOverdue() > 0 ? "text-destructive" : "text-muted-foreground"}`} />
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              {medianDaysOverdue === 0 ? "No overdue tasks" : "Across all projects"}
+              {getMedianDaysOverdue() === 0 ? "No overdue tasks" : "Across all projects"}
             </p>
           </div>
         </div>
@@ -321,13 +382,10 @@ export function ProjectDashboard() {
                 </SelectContent>
               </Select>
 
-              {/* Date Range (click to open calendar) */}
+              {/* Date Range */}
               <Popover>
                 <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className="w-[180px] justify-start text-left font-normal bg-transparent"
-                  >
+                  <Button variant="outline" className="w-[180px] justify-start text-left font-normal bg-transparent">
                     <CalendarIcon className="mr-2 h-4 w-4" />
                     {dateRange?.from ? (
                       dateRange?.to ? (
@@ -342,7 +400,6 @@ export function ProjectDashboard() {
                     )}
                   </Button>
                 </PopoverTrigger>
-
                 <PopoverContent className="w-auto p-0 z-[1000]">
                   <Calendar
                     initialFocus
@@ -373,12 +430,7 @@ export function ProjectDashboard() {
                   </button>
                 </Badge>
               ))}
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={clearAllFilters}
-                className="text-muted-foreground hover:text-foreground"
-              >
+              <Button variant="ghost" size="sm" onClick={clearAllFilters} className="text-muted-foreground hover:text-foreground">
                 Clear all
               </Button>
             </div>

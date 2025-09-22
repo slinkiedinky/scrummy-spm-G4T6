@@ -15,7 +15,6 @@ export interface TeamMember {
     description: string
     status: TaskStatus
     priority: "low" | "medium" | "high" | "urgent"
-    assignee: string
     dueDate: string
     createdAt: string
     updatedAt: string
@@ -26,6 +25,8 @@ export interface TeamMember {
     estimatedHours?: number
     actualHours?: number
     isOverdue?: boolean
+    assigneeId?: string
+    assignee?: TeamMember
   }
   
   export interface Comment {

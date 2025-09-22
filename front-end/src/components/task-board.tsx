@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useCallback, useMemo, useState } from "react"
 import { TaskColumn } from "@/components/task-column"
 import { TaskDetailModal } from "@/components/task-detail-modal"
 
@@ -9,10 +9,40 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Plus, Search, Filter } from "lucide-react"
 
-import type { Project, Task } from "@/types/project"
+import type { Project, Task, TeamMember } from "@/types/project"
 
 interface TaskBoardProps {
   project: Project
+}
+
+/**
+ * Ensure a task has an assignee object (name, role, etc.), not just an id.
+ * We look the id up in project.team and attach the full TeamMember.
+ */
+function withHydratedAssignee(task: Task, team: TeamMember[]): Task {
+  const raw = task as any
+  const already = typeof raw.assignee === "object" && raw.assignee
+  const assigneeId =
+    already?.id ??
+    (typeof raw.assignee === "string" ? raw.assignee : raw.assigneeId)
+
+  const member = team.find((m) => m.id === assigneeId)
+  if (member) return { ...task, assignee: member } as Task
+
+  // Fallback placeholder (keeps UI stable if user doc is missing)
+  return assigneeId
+    ? ({
+        ...task,
+        assignee: {
+          id: String(assigneeId),
+          name: `User ${String(assigneeId).slice(0, 4)}`,
+          role: "Member",
+          email: "",
+          avatar: "",
+          department: "General",
+        },
+      } as Task)
+    : task
 }
 
 export function TaskBoard({ project }: TaskBoardProps) {
@@ -32,7 +62,8 @@ export function TaskBoard({ project }: TaskBoardProps) {
       const matchesPriority = priorityFilter === "all" || task.priority === priorityFilter
 
       // Support either a string id or an { id, name } object
-      const assigneeId = typeof task.assignee === "string" ? task.assignee : (task.assignee?.id ?? task.assigneeId)
+      const assigneeId =
+        typeof task.assignee === "string" ? task.assignee : (task.assignee?.id ?? task.assigneeId)
       const matchesAssignee = assigneeFilter === "all" || assigneeId === assigneeFilter
 
       return matchesSearch && matchesPriority && matchesAssignee
@@ -50,6 +81,12 @@ export function TaskBoard({ project }: TaskBoardProps) {
     { id: "review", title: "Review", status: "review", color: "bg-secondary" },
     { id: "completed", title: "Completed", status: "completed", color: "bg-chart-3" },
   ]
+
+  // Wrap the click so the modal always receives a hydrated task
+  const handleTaskClick = useCallback(
+    (t: Task) => setSelectedTask(withHydratedAssignee(t, project.team || [])),
+    [project.team]
+  )
 
   return (
     <div className="flex flex-col h-full">
@@ -93,7 +130,7 @@ export function TaskBoard({ project }: TaskBoardProps) {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Assignees</SelectItem>
-              {project.team.map((m) => (
+              {(project.team || []).map((m) => (
                 <SelectItem key={m.id} value={m.id}>
                   {m.name}
                 </SelectItem>
@@ -112,7 +149,7 @@ export function TaskBoard({ project }: TaskBoardProps) {
               title={col.title}
               color={col.color}
               tasks={getTasksByStatus(col.status)}
-              onTaskClick={setSelectedTask}
+              onTaskClick={handleTaskClick}
             />
           ))}
         </div>

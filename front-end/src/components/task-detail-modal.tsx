@@ -37,28 +37,28 @@ export function TaskDetailModal({ task, isOpen, onClose }: TaskDetailModalProps)
   const getPriorityColor = (priority: string) => {
     switch ((priority || "medium").toLowerCase()) {
       case "low":
-        return "bg-green-100 text-green-700 border border-green-200"
+        return "bg-green-500 text-white border-green-500"
       case "medium":
-        return "bg-yellow-100 text-yellow-800 border border-yellow-200"
+        return "bg-yellow-400 text-white border border-yellow-400"
       case "high":
-        return "bg-red-100 text-red-700 border border-red-200"
+        return "bg-red-500 text-white border-red-500"
       default:
-        return "bg-muted text-muted-foreground"
+        return "bg-muted text-muted-foreground border-muted"
     }
   }
 
   const getStatusColor = (status: string) => {
     switch (status) {
       case "todo":
-        return "bg-muted text-muted-foreground"
+        return "bg-muted text-muted-foreground border-muted"
       case "in-progress":
-        return "bg-primary text-primary-foreground"
+        return "bg-primary text-primary-foreground border-primary"
       case "review":
-        return "bg-secondary text-secondary-foreground"
+        return "bg-secondary text-secondary-foreground border-secondary"
       case "completed":
-        return "bg-chart-3 text-white"
+        return "bg-chart-3 text-white border-chart-3"
       default:
-        return "bg-muted text-muted-foreground"
+        return "bg-muted text-muted-foreground border-muted"
     }
   }
 

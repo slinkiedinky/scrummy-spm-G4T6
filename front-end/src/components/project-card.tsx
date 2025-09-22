@@ -25,28 +25,28 @@ function getInitials(member: TeamMember) {
 export function ProjectCard({ project }: ProjectCardProps) {
   const getStatusColor = (status: string) => {
     switch (status) {
-      case "active":     return "bg-primary text-primary-foreground"
-      case "planning":   return "bg-secondary text-secondary-foreground"
-      case "on-hold":    return "bg-muted text-muted-foreground"
-      case "completed":  return "bg-emerald-600 text-white"
-      default:           return "bg-muted text-muted-foreground"
+      case "active":     return "bg-primary text-primary-foreground border-primary"
+      case "planning":   return "bg-secondary text-secondary-foreground border-secondary"
+      case "on-hold":    return "bg-muted text-muted-foreground border-muted"
+      case "completed":  return "bg-emerald-600 text-white border-emerald-600"
+      default:           return "bg-muted text-muted-foreground border-muted"
     }
   }
   // Priority colors: high=red, medium=yellow, low=green
   const getPriorityColor = (priority: string) => {
     switch (priority) {
       case "urgent":
-      case "high":   return "bg-red-500 text-white"
-      case "medium": return "bg-yellow-400 text-black"
-      case "low":    return "bg-green-500 text-white"
-      default:       return "bg-muted text-muted-foreground"
+      case "high":   return "bg-red-500 text-white border-red-500"
+      case "medium": return "bg-yellow-400 text-white border-yellow-400"
+      case "low":    return "bg-green-500 text-white border-green-500"
+      default:       return "bg-muted text-muted-foreground border-muted"
     }
   }
   const getRiskLevel = () => {
     const p = project.overduePercentage || 0
-    if (p > 20) return { level: "High", color: "bg-red-500 text-white" }
-    if (p > 10) return { level: "Medium", color: "bg-yellow-400 text-black" }
-    return { level: "Low", color: "bg-green-500 text-white" }
+    if (p > 20) return { level: "High", color: "bg-red-500 text-white border-red-500" }
+    if (p > 10) return { level: "Medium", color: "bg-yellow-400 text-black border-yellow-400" }
+    return { level: "Low", color: "bg-green-500 text-white border-green-500" }
   }
   const formatDate = (s: string) =>
     new Date(s).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })

@@ -14,7 +14,7 @@ interface TaskColumnProps {
 
 const priorityClasses: Record<string, string> = {
   low: "bg-green-100 text-green-700 border border-green-200",
-  medium: "bg-yellow-100 text-yellow-800 border border-yellow-200",
+  medium: "bg-yellow-400 text-white border border-yellow-400",
   high: "bg-red-100 text-red-700 border border-red-200",
 }
 

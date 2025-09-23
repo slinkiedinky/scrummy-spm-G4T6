@@ -4,19 +4,19 @@ import { useEffect, useState } from "react"
 import Link from "next/link"
 import { ArrowLeft } from "lucide-react"
 
-import { TaskBoard } from "@/components/task-board"
-import { ProjectHeader } from "@/components/project-header"
-import { ProjectOverview } from "@/components/project-overview"
-import { ProjectTeamView } from "@/components/project-team-view"
+import { TaskBoard } from "@/components/TaskBoard"
+import { ProjectHeader } from "@/components/ProjectHeader"
+import { ProjectOverview } from "@/components/ProjectOverview"
+import { ProjectTeamView } from "@/components/ProjectTeamView"
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
 
 
 export function ProjectDetailView({ projectId }) {
-  const [project, setProject] = useState<Project | null>(null)
+  const [project, setProject] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState(null)
 
   useEffect(() => {
     ;(async () => {

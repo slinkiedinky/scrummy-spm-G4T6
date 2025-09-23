@@ -1,4 +1,4 @@
-import { Sidebar } from "@/components/sidebar"
+import { Sidebar } from "@/components/Sidebar"
 import { ProjectDetailView } from "@/components/ProjectDetailedView"
 
 export default function ProjectPage({ params }) {

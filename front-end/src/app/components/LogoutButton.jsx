@@ -9,7 +9,7 @@ export default function LogoutButton() {
   const handleLogout = async () => {
     try {
       await signOut(auth);
-      router.replace("/login");
+      router.replace("/");
     } catch (err) {
       console.error("Logout failed:", err);
     }

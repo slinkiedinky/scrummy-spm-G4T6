@@ -11,7 +11,7 @@ export default function AuthGuard({ children }) {
     // Immediate check
     const user = auth.currentUser;
     if (!user) {
-      router.replace("/login");
+      router.replace("/");
     } else {
       setChecked(true);
     }
@@ -19,7 +19,7 @@ export default function AuthGuard({ children }) {
     // Listen for changes
     const unsubscribe = auth.onAuthStateChanged((u) => {
       if (!u) {
-        router.replace("/login");
+        router.replace("/");
       } else {
         setChecked(true);
       }

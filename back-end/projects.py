@@ -1,17 +1,17 @@
 from flask import Blueprint, request, jsonify
 from firebase_admin import firestore
-import datetime
+from datetime import datetime
 
 db = firestore.client()
 projects_bp = Blueprint("projects", __name__, url_prefix="/projects")
 
 def _to_iso(value):
-    if isinstance(value, dt.datetime):
+    if isinstance(value, datetime):
         return value.isoformat()
     return value
 
 def _canon_status(status):
-    return status.lower() if status else "new"
+    return status.lower() if status else "to-do"
 
 def _canon_priority(priority):
     return priority.lower() if priority else "medium"

@@ -25,7 +25,7 @@ export default function LoginPage() {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
         // User is signed in, redirect to task landing
-        router.push("/taskLanding");
+        router.push("/projects");
       } else {
         // User is signed out, stay on login page
         setAuthChecking(false);
@@ -170,7 +170,7 @@ export default function LoginPage() {
             <div className="w-16 h-16 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-full flex items-center justify-center mx-auto mb-4">
               <Lock className="w-8 h-8 text-white" />
             </div>
-            <h1 className="text-2xl font-bold text-gray-900 mb-2">Welcome to Tasker!</h1>
+            <h1 className="text-2xl font-bold text-gray-900 mb-2">Welcome to TaskFlow!</h1>
             <p className="text-gray-600">{isSignUp ? 'Create your account to get started' : 'Sign in to your account to continue'}</p>
           </div>
 

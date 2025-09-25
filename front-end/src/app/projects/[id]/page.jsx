@@ -345,12 +345,12 @@ const workloadList = Object.entries(counts)
 
     autoTable(doc, {
       startY: y,
-      head: [["Field", "Value"]],
+      head: [["Summary", "Details"]],
       body: [
         ["Status", (project.status || "").toLowerCase()],
         ["Priority", (project.priority || "").toLowerCase()],
         ["Due date", project.dueDate ? new Date(toDate(project.dueDate)).toLocaleDateString() : "-"],
-        ["Team", String((project.teamIds || []).length)],
+        ["Team Members", String((project.teamIds || []).length)],
         ["Tags", (project.tags || []).join(", ") || "-"],
       ],
       styles: { fontSize: 10, cellPadding: 6 },
@@ -381,7 +381,7 @@ const workloadList = Object.entries(counts)
 
     autoTable(doc, {
       startY: y,
-      head: [["Member", "Tasks"]],
+      head: [["Member", "No. of Tasks"]],
       body: workloadRows.length ? workloadRows : [["—", "0"]],
       styles: { fontSize: 10, cellPadding: 6 },
       headStyles: { fillColor: [243, 244, 246], textColor: 17 },
@@ -393,11 +393,11 @@ const workloadList = Object.entries(counts)
     const dlRows = [
       ...dueToday.map((t) => ["Due Today", t.title, t.dueDate ? new Date(toDate(t.dueDate)).toLocaleDateString() : "-"]),
       ...overdueTasks.map((t) => ["Overdue", t.title, t.dueDate ? new Date(toDate(t.dueDate)).toLocaleDateString() : "-"]),
-      ...next7Days.map((t) => ["Next 7 Days", t.title, t.dueDate ? new Date(toDate(t.dueDate)).toLocaleDateString() : "-"]),
+      ...next7Days.map((t) => ["Due Next 7 Days", t.title, t.dueDate ? new Date(toDate(t.dueDate)).toLocaleDateString() : "-"]),
     ];
     autoTable(doc, {
       startY: y,
-      head: [["Bucket", "Task", "Due date"]],
+      head: [["Task Status", "Task", "Due date"]],
       body: dlRows.length ? dlRows : [["—", "None", "—"]],
       styles: { fontSize: 10, cellPadding: 6 },
       headStyles: { fillColor: [243, 244, 246], textColor: 17 },

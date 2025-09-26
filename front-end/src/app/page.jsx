@@ -114,7 +114,7 @@ export default function LoginPage() {
         });
 
         console.log("Sign up successful!", user.uid);
-        router.push("/taskLanding");
+        router.push("/tasks");
         } catch (err) {
           setError("Failed to create account. Please try again.");
           console.error("Sign up error:", err);
@@ -129,7 +129,7 @@ export default function LoginPage() {
         console.log("Login successful:", auth.currentUser);
 
         // Redirect to dashboard
-        router.push("/taskLanding");
+        router.push("/tasks");
       } catch (err) {
         setError("Failed to login. Check credentials.");
         console.error("Login error:", err);

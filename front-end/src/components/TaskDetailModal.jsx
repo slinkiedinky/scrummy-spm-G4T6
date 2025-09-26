@@ -14,6 +14,14 @@ function toInitials(name) {
   return (parts[0].includes("@") ? parts[0].split("@")[0] : parts[0]).slice(0, 2).toUpperCase()
 }
 
+function toDate(value) {
+  if (!value) return null
+  if (value instanceof Date) return value
+  if (typeof value === "string" || typeof value === "number") return new Date(value)
+  if (typeof value === "object" && typeof value.seconds === "number") return new Date(value.seconds * 1000)
+  return null
+}
+
 export function TaskDetailModal({ task, isOpen, onClose }) {
   const assignee =
     typeof task.assignee === "object" && task.assignee
@@ -55,8 +63,8 @@ export function TaskDetailModal({ task, isOpen, onClose }) {
 
 
   const fmt = (d) =>
-    d
-      ? new Date(d).toLocaleDateString("en-US", {
+    d && toDate(d)
+      ? toDate(d).toLocaleDateString("en-US", {
           month: "long",
           day: "numeric",
           year: "numeric",
@@ -65,7 +73,10 @@ export function TaskDetailModal({ task, isOpen, onClose }) {
         })
       : "—"
 
-  const isOverdue = !!task.dueDate && new Date(task.dueDate) < new Date() && task.status !== "completed"
+  const isOverdue = (() => {
+    const due = toDate(task.dueDate)
+    return !!due && due < new Date() && task.status !== "completed"
+  })()
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -83,6 +94,11 @@ export function TaskDetailModal({ task, isOpen, onClose }) {
                 </Badge>
                 {isOverdue && <Badge variant="destructive">Overdue</Badge>}
               </div>
+              {task.projectName && (
+                <p className="text-xs text-muted-foreground mt-2 truncate">
+                  Project: {task.projectName}
+                </p>
+              )}
             </div>
             <div className="flex gap-2">
               <Button size="sm" variant="outline">

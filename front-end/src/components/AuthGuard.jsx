@@ -8,27 +8,23 @@ export default function AuthGuard({ children }) {
   const [checked, setChecked] = useState(false);
 
   useEffect(() => {
-    // Immediate check
-    const user = auth.currentUser;
-    if (!user) {
-      router.replace("/");
-    } else {
-      setChecked(true);
-    }
+    let cancelled = false;
 
-    // Listen for changes
-    const unsubscribe = auth.onAuthStateChanged((u) => {
-      if (!u) {
-        router.replace("/");
-      } else {
+    const unsubscribe = auth.onAuthStateChanged((user) => {
+      if (cancelled) return;
+      if (user) {
         setChecked(true);
+      } else {
+        router.replace("/");
       }
     });
 
-    return unsubscribe;
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
   }, [router]);
 
-  // Don't render children until auth is confirmed
   if (!checked) return null;
 
   return <>{children}</>;

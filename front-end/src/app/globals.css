@@ -4,6 +4,7 @@
 @plugin "tailwindcss-animate";
 
 @custom-variant dark (&:is(.dark *));
+@import "tw-animate-css";
 
 :root {
   /* Base */

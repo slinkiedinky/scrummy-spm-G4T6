@@ -1,4 +1,7 @@
-Flask
+Flask==3.0.0
+Flask-CORS==4.0.0
+firebase-admin==6.5.0
+sendgrid==6.Flask
 flask-cors
 firebase-admin
 google-cloud-firestore

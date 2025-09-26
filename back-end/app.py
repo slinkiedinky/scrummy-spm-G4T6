@@ -1,8 +1,12 @@
 # back-end/app.py
 from flask import Flask, jsonify, request
 from flask_cors import CORS
+from firebase import db
+import datetime as dt
+from flask_cors import CORS
 from firebase import db  # from back-end/firebase.py
 import datetime as dt
+from projects import projects_bp
 
 app = Flask(__name__)
 CORS(app, resources={r"/api/*": {"origins": "*"}})
@@ -175,5 +179,10 @@ def get_users():
     return jsonify(out)
 
 
+CORS(app, resources={r"/api/*": {"origins": "*"}})
+app.register_blueprint(users_bp, url_prefix="/api/users")
+app.register_blueprint(projects_bp, url_prefix="/api/projects")
+
+# Running app
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)

@@ -5,6 +5,41 @@ import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { Calendar, Clock, Target, TrendingUp, AlertTriangle } from "lucide-react"
 
+const priorityMeta = {
+  low: {
+    badge: "border-emerald-500 text-emerald-600",
+    label: "Low Priority",
+  },
+  medium: {
+    badge: "border-yellow-500 text-yellow-600",
+    label: "Medium Priority",
+  },
+  high: {
+    badge: "border-red-500 text-red-600",
+    label: "High Priority",
+  },
+};
+
+const resolveProjectPriority = (raw) => {
+  if (typeof raw === "string") {
+    const candidate = raw.trim().toLowerCase();
+    if (priorityMeta[candidate]) {
+      return candidate;
+    }
+    const parsed = Number(candidate);
+    if (Number.isFinite(parsed)) {
+      return resolveProjectPriority(parsed);
+    }
+    return "medium";
+  }
+  if (typeof raw === "number") {
+    if (raw >= 8) return "high";
+    if (raw <= 3) return "low";
+    return "medium";
+  }
+  return "medium";
+};
+
 export function ProjectOverview({ project }) {
   const completedTasks = project.tasks.filter((task) => task.status === "completed").length
   const totalTasks = project.tasks.length
@@ -12,6 +47,9 @@ export function ProjectOverview({ project }) {
   const overdueTasks = project.tasks.filter(
     (task) => new Date(task.dueDate) < new Date() && task.status !== "completed",
   ).length
+
+  const priorityKey = resolveProjectPriority(project.priority)
+  const priorityBadge = priorityMeta[priorityKey] ?? priorityMeta.medium
 
   const getUpcomingDeadlines = () => {
     const today = new Date()
@@ -163,16 +201,17 @@ export function ProjectOverview({ project }) {
             <div>
               <label className="text-sm font-medium text-muted-foreground">Status</label>
               <div className="mt-1">
-                <Badge
-                  className={
-                    project.status === "active"
-                      ? "bg-primary text-primary-foreground"
-                      : project.status === "completed"
-                        ? "bg-chart-3 text-white"
-                        : "bg-secondary text-secondary-foreground"
-                  }
-                >
-                  {project.status.charAt(0).toUpperCase() + project.status.slice(1)}
+                <Badge className={(() => {
+                  const status = (project.status || "").toLowerCase();
+                  if (status === "to-do") return "bg-blue-400 text-white";
+                  if (status === "in progress") return "bg-yellow-300 text-secondary-foreground";
+                  if (status === "completed") return "bg-emerald-600 text-white";
+                  if (status === "blocked") return "bg-red-500 text-white";
+                  return "bg-secondary text-secondary-foreground";
+                })()}>
+                  {project.status
+                    ? project.status.charAt(0).toUpperCase() + project.status.slice(1).replace("-", " ")
+                    : "Unknown"}
                 </Badge>
               </div>
             </div>
@@ -182,15 +221,9 @@ export function ProjectOverview({ project }) {
               <div className="mt-1">
                 <Badge
                   variant="outline"
-                  className={
-                    project.priority === "urgent"
-                      ? "border-destructive text-destructive"
-                      : project.priority === "high"
-                        ? "border-accent text-accent"
-                        : "border-muted-foreground text-muted-foreground"
-                  }
+                  className={priorityBadge.badge}
                 >
-                  {project.priority.charAt(0).toUpperCase() + project.priority.slice(1)}
+                  {priorityBadge.label}
                 </Badge>
               </div>
             </div>

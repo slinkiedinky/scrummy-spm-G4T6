@@ -16,6 +16,37 @@ import { format } from "date-fns";
 import { auth } from "@/lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
 
+const PROJECT_PRIORITIES = [
+  { value: "low", label: "Low" },
+  { value: "medium", label: "Medium" },
+  { value: "high", label: "High" },
+];
+
+const priorityOrder = { low: 1, medium: 2, high: 3 };
+
+const ensureProjectPriority = (value) => {
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (priorityOrder[normalized]) {
+      return normalized;
+    }
+    const parsed = Number(normalized);
+    if (Number.isFinite(parsed)) {
+      return ensureProjectPriority(parsed);
+    }
+    return "medium";
+  }
+  if (typeof value === "number") {
+    if (value >= 8) return "high";
+    if (value <= 3) return "low";
+    return "medium";
+  }
+  if (value && typeof value === "object" && "value" in value) {
+    return ensureProjectPriority(value.value);
+  }
+  return "medium";
+};
+
 // normalize backend status -> UI status
 function canonUiStatus(s = "") {
   const v = (s || "").toLowerCase();
@@ -26,7 +57,6 @@ function canonUiStatus(s = "") {
 }
 
 export default function ProjectsPage() {
-  const [projectsRaw, setProjectsRaw] = useState([]);
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -51,7 +81,6 @@ export default function ProjectsPage() {
 
   const load = useCallback(async (userId) => {
     if (!userId) {
-      setProjectsRaw([]);
       setProjects([]);
       setLoading(false);
       return;
@@ -61,8 +90,16 @@ export default function ProjectsPage() {
       setLoading(true);
       setError(null);
       const data = await listProjects({ assignedTo: userId });
-      setProjectsRaw(data);
-      setProjects((data || []).map((p) => ({ ...p, status: canonUiStatus(p.status) })));
+      setProjects(
+        (data || []).map((p) => {
+          const priority = ensureProjectPriority(p.priority);
+          return {
+            ...p,
+            status: canonUiStatus(p.status),
+            priority,
+          };
+        })
+      );
     } catch (e) {
       setError(e?.message ?? "Failed to load projects");
     } finally {
@@ -80,7 +117,6 @@ export default function ProjectsPage() {
 
   useEffect(() => {
     if (!currentUser?.uid) {
-      setProjectsRaw([]);
       setProjects([]);
       setLoading(false);
       return;
@@ -332,9 +368,11 @@ export default function ProjectsPage() {
                       <SelectValue placeholder="Select priority" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="low">Low</SelectItem>
-                      <SelectItem value="medium">Medium</SelectItem>
-                      <SelectItem value="high">High</SelectItem>
+                      {PROJECT_PRIORITIES.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>

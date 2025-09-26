@@ -10,12 +10,36 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Search, Filter, RefreshCw } from "lucide-react";
+import { Search, Filter, RefreshCw, AlertCircle, Trash2 } from "lucide-react";
 
 import { auth } from "@/lib/firebase";
-import { listAssignedTasks } from "@/lib/api";
+import { listAssignedTasks, listUsers, updateTask, deleteTask } from "@/lib/api";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:5000/api";
+const ensureArray = (value) => {
+  if (Array.isArray(value)) {
+    return value.filter((item) => item !== undefined && item !== null);
+  }
+  if (value === undefined || value === null) return [];
+  return [value];
+};
+
+const fallbackUserLabel = (id, index = 0) => {
+  const raw = String(id ?? "").trim();
+  if (raw) {
+    return `User ${raw.slice(0, 4)}`;
+  }
+  const suffix = Number.isFinite(index) ? index + 1 : "?";
+  return `User ${suffix}`;
+};
+
 const STATUS_COLUMNS = [
   { id: "to-do", title: "To Do", status: "to-do" },
   { id: "in progress", title: "In Progress", status: "in progress" },
@@ -23,11 +47,12 @@ const STATUS_COLUMNS = [
   { id: "blocked", title: "Blocked", status: "blocked" },
 ];
 
+const STATUS = STATUS_COLUMNS.map((column) => column.status);
+
+const PRIORITY_VALUES = Array.from({ length: 10 }, (_, i) => String(i + 1));
 const PRIORITY_OPTIONS = [
   { value: "all", label: "All Priority" },
-  { value: "high", label: "High" },
-  { value: "medium", label: "Medium" },
-  { value: "low", label: "Low" },
+  ...PRIORITY_VALUES.map((value) => ({ value, label: `Priority ${value}` })),
 ];
 
 const toDate = (value) => {
@@ -45,29 +70,31 @@ const statusBadgeClasses = {
   blocked: "bg-muted text-muted-foreground",
 };
 
-const priorityBadgeClasses = {
-  low: "bg-green-100 text-green-700 border border-green-200",
-  medium: "bg-yellow-400 text-white border border-yellow-400",
-  high: "bg-red-100 text-red-700 border border-red-200",
+const getPriorityBadgeClass = (priority) => {
+  const value = Number(priority);
+  if (!Number.isFinite(value)) {
+    return "bg-muted text-muted-foreground border border-border/50";
+  }
+  if (value >= 8) {
+    return "bg-red-100 text-red-700 border border-red-200";
+  }
+  if (value >= 5) {
+    return "bg-yellow-100 text-yellow-700 border border-yellow-200";
+  }
+  return "bg-emerald-100 text-emerald-700 border border-emerald-200";
 };
 
 const statusLabel = (status) =>
   status ? status.charAt(0).toUpperCase() + status.slice(1).replace("-", " ") : "Unknown";
 
 const priorityLabel = (priority) =>
-  priority ? priority.charAt(0).toUpperCase() + priority.slice(1) : "N/A";
+  priority ? `Priority ${priority}` : "Priority —";
 
-async function fetchUserById(id) {
-  if (!id) return null;
-  try {
-    const res = await fetch(`${API_BASE}/users/${id}`);
-    if (!res.ok) throw new Error("Failed to fetch user");
-    return await res.json();
-  } catch (err) {
-    console.error("Error fetching user", err);
-    return null;
-  }
-}
+const toDateInputValue = (value) => {
+  const date = toDate(value);
+  if (!date) return "";
+  return date.toISOString().slice(0, 10);
+};
 
 export default function TasksPage() {
   const [currentUser, setCurrentUser] = useState(null);
@@ -77,12 +104,31 @@ export default function TasksPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
+  const [users, setUsers] = useState([]);
+  const [usersLoading, setUsersLoading] = useState(true);
+  const [usersError, setUsersError] = useState("");
+
   const [searchTerm, setSearchTerm] = useState("");
   const [priorityFilter, setPriorityFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [projectFilter, setProjectFilter] = useState("all");
 
   const [selectedTask, setSelectedTask] = useState(null);
+  const [editingTask, setEditingTask] = useState(null);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [editForm, setEditForm] = useState({
+    title: "",
+    description: "",
+    status: "to-do",
+    priority: "5",
+    dueDate: "",
+  });
+  const [editError, setEditError] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [deletingTaskId, setDeletingTaskId] = useState("");
+  const [deleteCandidate, setDeleteCandidate] = useState(null);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
 
   const loadTasks = useCallback(async (uid) => {
     if (!uid) {
@@ -99,13 +145,17 @@ export default function TasksPage() {
         (data || []).map((t) => {
           const projectId = t.projectId || "unassigned";
           const projectName = t.projectName || (projectId === "unassigned" ? "Unassigned Project" : projectId);
+          const priorityNumber = Number(t.priority);
+          const priority = Number.isFinite(priorityNumber) ? String(priorityNumber) : "";
           return {
             ...t,
             projectId,
             projectName,
             status: (t.status || "").toLowerCase(),
-            priority: (t.priority || "").toLowerCase(),
+            priority,
+            priorityNumber: Number.isFinite(priorityNumber) ? priorityNumber : null,
             tags: Array.isArray(t.tags) ? t.tags : [],
+            collaboratorsIds: ensureArray(t.collaboratorsIds),
           };
         })
       );
@@ -129,10 +179,94 @@ export default function TasksPage() {
     if (!currentUser?.uid) {
       setTasks([]);
       setLoading(false);
+      setUsers([]);
+      setUsersLoading(false);
+      setUsersError("");
       return;
     }
     loadTasks(currentUser.uid);
   }, [currentUser?.uid, loadTasks]);
+
+  useEffect(() => {
+    if (!currentUser?.uid) {
+      setUsers([]);
+      setUsersLoading(false);
+      setUsersError("");
+      return;
+    }
+
+    let active = true;
+    setUsersLoading(true);
+    setUsersError("");
+
+    (async () => {
+      try {
+        const data = await listUsers();
+        if (!active) return;
+        setUsers(Array.isArray(data) ? data : []);
+      } catch (err) {
+        if (!active) return;
+        setUsers([]);
+        setUsersError(err?.message || "Failed to load users");
+      } finally {
+        if (active) {
+          setUsersLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [currentUser?.uid]);
+
+  const userLookup = useMemo(() => {
+    const map = new Map();
+    (users || []).forEach((user) => {
+      if (!user || !user.id) return;
+      const key = String(user.id).trim();
+      if (!key) return;
+      map.set(key, user);
+    });
+    return map;
+  }, [users]);
+
+  const summarizeUser = useCallback(
+    (id) => {
+      if (id === undefined || id === null) return null;
+      const key = String(id).trim();
+      if (!key) return null;
+      const info = userLookup.get(key);
+      if (!info) {
+        return {
+          id: key,
+          name: fallbackUserLabel(key),
+          email: "",
+          role: "",
+          avatar: "",
+        };
+      }
+      const nameCandidate = [info.fullName, info.displayName, info.name, info.email, key].find(
+        (value) => typeof value === "string" && value.trim()
+      );
+      return {
+        id: key,
+        name: nameCandidate ? nameCandidate.trim() : fallbackUserLabel(key),
+        email: typeof info.email === "string" ? info.email : "",
+        role: typeof info.role === "string" ? info.role : "",
+        avatar: info.avatar || info.photoURL || "",
+      };
+    },
+    [userLookup]
+  );
+
+  const resolveUserLabel = useCallback(
+    (id) => {
+      const summary = summarizeUser(id);
+      return summary?.name || "";
+    },
+    [summarizeUser]
+  );
 
   const projectsList = useMemo(() => {
     const unique = new Map();
@@ -148,20 +282,49 @@ export default function TasksPage() {
 
   const filteredTasks = useMemo(() => {
     const search = searchTerm.trim().toLowerCase();
-    return tasks.filter((task) => {
-      const matchesSearch =
-        !search ||
-        (task.title || "").toLowerCase().includes(search) ||
-        (task.description || "").toLowerCase().includes(search) ||
-        (task.projectName || "").toLowerCase().includes(search);
+    return tasks
+      .filter((task) => {
+        const matchesSearch =
+          !search ||
+          (task.title || "").toLowerCase().includes(search) ||
+          (task.description || "").toLowerCase().includes(search) ||
+          (task.projectName || "").toLowerCase().includes(search);
 
-      const matchesPriority = priorityFilter === "all" || task.priority === priorityFilter;
-      const matchesStatus = statusFilter === "all" || task.status === statusFilter;
-      const matchesProject = projectFilter === "all" || task.projectId === projectFilter;
+        const matchesPriority = priorityFilter === "all" || task.priority === priorityFilter;
+        const matchesStatus = statusFilter === "all" || task.status === statusFilter;
+        const matchesProject = projectFilter === "all" || task.projectId === projectFilter;
 
-      return matchesSearch && matchesPriority && matchesStatus && matchesProject;
-    });
-  }, [tasks, searchTerm, priorityFilter, statusFilter, projectFilter]);
+        return matchesSearch && matchesPriority && matchesStatus && matchesProject;
+      })
+      .map((task) => {
+        const collaboratorIds = ensureArray(task.collaboratorsIds);
+        const dedupedCollaboratorIds = Array.from(
+          new Set(collaboratorIds.filter((id) => id !== undefined && id !== null && String(id).trim()))
+        ).map((id) => String(id).trim());
+
+        const collaboratorSummaries = dedupedCollaboratorIds.map((id, index) => {
+          const summary = summarizeUser(id);
+          if (summary) return summary;
+          return {
+            id,
+            name: fallbackUserLabel(id, index),
+            email: "",
+            role: "",
+            avatar: "",
+          };
+        });
+
+        const assigneeSummary = summarizeUser(task.assigneeId || task.ownerId);
+
+        return {
+          ...task,
+          assigneeSummary,
+          collaboratorIds: dedupedCollaboratorIds,
+          collaboratorSummaries,
+          collaboratorNames: collaboratorSummaries.map((item) => item.name),
+        };
+      });
+  }, [tasks, searchTerm, priorityFilter, statusFilter, projectFilter, summarizeUser]);
 
   const statusOrder = useMemo(
     () => STATUS_COLUMNS.map((column) => column.status),
@@ -209,20 +372,185 @@ export default function TasksPage() {
     return due && due < new Date() && task.status !== "completed";
   });
 
-  const handleTaskClick = useCallback(async (task) => {
-    if (!task) return;
-    const assigneeId = task.assigneeId || task.ownerId;
-    const hydrated = { ...task };
+  const resolveTaskRecord = useCallback(
+    (task) => {
+      if (!task) return null;
+      const match = tasks.find(
+        (entry) => entry.id === task.id && entry.projectId === task.projectId
+      );
+      return match || task;
+    },
+    [tasks]
+  );
 
-    if (assigneeId) {
-      const user = await fetchUserById(assigneeId);
-      if (user) {
-        hydrated.assignee = user;
-      }
-    }
+  const handleTaskClick = useCallback(
+    (task) => {
+      if (!task) return;
 
-    setSelectedTask(hydrated);
+      const resolved = resolveTaskRecord(task) || task;
+      const assigneeSummary = summarizeUser(resolved.assigneeId || resolved.ownerId);
+
+      const sourceCollaborators = Array.isArray(resolved.collaboratorSummaries) && resolved.collaboratorSummaries.length > 0
+        ? resolved.collaboratorSummaries
+        : (Array.isArray(resolved.collaboratorIds) ? resolved.collaboratorIds : ensureArray(resolved.collaboratorsIds)).map(
+            (id, index) => summarizeUser(id) || {
+              id: String(id ?? ""),
+              name: fallbackUserLabel(id, index),
+              email: "",
+              role: "",
+              avatar: "",
+            }
+          );
+
+      const collaborators = [];
+      const seen = new Set();
+      sourceCollaborators.forEach((item, index) => {
+        if (!item) return;
+        const key = String(item.id ?? index);
+        if (!key || seen.has(key)) return;
+        seen.add(key);
+        collaborators.push({
+          id: key,
+          name: item.name || fallbackUserLabel(key, index),
+          email: item.email || "",
+          role: item.role || "",
+          avatar: item.avatar || "",
+        });
+      });
+
+      setSelectedTask({
+        ...resolved,
+        assignee: assigneeSummary || undefined,
+        collaborators,
+      });
+    },
+    [resolveTaskRecord, summarizeUser]
+  );
+
+  const openEditDialog = useCallback(
+    (task) => {
+      const base = resolveTaskRecord(task);
+      if (!base) return;
+      setEditingTask(base);
+      setEditForm({
+        title: base.title || "",
+        description: base.description || "",
+        status: (base.status || "to-do").toLowerCase(),
+        priority: base.priority || (Number.isFinite(base.priorityNumber) ? String(base.priorityNumber) : "5"),
+        dueDate: toDateInputValue(base.dueDate),
+      });
+      setEditError("");
+      setSavingEdit(false);
+      setIsEditDialogOpen(true);
+    },
+    [resolveTaskRecord]
+  );
+
+  const closeEditDialog = useCallback(() => {
+    setIsEditDialogOpen(false);
+    setEditingTask(null);
+    setEditError("");
+    setSavingEdit(false);
   }, []);
+
+  const handleEditFieldChange = useCallback((field, value) => {
+    setEditForm((previous) => ({ ...previous, [field]: value }));
+  }, []);
+
+  const handleEditSubmit = useCallback(
+    async (event) => {
+      event?.preventDefault();
+      if (!editingTask || !currentUser?.uid) {
+        return;
+      }
+
+      const title = editForm.title.trim();
+      if (!title) {
+        setEditError("Task title is required.");
+        return;
+      }
+
+      const priorityNumber = Number(editForm.priority);
+      if (!Number.isFinite(priorityNumber)) {
+        setEditError("Priority must be a number between 1 and 10.");
+        return;
+      }
+      const clampedPriority = Math.min(10, Math.max(1, Math.round(priorityNumber)));
+
+      setSavingEdit(true);
+      setEditError("");
+
+      try {
+        const payload = {
+          title,
+          description: editForm.description.trim(),
+          status: editForm.status || "to-do",
+          priority: clampedPriority,
+        };
+
+        if (editForm.dueDate) {
+          const due = new Date(`${editForm.dueDate}T00:00:00`);
+          if (Number.isNaN(due.getTime())) {
+            setEditError("Please provide a valid due date.");
+            setSavingEdit(false);
+            return;
+          }
+          payload.dueDate = due.toISOString();
+        } else {
+          payload.dueDate = null;
+        }
+
+        await updateTask(editingTask.projectId, editingTask.id, payload);
+        await loadTasks(currentUser.uid);
+        closeEditDialog();
+        setSelectedTask(null);
+      } catch (err) {
+        setEditError(err?.message || "Failed to update task.");
+        setSavingEdit(false);
+      }
+    },
+    [editingTask, editForm, currentUser?.uid, loadTasks, closeEditDialog]
+  );
+
+  const requestDeleteTask = useCallback(
+    (task) => {
+      const base = resolveTaskRecord(task);
+      if (!base) return;
+      setDeleteCandidate(base);
+      setDeleteError("");
+      setIsDeleteDialogOpen(true);
+    },
+    [resolveTaskRecord]
+  );
+
+  const closeDeleteDialog = useCallback(() => {
+    setIsDeleteDialogOpen(false);
+    setDeleteCandidate(null);
+    setDeleteError("");
+    setDeletingTaskId("");
+  }, []);
+
+  const confirmDeleteTask = useCallback(
+    async () => {
+      if (!deleteCandidate || !deleteCandidate.projectId || !deleteCandidate.id || !currentUser?.uid) {
+        return;
+      }
+      setDeletingTaskId(deleteCandidate.id);
+      setDeleteError("");
+      try {
+        await deleteTask(deleteCandidate.projectId, deleteCandidate.id);
+        await loadTasks(currentUser.uid);
+        if (selectedTask?.id === deleteCandidate.id) {
+          setSelectedTask(null);
+        }
+        closeDeleteDialog();
+      } catch (err) {
+        setDeleteError(err?.message || "Failed to delete task.");
+        setDeletingTaskId("");
+      }
+    },
+    [closeDeleteDialog, currentUser?.uid, deleteCandidate, loadTasks, selectedTask?.id]
+  );
 
   const handleRefresh = () => {
     if (currentUser?.uid) {
@@ -248,6 +576,169 @@ export default function TasksPage() {
 
   return (
     <div className="flex flex-col h-full">
+      <Dialog
+        open={isDeleteDialogOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            closeDeleteDialog();
+          }
+        }}
+      >
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <Trash2 className="h-4 w-4" />
+              Delete Task
+            </DialogTitle>
+            <DialogDescription>
+              This action permanently removes the task and any associated metadata.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Are you sure you want to delete
+              {" "}
+              <span className="font-semibold text-foreground">
+                {deleteCandidate?.title || "this task"}
+              </span>
+              ? This can’t be undone.
+            </p>
+            {deleteError && (
+              <div className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                <AlertCircle className="h-4 w-4" />
+                <span>{deleteError}</span>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={closeDeleteDialog} disabled={Boolean(deletingTaskId)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={confirmDeleteTask}
+              disabled={Boolean(deletingTaskId)}
+            >
+              {deletingTaskId ? "Deleting…" : "Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={isEditDialogOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            closeEditDialog();
+          }
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <form onSubmit={handleEditSubmit} className="space-y-6">
+            <DialogHeader>
+              <DialogTitle>Edit Task</DialogTitle>
+              <DialogDescription>Update task details and save to keep everyone aligned.</DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <label htmlFor="edit-title" className="text-sm font-medium text-foreground">
+                  Title
+                </label>
+                <Input
+                  id="edit-title"
+                  value={editForm.title}
+                  onChange={(e) => handleEditFieldChange("title", e.target.value)}
+                  placeholder="Task title"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label htmlFor="edit-description" className="text-sm font-medium text-foreground">
+                  Description
+                </label>
+                <textarea
+                  id="edit-description"
+                  className="min-h-[96px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  value={editForm.description}
+                  onChange={(e) => handleEditFieldChange("description", e.target.value)}
+                  placeholder="Add helpful context for this task"
+                />
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <label htmlFor="edit-status" className="text-sm font-medium text-foreground">
+                    Status
+                  </label>
+                  <Select value={editForm.status} onValueChange={(value) => handleEditFieldChange("status", value)}>
+                    <SelectTrigger id="edit-status">
+                      <SelectValue placeholder="Select status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {STATUS.map((status) => (
+                        <SelectItem key={status} value={status}>
+                          {STATUS_COLUMNS.find((column) => column.status === status)?.title || status}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <label htmlFor="edit-priority" className="text-sm font-medium text-foreground">
+                    Priority (1 = least urgent, 10 = most urgent)
+                  </label>
+                  <Select value={editForm.priority} onValueChange={(value) => handleEditFieldChange("priority", value)}>
+                    <SelectTrigger id="edit-priority">
+                      <SelectValue placeholder="Select priority" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {PRIORITY_VALUES.map((value) => (
+                        <SelectItem key={value} value={value}>
+                          {`Priority ${value}`}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label htmlFor="edit-due-date" className="text-sm font-medium text-foreground">
+                  Due date
+                </label>
+                <Input
+                  id="edit-due-date"
+                  type="date"
+                  value={editForm.dueDate}
+                  onChange={(e) => handleEditFieldChange("dueDate", e.target.value)}
+                />
+              </div>
+
+              {editError && (
+                <div className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                  <AlertCircle className="h-4 w-4" />
+                  <span>{editError}</span>
+                </div>
+              )}
+            </div>
+
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={closeEditDialog} disabled={savingEdit}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={savingEdit}>
+                {savingEdit ? "Saving…" : "Save Changes"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
       <div className="border-b border-border p-6 space-y-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
@@ -278,6 +769,11 @@ export default function TasksPage() {
         </div>
 
         {error && <p className="text-sm text-destructive">{error}</p>}
+        {usersError && !usersLoading && (
+          <p className="text-xs text-muted-foreground">
+            Unable to load teammate details. Collaborator names may be limited.
+          </p>
+        )}
 
         <div className="flex flex-col lg:flex-row gap-4">
           <div className="relative flex-1">
@@ -393,15 +889,21 @@ export default function TasksPage() {
                           </div>
                           <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
                             <Badge
-                              className={priorityBadgeClasses[task.priority] || "bg-muted text-muted-foreground"}
+                              className={getPriorityBadgeClass(task.priority)}
                               variant="outline"
                             >
-                              {priorityLabel(task.priority)} Priority
+                              {priorityLabel(task.priority)}
                             </Badge>
                             <span className={overdue ? "text-destructive font-medium" : ""}>
                               Due: {due ? due.toLocaleDateString() : "—"}
                             </span>
                             <span>Updated: {updated ? updated.toLocaleDateString() : "—"}</span>
+                            {task.assigneeSummary?.name && (
+                              <span>Assignee: {task.assigneeSummary.name}</span>
+                            )}
+                            {task.collaboratorNames?.length > 0 && (
+                              <span>Collaborators: {task.collaboratorNames.join(", ")}</span>
+                            )}
                             {task.tags?.length > 0 && (
                               <span>Tags: {task.tags.join(", ")}</span>
                             )}
@@ -422,6 +924,9 @@ export default function TasksPage() {
           task={selectedTask}
           isOpen={!!selectedTask}
           onClose={() => setSelectedTask(null)}
+          onEdit={openEditDialog}
+          onDelete={requestDeleteTask}
+          disableActions={Boolean(deletingTaskId) || savingEdit}
         />
       )}
     </div>

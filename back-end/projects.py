@@ -7,7 +7,16 @@ db = firestore.client()
 projects_bp = Blueprint("projects", __name__)
 
 ALLOWED_STATUSES = {"to-do", "in progress", "completed", "blocked"}
-ALLOWED_PRIORITIES = {"low", "medium", "high"}
+PROJECT_PRIORITIES = {"low", "medium", "high"}
+PRIORITY_RANGE = list(range(1, 11))
+LEGACY_PRIORITY_MAP = {
+    "low": 3,
+    "medium": 6,
+    "high": 9,
+    "urgent": 9,
+    "critical": 10,
+}
+DEFAULT_TASK_PRIORITY = 5
 
 def now_utc():
     return datetime.now(timezone.utc)
@@ -21,10 +30,54 @@ def canon_status(s: str | None) -> str:
     # enforce allowed
     return v if v in ALLOWED_STATUSES else "to-do"
 
-def canon_priority(p: str | None) -> str:
-    if not p: return "medium"
-    v = p.strip().lower()
-    return v if v in ALLOWED_PRIORITIES else "medium"
+def canon_project_priority(value) -> str:
+    if not value:
+        return "medium"
+    if isinstance(value, str):
+        candidate = value.strip().lower()
+        if not candidate:
+            return "medium"
+        if candidate in PROJECT_PRIORITIES:
+            return candidate
+        # allow legacy numeric strings
+        try:
+            numeric = int(round(float(candidate)))
+        except (TypeError, ValueError):
+            return "medium"
+        return _priority_number_to_bucket(numeric)
+    if isinstance(value, (int, float)):
+        return _priority_number_to_bucket(int(round(value)))
+    return "medium"
+
+
+def _priority_number_to_bucket(number: int) -> str:
+    if number >= 8:
+        return "high"
+    if number <= 3:
+        return "low"
+    return "medium"
+
+
+def canon_task_priority(p) -> int:
+    if p is None:
+        return DEFAULT_TASK_PRIORITY
+    if isinstance(p, (int, float)):
+        value = int(round(p))
+    else:
+        s = str(p).strip().lower()
+        if not s:
+            return DEFAULT_TASK_PRIORITY
+        if s in LEGACY_PRIORITY_MAP:
+            return LEGACY_PRIORITY_MAP[s]
+        try:
+            value = int(round(float(s)))
+        except (TypeError, ValueError):
+            return DEFAULT_TASK_PRIORITY
+    if value < PRIORITY_RANGE[0]:
+        return PRIORITY_RANGE[0]
+    if value > PRIORITY_RANGE[-1]:
+        return PRIORITY_RANGE[-1]
+    return value
 
 def ensure_list(x):
     if isinstance(x, list):
@@ -45,7 +98,7 @@ def normalize_project_out(doc):
     if owner:
         d["ownerId"] = owner
     d["status"] = canon_status(d.get("status"))
-    d["priority"] = canon_priority(d.get("priority"))
+    d["priority"] = canon_project_priority(d.get("priority"))
     d["teamIds"] = ensure_list(d.get("teamIds"))
     if owner and owner not in d["teamIds"]:
         d["teamIds"].append(owner)
@@ -62,7 +115,7 @@ def normalize_task_out(doc):
     d.setdefault("assigneeId", d.get("ownerId"))
     d.setdefault("ownerId", d.get("assigneeId"))
     d["status"] = canon_status(d.get("status"))
-    d["priority"] = canon_priority(d.get("priority"))
+    d["priority"] = canon_task_priority(d.get("priority"))
     d["collaboratorsIds"] = ensure_list(d.get("collaboratorsIds"))
     d["tags"] = ensure_list(d.get("tags"))
     return d
@@ -76,10 +129,11 @@ def list_projects():
     assigned_to = request.args.get("assignedTo") or request.args.get("assigneeId")
 
     filters = []
-    if status:
+    if status and status.lower() != "all":
         filters.append(("status", canon_status(status)))
-    if priority:
-        filters.append(("priority", canon_priority(priority)))
+    if priority is not None:
+        if not (isinstance(priority, str) and priority.lower() == "all"):
+            filters.append(("priority", canon_project_priority(priority)))
 
     def apply_filters(query):
         for field, value in filters:
@@ -117,7 +171,7 @@ def create_project():
     doc = {
         "name": data.get("name", ""),
         "description": data.get("description", ""),
-        "priority": canon_priority(data.get("priority")),
+        "priority": canon_project_priority(data.get("priority")),
         "status": canon_status(data.get("status")),
         "teamIds": team_ids,
         "ownerId": owner,
@@ -145,7 +199,7 @@ def get_project(project_id):
 def update_project(project_id):
     patch = request.json or {}
     if "status" in patch: patch["status"] = canon_status(patch["status"])
-    if "priority" in patch: patch["priority"] = canon_priority(patch["priority"])
+    if "priority" in patch: patch["priority"] = canon_project_priority(patch["priority"])
     if "teamIds" in patch: patch["teamIds"] = ensure_list(patch["teamIds"])
     if "tags" in patch: patch["tags"] = ensure_list(patch["tags"])
     patch["updatedAt"] = now_utc()
@@ -180,7 +234,12 @@ def list_tasks_across_projects():
         return jsonify({"error": "assignedTo is required"}), 400
 
     status_filter = request.args.get("status")
+    if status_filter and status_filter.lower() == "all":
+        status_filter = None
+
     priority_filter = request.args.get("priority")
+    if priority_filter and isinstance(priority_filter, str) and priority_filter.lower() == "all":
+        priority_filter = None
 
     query = db.collection_group("tasks").where(filter=firestore.FieldFilter("assigneeId", "==", assigned_to))
     docs = list(query.stream())
@@ -201,7 +260,7 @@ def list_tasks_across_projects():
 
         if status_filter and data.get("status") != canon_status(status_filter):
             continue
-        if priority_filter and data.get("priority") != canon_priority(priority_filter):
+        if priority_filter and data.get("priority") != canon_task_priority(priority_filter):
             continue
 
         project_ref = doc.reference.parent.parent
@@ -236,16 +295,20 @@ def create_task(project_id):
             "updatedAt": now,
         })
 
+    title = (data.get("title") or "Untitled task").strip() or "Untitled task"
+    description = (data.get("description") or "").strip()
+    due_date = data.get("dueDate") or None
+
     doc = {
         "assigneeId": assignee_id,
         "ownerId": assignee_id,
         "collaboratorsIds": ensure_list(data.get("collaboratorsIds")),
         "createdAt": now,
-        "description": data.get("description", ""),
-        "dueDate": data.get("dueDate"),
-        "priority": canon_priority(data.get("priority")),
+        "description": description,
+        "dueDate": due_date,
+        "priority": canon_task_priority(data.get("priority")),
         "status": canon_status(data.get("status")),
-        "title": data.get("title", "Untitled task"),
+        "title": title,
         "updatedAt": now,
         "tags": ensure_list(data.get("tags")),
     }
@@ -256,9 +319,16 @@ def create_task(project_id):
 def update_task(project_id, task_id):
     patch = request.json or {}
     if "status" in patch: patch["status"] = canon_status(patch["status"])
-    if "priority" in patch: patch["priority"] = canon_priority(patch["priority"])
+    if "priority" in patch: patch["priority"] = canon_task_priority(patch["priority"])
     if "collaboratorsIds" in patch: patch["collaboratorsIds"] = ensure_list(patch["collaboratorsIds"])
     if "tags" in patch: patch["tags"] = ensure_list(patch["tags"])
+    if "title" in patch:
+        title = (patch["title"] or "").strip()
+        patch["title"] = title or "Untitled task"
+    if "description" in patch:
+        patch["description"] = patch["description"] or ""
+    if "dueDate" in patch and not patch["dueDate"]:
+        patch["dueDate"] = None
     if "assigneeId" in patch:
         patch["ownerId"] = patch.get("assigneeId")
     if "ownerId" in patch and "assigneeId" not in patch:

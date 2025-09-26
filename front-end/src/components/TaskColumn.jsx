@@ -12,10 +12,18 @@ function toDate(value) {
   return null
 }
 
-const priorityClasses = {
-  low: "bg-green-100 text-green-700 border border-green-200",
-  medium: "bg-yellow-400 text-white border border-yellow-400",
-  high: "bg-red-100 text-red-700 border border-red-200",
+const getPriorityBadgeClass = (priority) => {
+  const value = Number(priority)
+  if (!Number.isFinite(value)) {
+    return "bg-muted text-muted-foreground border border-border/50"
+  }
+  if (value >= 8) {
+    return "bg-red-100 text-red-700 border border-red-200"
+  }
+  if (value >= 5) {
+    return "bg-yellow-100 text-yellow-700 border border-yellow-200"
+  }
+  return "bg-emerald-100 text-emerald-700 border border-emerald-200"
 }
 
 const statusClasses = {
@@ -67,14 +75,10 @@ export function TaskColumn({ title, color, tasks, onTaskClick }) {
                       : "Unknown"}
                   </Badge>
                   <Badge
-                    className={
-                      priorityClasses[task.priority] || "bg-muted text-muted-foreground"
-                    }
+                    className={getPriorityBadgeClass(task.priority)}
                     variant="outline"
                   >
-                    {task.priority
-                      ? task.priority.charAt(0).toUpperCase() + task.priority.slice(1)
-                      : "N/A"}
+                    {task.priority ? `Priority ${task.priority}` : "Priority —"}
                   </Badge>
                 </div>
 
@@ -90,6 +94,32 @@ export function TaskColumn({ title, color, tasks, onTaskClick }) {
                     ))}
                   </div>
                 )}
+
+                {(() => {
+                  const candidate =
+                    (task.assignee && typeof task.assignee === "object" && task.assignee.name) ||
+                    task.assigneeName ||
+                    (task.assigneeSummary && task.assigneeSummary.name) ||
+                    ""
+                  return candidate ? (
+                    <div className="text-xs text-muted-foreground">Assignee: {candidate}</div>
+                  ) : null
+                })()}
+
+                {(() => {
+                  const names = Array.isArray(task.collaboratorNames)
+                    ? task.collaboratorNames
+                    : Array.isArray(task.collaborators)
+                      ? task.collaborators
+                          .map((item) => (typeof item === "object" ? item?.name : item))
+                          .filter(Boolean)
+                      : []
+                  return names.length > 0 ? (
+                    <div className="text-xs text-muted-foreground">
+                      Collaborators: {names.join(", ")}
+                    </div>
+                  ) : null
+                })()}
 
                 <div className="text-xs text-muted-foreground flex items-center gap-2">
                   <Calendar className="h-3 w-3" />

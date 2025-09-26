@@ -9,6 +9,28 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Plus, Search, Filter } from "lucide-react"
 
+const PRIORITY_VALUES = Array.from({ length: 10 }, (_, i) => String(i + 1))
+const PRIORITY_OPTIONS = [
+  { value: "all", label: "All Priority" },
+  ...PRIORITY_VALUES.map((value) => ({ value, label: `Priority ${value}` })),
+]
+
+const getPriorityBadgeClass = (priority) => {
+  const value = Number(priority)
+  if (!Number.isFinite(value)) {
+    return "bg-muted text-muted-foreground border border-border/50"
+  }
+  if (value >= 8) {
+    return "bg-red-100 text-red-700 border border-red-200"
+  }
+  if (value >= 5) {
+    return "bg-yellow-100 text-yellow-700 border border-yellow-200"
+  }
+  return "bg-emerald-100 text-emerald-700 border border-emerald-200"
+}
+
+const priorityLabel = (priority) => (priority ? `Priority ${priority}` : "Priority —")
+
 async function fetchUserById(id) {
   try {
     const res = await fetch(`http://localhost:5000/api/users/${id}`)
@@ -34,7 +56,8 @@ export function TaskBoard({}) {
       (task.title || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
       (task.description || "").toLowerCase().includes(searchTerm.toLowerCase())
 
-    const matchesPriority = priorityFilter === "all" || task.priority === priorityFilter
+    const matchesPriority =
+      priorityFilter === "all" || String(task.priority) === priorityFilter
 
     const assigneeId =
       typeof task.assignee === "string" ? task.assignee : (task.assignee?.id ?? task.assigneeId)
@@ -109,10 +132,11 @@ export function TaskBoard({}) {
               <SelectValue placeholder="Filter by priority" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Priority</SelectItem>
-              <SelectItem value="high">High</SelectItem>
-              <SelectItem value="medium">Medium</SelectItem>
-              <SelectItem value="low">Low</SelectItem>
+              {PRIORITY_OPTIONS.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
 

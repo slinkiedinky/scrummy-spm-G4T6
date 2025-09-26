@@ -1,12 +1,14 @@
 .DS_Store
 
 node_modules/
+/front-end/node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
 /.next/
+/front-end/.next/
 .vercel/
 .next/cache/
 .turbo/
@@ -18,6 +20,8 @@ yarn-error.log*
 /front-end/.env.production.local
 
 __pycache__/
+/back-end/__pycache__/
+/**/__pycache__/
 *.py[cod]
 *$py.class
 
@@ -27,12 +31,21 @@ dist/
 pip-wheel-metadata/
 
 venv/
+/back-end/venv/
+/back-end/.venv/
 env/
 .venv/
 env.bak/
 venv.bak/
 
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+/back-end/.python-version
+/back-end/.pytest_cache/
+/back-end/.mypy_cache/
+/back-end/.ruff_cache/
 
 /back-end/.env
 .env

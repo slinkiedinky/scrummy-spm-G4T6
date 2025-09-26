@@ -25,6 +25,14 @@ import {
 } from "@/components/ui/select";
 import { Card } from "@/components/ui/card";
 import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -40,6 +48,17 @@ import { onAuthStateChanged } from "firebase/auth";
 const STATUS = ["to-do", "in progress", "completed", "blocked"];
 const PRIORITY = ["low", "medium", "high"];
 
+const ensureArray = (value) => {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => (typeof item === "string" ? item.trim() : String(item ?? "").trim()))
+      .filter(Boolean);
+  }
+  if (value === undefined || value === null) return [];
+  const str = typeof value === "string" ? value.trim() : String(value ?? "").trim();
+  return str ? [str] : [];
+};
+
 const createEmptyTaskForm = (uid = "") => ({
   title: "",
   description: "",
@@ -48,6 +67,7 @@ const createEmptyTaskForm = (uid = "") => ({
   priority: "medium",
   status: "to-do",
   tags: "",
+  collaboratorsIds: [],
 });
 
 export default function ProjectDetailPage() {
@@ -85,7 +105,10 @@ export default function ProjectDetailPage() {
         listUsers(),
       ]);
       setProject(p);
-      setTasks(t);
+      setTasks((t || []).map((task) => ({
+        ...task,
+        collaboratorsIds: ensureArray(task.collaboratorsIds),
+      })));
       setUsers(Array.isArray(u) ? u : []);
       setPStatus((p.status || "to-do").toLowerCase());
       setPPriority((p.priority || "medium").toLowerCase());
@@ -138,7 +161,14 @@ export default function ProjectDetailPage() {
   }, [resetTaskForm]);
 
   const updateTaskForm = (field, value) => {
-    setTaskForm((prev) => ({ ...prev, [field]: value }));
+    setTaskForm((prev) => {
+      if (field === "assigneeId") {
+        const trimmedValue = typeof value === "string" ? value.trim() : String(value ?? "");
+        const filteredCollaborators = ensureArray(prev.collaboratorsIds).filter((id) => id !== trimmedValue);
+        return { ...prev, assigneeId: trimmedValue, collaboratorsIds: filteredCollaborators };
+      }
+      return { ...prev, [field]: value };
+    });
   };
 
   const overdueCount = useMemo(() => {
@@ -162,6 +192,14 @@ export default function ProjectDetailPage() {
     return map;
   }, [users]);
 
+  const resolveUserLabel = useCallback((id) => {
+    if (!id) return "";
+    const info = userLookup.get(id);
+    if (!info) return id;
+    const label = (info.fullName || info.displayName || info.name || info.email || "").trim();
+    return label || id;
+  }, [userLookup]);
+
   const teamMembers = useMemo(() => {
     const ids = Array.isArray(project?.teamIds) ? [...project.teamIds] : [];
     if (ownerId && !ids.includes(ownerId)) {
@@ -181,6 +219,7 @@ export default function ProjectDetailPage() {
         const fullName = (info?.fullName || info?.displayName || info?.name || "").trim();
         const email = (info?.email || "").trim();
         const role = typeof info?.role === "string" ? info.role.trim() : "";
+        const displayName = fullName || email || id;
         return {
           id,
           fullName,
@@ -188,6 +227,7 @@ export default function ProjectDetailPage() {
           role,
           isOwner: !!ownerId && id === ownerId,
           isCurrentUser: id === (currentUser?.uid || ""),
+          displayName,
         };
       });
   }, [project?.teamIds, userLookup, ownerId, currentUser?.uid]);
@@ -198,14 +238,11 @@ export default function ProjectDetailPage() {
       .filter((user) => user?.id && !teamSet.has(user.id))
       .map((user) => ({
         id: user.id,
-        label:
-          (user.fullName || user.displayName || user.name || "").trim() ||
-          (user.email || "").trim() ||
-          user.id,
+        label: resolveUserLabel(user.id),
         email: (user.email || "").trim(),
       }))
       .sort((a, b) => a.label.localeCompare(b.label));
-  }, [users, teamMembers]);
+  }, [users, teamMembers, resolveUserLabel]);
 
   useEffect(() => {
     if (selectedMember && !availableUsers.some((user) => user.id === selectedMember)) {
@@ -220,6 +257,50 @@ export default function ProjectDetailPage() {
   }, [selectedMember]);
 
   const isCreateDisabled = creatingTask || !taskForm.title.trim();
+
+  const collaboratorOptions = useMemo(() =>
+    teamMembers.map((member) => ({
+      id: member.id,
+      label: member.displayName || resolveUserLabel(member.id),
+      email: member.email,
+      isOwner: member.isOwner,
+      isCurrentUser: member.isCurrentUser,
+    })),
+  [teamMembers, resolveUserLabel]);
+
+  const selectedCollaborators = ensureArray(taskForm.collaboratorsIds);
+  const selectedCollaboratorNames = selectedCollaborators
+    .map((id) => resolveUserLabel(id))
+    .filter(Boolean);
+  const collaboratorButtonLabel = selectedCollaboratorNames.length === 0
+    ? "Select collaborators"
+    : selectedCollaboratorNames.length <= 2
+      ? selectedCollaboratorNames.join(", ")
+      : `${selectedCollaboratorNames.slice(0, 2).join(", ")} +${selectedCollaboratorNames.length - 2} more`;
+
+  useEffect(() => {
+    const allowedIds = new Set(collaboratorOptions.map((option) => option.id));
+    setTaskForm((prev) => {
+      const current = ensureArray(prev.collaboratorsIds);
+      const filtered = current.filter((id) => allowedIds.has(id));
+      if (filtered.length === current.length) {
+        return prev;
+      }
+      return { ...prev, collaboratorsIds: filtered };
+    });
+  }, [collaboratorOptions]);
+
+  const handleCollaboratorToggle = (id, checked) => {
+    const isActive = Boolean(checked);
+    setTaskForm((prev) => {
+      const current = ensureArray(prev.collaboratorsIds);
+      if (isActive) {
+        if (current.includes(id)) return prev;
+        return { ...prev, collaboratorsIds: [...current, id] };
+      }
+      return { ...prev, collaboratorsIds: current.filter((value) => value !== id) };
+    });
+  };
 
   const handleMemberSelect = (value) => {
     setSelectedMember(value);
@@ -310,6 +391,13 @@ export default function ProjectDetailPage() {
 
       if (payload.tags.length === 0) {
         delete payload.tags;
+      }
+
+      const collaboratorIds = ensureArray(taskForm.collaboratorsIds)
+        .filter((id) => id && id !== assignee);
+      const uniqueCollaborators = [...new Set(collaboratorIds)];
+      if (uniqueCollaborators.length > 0) {
+        payload.collaboratorsIds = uniqueCollaborators;
       }
 
       await createTask(id, payload);
@@ -443,6 +531,45 @@ export default function ProjectDetailPage() {
               </div>
 
               <div className="space-y-2">
+                <label className="text-sm font-medium text-foreground">Collaborators</label>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button type="button" variant="outline" className="w-full justify-between">
+                      <span className="truncate text-left">
+                        {collaboratorButtonLabel}
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        {selectedCollaborators.length} selected
+                      </span>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent className="w-64">
+                    <DropdownMenuLabel>Select collaborators</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    {collaboratorOptions.length === 0 ? (
+                      <div className="px-2 py-1.5 text-sm text-muted-foreground">Add team members to this project to invite collaborators.</div>
+                    ) : (
+                      collaboratorOptions.map((option) => (
+                        <DropdownMenuCheckboxItem
+                          key={option.id}
+                          checked={selectedCollaborators.includes(option.id)}
+                          onCheckedChange={(checked) => handleCollaboratorToggle(option.id, checked)}
+                        >
+                          <div className="flex flex-col">
+                            <span className="leading-tight">{option.label}</span>
+                            {option.email && option.email !== option.label && (
+                              <span className="text-xs text-muted-foreground leading-tight">{option.email}</span>
+                            )}
+                          </div>
+                        </DropdownMenuCheckboxItem>
+                      ))
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                <p className="text-xs text-muted-foreground">Select one or more teammates to collaborate on this task.</p>
+              </div>
+
+              <div className="space-y-2">
                 <label htmlFor="task-tags" className="text-sm font-medium text-foreground">Tags</label>
                 <Input
                   id="task-tags"
@@ -571,7 +698,7 @@ export default function ProjectDetailPage() {
             ) : (
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {teamMembers.map((member) => {
-                  const displayName = member.fullName || member.email || member.id;
+                  const displayName = member.displayName || member.fullName || member.email || member.id;
                   const secondary =
                     member.email && member.email !== displayName
                       ? member.email
@@ -615,41 +742,48 @@ export default function ProjectDetailPage() {
               <div className="text-sm text-muted-foreground">No tasks yet.</div>
             ) : (
               <div className="divide-y divide-border">
-                {tasks.map((t) => (
-                  <div key={t.id} className="flex items-center justify-between gap-3 py-3">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium truncate">{t.title}</span>
-                        <StatusBadge status={t.status} />
-                        <Badge variant="secondary">{(t.priority || "medium").toLowerCase()}</Badge>
-                      </div>
-                      <div className="mt-0.5 text-xs text-muted-foreground">
-                        {t.description || "—"}
-                      </div>
-                      <div className="mt-0.5 flex flex-wrap gap-2 text-xs text-muted-foreground">
-                        {t.dueDate && <span>Due: {format(toDate(t.dueDate), "dd MMM yyyy")}</span>}
-                        {(t.assigneeId || t.ownerId) && <span>Assignee: {t.assigneeId || t.ownerId}</span>}
-                        {(t.collaboratorsIds || []).length > 0 && <span>Collab: {(t.collaboratorsIds || []).join(", ")}</span>}
-                        {(t.tags || []).length > 0 && <span>Tags: {(t.tags || []).join(", ")}</span>}
-                      </div>
-                    </div>
+                {tasks.map((t) => {
+                  const assigneeLabel = resolveUserLabel(t.assigneeId || t.ownerId);
+                  const collaboratorLabels = ensureArray(t.collaboratorsIds)
+                    .map((id) => resolveUserLabel(id))
+                    .filter(Boolean);
 
-                    <div className="flex items-center gap-2">
-                      <Select value={(t.status || "to-do").toLowerCase()} onValueChange={(value) => handleTaskStatus(t.id, value)}>
-                        <SelectTrigger className="w-[160px]"><SelectValue placeholder="Status" /></SelectTrigger>
-                        <SelectContent>{STATUS.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
-                      </Select>
-                      <Button
-                        variant="ghost"
-                        className="text-destructive hover:text-destructive"
-                        onClick={() => handleDeleteTask(t.id)}
-                        title="Delete task"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                  return (
+                    <div key={t.id} className="flex items-center justify-between gap-3 py-3">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium truncate">{t.title}</span>
+                          <StatusBadge status={t.status} />
+                          <Badge variant="secondary">{(t.priority || "medium").toLowerCase()}</Badge>
+                        </div>
+                        <div className="mt-0.5 text-xs text-muted-foreground">
+                          {t.description || "—"}
+                        </div>
+                        <div className="mt-0.5 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                          {t.dueDate && <span>Due: {format(toDate(t.dueDate), "dd MMM yyyy")}</span>}
+                          {assigneeLabel && <span>Assignee: {assigneeLabel}</span>}
+                          {collaboratorLabels.length > 0 && <span>Collaborators: {collaboratorLabels.join(", ")}</span>}
+                          {(t.tags || []).length > 0 && <span>Tags: {(t.tags || []).join(", ")}</span>}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <Select value={(t.status || "to-do").toLowerCase()} onValueChange={(value) => handleTaskStatus(t.id, value)}>
+                          <SelectTrigger className="w-[160px]"><SelectValue placeholder="Status" /></SelectTrigger>
+                          <SelectContent>{STATUS.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+                        </Select>
+                        <Button
+                          variant="ghost"
+                          className="text-destructive hover:text-destructive"
+                          onClick={() => handleDeleteTask(t.id)}
+                          title="Delete task"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </Card>

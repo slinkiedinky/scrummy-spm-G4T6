@@ -4,6 +4,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Calendar } from "lucide-react"
 
+function toDate(value) {
+  if (!value) return null
+  if (value instanceof Date) return value
+  if (typeof value === "string" || typeof value === "number") return new Date(value)
+  if (typeof value === "object" && typeof value.seconds === "number") return new Date(value.seconds * 1000)
+  return null
+}
+
 const priorityClasses = {
   low: "bg-green-100 text-green-700 border border-green-200",
   medium: "bg-yellow-400 text-white border border-yellow-400",
@@ -44,6 +52,9 @@ export function TaskColumn({ title, color, tasks, onTaskClick }) {
                 <CardTitle className="text-sm font-semibold text-foreground">
                   {task.title}
                 </CardTitle>
+                {task.projectName && (
+                  <p className="text-xs text-muted-foreground truncate">{task.projectName}</p>
+                )}
               </CardHeader>
               <CardContent className="space-y-2">
                 <div className="flex flex-wrap gap-2">
@@ -83,9 +94,10 @@ export function TaskColumn({ title, color, tasks, onTaskClick }) {
                 <div className="text-xs text-muted-foreground flex items-center gap-2">
                   <Calendar className="h-3 w-3" />
                   <span>
-                    {task.dueDate
-                      ? new Date(task.dueDate).toLocaleDateString()
-                      : "—"}
+                    {(() => {
+                      const due = toDate(task.dueDate)
+                      return due ? due.toLocaleDateString() : "—"
+                    })()}
                   </span>
                 </div>
               </CardContent>

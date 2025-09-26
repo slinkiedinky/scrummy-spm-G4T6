@@ -9,10 +9,22 @@ export async function listProjects(params = {}) {
   return r.json();
 }
 
-export async function getProject(id) {
-  const r = await fetch(`${API}/projects/${id}`, { cache: "no-store" });
-  if (!r.ok) throw new Error(`Project not found (${id})`);
-  return r.json();
+export async function getProject(id, params = {}) {
+  const qs = new URLSearchParams(params).toString();
+  const url = `${API}/projects/${id}${qs ? `?${qs}` : ""}`;
+  const r = await fetch(url, { cache: "no-store" });
+  const text = await r.text();
+  let data;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch (err) {
+    data = null;
+  }
+  if (!r.ok) {
+    const message = data?.error || data?.message || text || `Project request failed (${r.status})`;
+    throw new Error(message);
+  }
+  return data;
 }
 
 export async function createProject(payload) {
@@ -21,8 +33,18 @@ export async function createProject(payload) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
-  if (!r.ok) throw new Error(`Create failed (${r.status})`);
-  return r.json(); // { id, message }
+  const text = await r.text();
+  let data;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch (err) {
+    data = null;
+  }
+  if (!r.ok) {
+    const message = data?.error || data?.message || text || `Create failed (${r.status})`;
+    throw new Error(message);
+  }
+  return data; // { id, message }
 }
 
 export async function updateProject(id, patch) {
@@ -41,19 +63,58 @@ export async function deleteProject(id) {
   return r.json();
 }
 
+// ---- Users ----
+export async function listUsers() {
+  const r = await fetch(`${API}/users/`, { cache: "no-store" });
+  const text = await r.text();
+  let data;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch (err) {
+    data = null;
+  }
+  if (!r.ok) {
+    const message = data?.error || data?.message || text || `Failed to load users (${r.status})`;
+    throw new Error(message);
+  }
+  return data || [];
+}
+
 // Tasks -------------------------------------------------------
-export const listTasks = async (projectId) => {
-  const r = await fetch(`${API}/projects/${projectId}/tasks`, { cache: "no-store" });
-  if (!r.ok) throw new Error("Failed to load tasks");
-  return r.json();
+export const listTasks = async (projectId, params = {}) => {
+  const qs = new URLSearchParams(params).toString();
+  const url = `${API}/projects/${projectId}/tasks${qs ? `?${qs}` : ""}`;
+  const r = await fetch(url, { cache: "no-store" });
+  const text = await r.text();
+  let data;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch (err) {
+    data = null;
+  }
+  if (!r.ok) {
+    const message = data?.error || data?.message || text || "Failed to load tasks";
+    throw new Error(message);
+  }
+  return data;
 };
 
 export const createTask = async (projectId, payload) => {
   const r = await fetch(`${API}/projects/${projectId}/tasks`, {
     method: "POST", headers: { "Content-Type":"application/json" }, body: JSON.stringify(payload)
   });
-  if (!r.ok) throw new Error("Create task failed");
-  return r.json();
+  const text = await r.text();
+  let data;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch (err) {
+    data = null;
+  }
+  if (!r.ok) {
+    const message = data?.error || data?.message || text || "Create task failed";
+    throw new Error(message);
+  }
+  return data;
 };
 
 export const updateTask = async (projectId, taskId, patch) => {
@@ -68,4 +129,22 @@ export const deleteTask = async (projectId, taskId) => {
   const r = await fetch(`${API}/projects/${projectId}/tasks/${taskId}`, { method: "DELETE" });
   if (!r.ok) throw new Error("Delete task failed");
   return r.json();
+};
+
+export const listAssignedTasks = async (params = {}) => {
+  const qs = new URLSearchParams(params).toString();
+  const url = `${API}/projects/assigned/tasks${qs ? `?${qs}` : ""}`;
+  const r = await fetch(url, { cache: "no-store" });
+  const text = await r.text();
+  let data;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch (err) {
+    data = null;
+  }
+  if (!r.ok) {
+    const message = data?.error || data?.message || text || "Failed to load assigned tasks";
+    throw new Error(message);
+  }
+  return data;
 };

@@ -1,12 +1,12 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, usePathname } from "next/navigation"
+import Link from "next/link"
 import { signOut } from "firebase/auth"
 import { ChevronLeft, LayoutDashboard, FolderOpen, BarChart3, LogOut, Users } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { auth } from '@/lib/firebase';
-import { usePathname } from "next/navigation"
+import { auth } from "@/lib/firebase"
 
 
 const navigationItems = [
@@ -14,26 +14,22 @@ const navigationItems = [
     name: "Tasks",
     icon: LayoutDashboard,
     href: "/tasks",
-    active: true,
   },
   {
     name: "Projects",
     icon: FolderOpen,
     href: "/projects",
-    active: false,
   },
   {
     name: "Analytics",
     icon: BarChart3,
     href: "/analytics",
-    active: false,
   },
   {
     name: "Team",
     icon: Users,
     href: "/team",
-    active: false,
-  }
+  },
 ]
 
 const fetchUserData = async (userId) => {
@@ -142,9 +138,10 @@ export function Sidebar({ className }) {
       <nav className="flex-1 space-y-2 p-4">
         {navigationItems.map((item) => {
           const Icon = item.icon
-          const isActive = pathname === item.href // check current page
+          const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`)
+
           return (
-            <a
+            <Link
               key={item.name}
               href={item.href}
               className={cn(
@@ -155,7 +152,7 @@ export function Sidebar({ className }) {
             >
               <Icon className="h-5 w-5 flex-shrink-0" />
               {!isCollapsed && <span>{item.name}</span>}
-            </a>
+            </Link>
           )
         })}
       </nav>

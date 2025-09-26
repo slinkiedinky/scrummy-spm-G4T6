@@ -19,6 +19,34 @@ function getInitials(member) {
   return token.slice(0, 2).toUpperCase()
 }
 
+const priorityMeta = {
+  low: {
+    badge: "bg-emerald-100 text-emerald-700 border border-emerald-200",
+    label: "Low",
+  },
+  medium: {
+    badge: "bg-yellow-100 text-yellow-700 border border-yellow-200",
+    label: "Medium",
+  },
+  high: {
+    badge: "bg-red-100 text-red-700 border border-red-200",
+    label: "High",
+  },
+};
+
+const resolveProjectPriority = (raw) => {
+  if (typeof raw === "string" && priorityMeta[raw.trim().toLowerCase()]) {
+    return raw.trim().toLowerCase();
+  }
+  const numeric = Number(raw);
+  if (Number.isFinite(numeric)) {
+    if (numeric >= 8) return "high";
+    if (numeric <= 3) return "low";
+    return "medium";
+  }
+  return "medium";
+};
+
 export function ProjectCard({ project }) {
   const getStatusColor = (status) => {
     switch (status) {
@@ -30,16 +58,9 @@ export function ProjectCard({ project }) {
     }
     }
 
-  // Priority colors: high=red, medium=yellow, low=green
-  const getPriorityColor = (priority) => {
-    switch (priority) {
-      case "urgent":
-      case "high":   return "bg-red-500 text-white border-red-500"
-      case "medium": return "bg-yellow-400 text-white border-yellow-400"
-      case "low":    return "bg-green-500 text-white border-green-500"
-      default:       return "bg-muted text-muted-foreground border-muted"
-    }
-  }
+  const priorityKey = resolveProjectPriority(project.priority)
+  const priorityBadge = priorityMeta[priorityKey] ?? priorityMeta.medium
+
   const getRiskLevel = () => {
     const overdueCount = project.overdueTasksCount || 0
     if (overdueCount > 5) return { level: "High", color: "bg-red-500 text-white border-red-500" }
@@ -72,8 +93,8 @@ export function ProjectCard({ project }) {
           <Badge className={getStatusColor(project.status)} variant="secondary">
             {project.status.charAt(0).toUpperCase() + project.status.slice(1)}
           </Badge>
-          <Badge className={getPriorityColor(project.priority)} variant="outline">
-            {project.priority.charAt(0).toUpperCase() + project.priority.slice(1) + " Priority"}
+          <Badge className={priorityBadge.badge} variant="outline">
+            {`${priorityBadge.label} Priority`}
           </Badge>
           <Badge className={`${risk.color} flex items-center gap-1`} variant="outline">
             <AlertTriangle className="h-3 w-3" />

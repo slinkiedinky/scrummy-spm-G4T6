@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Separator } from "@/components/ui/separator"
-import { Calendar, Clock, User, Tag, MessageSquare, Paperclip, Edit, Trash2 } from "lucide-react"
+import { Calendar, Clock, User, Users, Tag, MessageSquare, Paperclip, Edit, Trash2 } from "lucide-react"
 
 function toInitials(name) {
   if (!name) return "?"
@@ -22,7 +22,7 @@ function toDate(value) {
   return null
 }
 
-export function TaskDetailModal({ task, isOpen, onClose }) {
+export function TaskDetailModal({ task, isOpen, onClose, onEdit, onDelete, disableActions = false }) {
   const assignee =
     typeof task.assignee === "object" && task.assignee
       ? task.assignee
@@ -33,17 +33,94 @@ export function TaskDetailModal({ task, isOpen, onClose }) {
             : { name: "Unassigned", role: "" }
         })()
 
-  const getPriorityColor = (priority) => {
-    switch ((priority || "medium").toLowerCase()) {
-      case "low":
-        return "bg-green-500 text-white border-green-500"
-      case "medium":
-        return "bg-yellow-400 text-white border border-yellow-400"
-      case "high":
-        return "bg-red-500 text-white border-red-500"
-      default:
-        return "bg-muted text-muted-foreground border-muted"
+  const tags = Array.isArray(task.tags) ? task.tags : []
+
+  const normalizeCollaborator = (value, index = 0) => {
+    if (value === undefined || value === null) return null
+    if (typeof value === "string") {
+      const id = value.trim()
+      if (!id) return null
+      return {
+        id,
+        name: `User ${id.slice(0, 4) || index + 1}`,
+        email: "",
+        role: "",
+        avatar: "",
+      }
     }
+    if (typeof value === "object") {
+      const rawId = value.id ?? value.uid ?? value.userId ?? value.email ?? value.name ?? index
+      const id = String(rawId ?? index).trim()
+      if (!id) return null
+      const nameCandidate = [value.name, value.fullName, value.displayName, value.email].find(
+        (item) => typeof item === "string" && item.trim()
+      )
+      return {
+        id,
+        name: nameCandidate ? nameCandidate.trim() : `User ${id.slice(0, 4) || index + 1}`,
+        email: typeof value.email === "string" ? value.email : "",
+        role: typeof value.role === "string" ? value.role : "",
+        avatar: value.avatar || value.photoURL || "",
+      }
+    }
+    return null
+  }
+
+  const collaborators = (() => {
+    const candidateLists = [
+      Array.isArray(task.collaborators) ? task.collaborators : null,
+      Array.isArray(task.collaboratorSummaries) ? task.collaboratorSummaries : null,
+      Array.isArray(task.collaboratorDetails) ? task.collaboratorDetails : null,
+    ]
+    const explicitList = candidateLists.find((list) => Array.isArray(list) && list.length)
+
+    const fromNames = (() => {
+      const ids = Array.isArray(task.collaboratorIds)
+        ? task.collaboratorIds
+        : Array.isArray(task.collaboratorsIds)
+          ? task.collaboratorsIds
+          : []
+      const names = Array.isArray(task.collaboratorNames) ? task.collaboratorNames : []
+      if (!ids.length) return []
+      return ids.map((id, index) => ({ id, name: names[index] }))
+    })()
+
+    const base = explicitList && explicitList.length ? explicitList : fromNames
+
+    const normalized = (base || [])
+      .map((item, index) => normalizeCollaborator(item, index))
+      .filter(Boolean)
+
+    const deduped = []
+    const seen = new Set()
+    normalized.forEach((item, index) => {
+      const key = String(item.id ?? index)
+      if (!key || seen.has(key)) return
+      seen.add(key)
+      deduped.push(item)
+    })
+
+    return deduped
+  })()
+
+  const priorityDisplay = (() => {
+    const raw = task.priority ?? task.priorityNumber
+    const value = Number(raw)
+    return Number.isFinite(value) ? String(value) : ""
+  })()
+
+  const getPriorityColor = (priority) => {
+    const value = Number(priority)
+    if (!Number.isFinite(value)) {
+      return "bg-muted text-muted-foreground border-muted"
+    }
+    if (value >= 8) {
+      return "bg-red-100 text-red-700 border border-red-200"
+    }
+    if (value >= 5) {
+      return "bg-yellow-100 text-yellow-700 border border-yellow-200"
+    }
+    return "bg-emerald-100 text-emerald-700 border border-emerald-200"
   }
 
   const getStatusColor = (status) => {
@@ -89,8 +166,8 @@ export function TaskDetailModal({ task, isOpen, onClose }) {
                 <Badge className={getStatusColor(task.status)}>
                   {task.status.charAt(0).toUpperCase() + task.status.slice(1).replace("-", " ")}
                 </Badge>
-                <Badge className={getPriorityColor(task.priority)} variant="outline">
-                  {task.priority.charAt(0).toUpperCase() + task.priority.slice(1)} Priority
+                <Badge className={getPriorityColor(priorityDisplay)} variant="outline">
+                  {priorityDisplay ? `Priority ${priorityDisplay}` : "Priority —"}
                 </Badge>
                 {isOverdue && <Badge variant="destructive">Overdue</Badge>}
               </div>
@@ -100,12 +177,28 @@ export function TaskDetailModal({ task, isOpen, onClose }) {
                 </p>
               )}
             </div>
-            <div className="flex gap-2">
-              <Button size="sm" variant="outline">
+            <div className="flex gap-2 mt-8 sm:mt-0">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={disableActions || typeof onEdit !== "function"}
+                onClick={() => {
+                  if (disableActions || typeof onEdit !== "function") return;
+                  onEdit(task);
+                }}
+              >
                 <Edit className="h-4 w-4 mr-2" />
                 Edit
               </Button>
-              <Button size="sm" variant="outline">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={disableActions || typeof onDelete !== "function"}
+                onClick={() => {
+                  if (disableActions || typeof onDelete !== "function") return;
+                  onDelete(task);
+                }}
+              >
                 <Trash2 className="h-4 w-4 mr-2" />
                 Delete
               </Button>
@@ -140,6 +233,35 @@ export function TaskDetailModal({ task, isOpen, onClose }) {
                 </div>
               </div>
 
+              <div className="flex items-start gap-3">
+                <Users className="h-4 w-4 text-muted-foreground mt-1" />
+                <div>
+                  <p className="text-sm font-medium text-foreground">Collaborators</p>
+                  {collaborators.length === 0 ? (
+                    <p className="text-xs text-muted-foreground mt-1">No collaborators added.</p>
+                  ) : (
+                    <div className="mt-2 space-y-2">
+                      {collaborators.map((person) => (
+                        <div key={person.id} className="flex items-center gap-2">
+                          <Avatar className="h-6 w-6">
+                            <AvatarImage src={person.avatar || "/placeholder.svg"} alt={person.name} />
+                            <AvatarFallback className="text-xs">{toInitials(person.name || "")}</AvatarFallback>
+                          </Avatar>
+                          <div className="min-w-0">
+                            <p className="text-sm text-foreground truncate">{person.name}</p>
+                            {(person.email || person.role) && (
+                              <p className="text-xs text-muted-foreground truncate">
+                                {[person.email, person.role].filter(Boolean).join(" • ")}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
               <div className="flex items-center gap-3">
                 <Calendar className="h-4 w-4 text-muted-foreground" />
                 <div>
@@ -170,7 +292,7 @@ export function TaskDetailModal({ task, isOpen, onClose }) {
             </div>
           </div>
 
-          {task.tags.length > 0 && (
+          {tags.length > 0 && (
             <>
               <Separator />
               <div>
@@ -179,7 +301,7 @@ export function TaskDetailModal({ task, isOpen, onClose }) {
                   <h3 className="font-semibold text-foreground">Tags</h3>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  {task.tags.map((tag) => (
+                  {tags.map((tag) => (
                     <Badge key={tag} variant="outline">
                       {tag}
                     </Badge>

@@ -1,5 +1,49 @@
 const API = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:5000/api";
 
+// ---- Project status helpers ----
+import { doc, updateDoc, collection, getDocs } from "firebase/firestore";
+import { db } from "@/lib/firebase"; // <-- keep this path consistent with your app
+
+export const normalizeStatus = (s) => {
+  const v = (s || "").toLowerCase().trim();
+  if (v === "doing") return "in progress";
+  if (v === "in-progress") return "in progress";
+  if (v === "under-review") return "under review";
+  if (v === "to do" || v === "todo") return "to-do";
+  return v;
+};
+
+// infer target project status from task statuses
+export function inferProjectStatusFromTasks(tasks) {
+  if (!Array.isArray(tasks) || tasks.length === 0) return null;
+
+  const anyOngoing = tasks.some((t) => {
+    const s = normalizeStatus(t?.status);
+    return s === "in progress" || s === "under review" || s === "blocked";
+  });
+  const allDone = tasks.every((t) => normalizeStatus(t?.status) === "completed");
+
+  if (anyOngoing) return "in progress";
+  if (allDone) return "completed";
+  return null; // keep whatever it is now ("new"/"to-do"/etc.)
+}
+
+// manual update (SCRUM-201)
+export async function updateProjectStatus(projectId, nextStatus) {
+  const ref = doc(db, "projects", projectId);
+  await updateDoc(ref, { status: nextStatus, updatedAt: new Date().toISOString() });
+}
+
+// convenience: recompute from tasks right after a task update
+export async function autoUpdateProjectStatus(projectId) {
+  const snap = await getDocs(collection(db, "projects", projectId, "tasks"));
+  const tasks = snap.docs.map((d) => d.data());
+  const suggested = inferProjectStatusFromTasks(tasks);
+  if (suggested) {
+    await updateProjectStatus(projectId, suggested);
+  }
+}
+
 // ---- Projects ----
 export async function listProjects(params = {}) {
   const qs = new URLSearchParams(params).toString();

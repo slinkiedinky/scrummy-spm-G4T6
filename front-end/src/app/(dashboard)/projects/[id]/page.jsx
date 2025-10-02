@@ -173,6 +173,7 @@ export default function ProjectDetailPage() {
   const [deletingTaskId, setDeletingTaskId] = useState("");
   const isEditingTask = Boolean(editingTaskId);
 
+<<<<<<< Updated upstream:front-end/src/app/(dashboard)/projects/[id]/page.jsx
   // ⭐ ADDED: infer next project status from a list of tasks
   const inferProjectStatusFromTasks = useCallback((arr) => {
     const list = Array.isArray(arr) ? arr : [];
@@ -203,22 +204,33 @@ export default function ProjectDetailPage() {
     },
     [id, inferProjectStatusFromTasks, pStatus]
   );
+=======
+>>>>>>> Stashed changes:front-end/src/app/projects/[id]/page.jsx
 
   const load = useCallback(async (userId) => {
     if (!userId) return;
-
     try {
       setLoading(true);
       setErr("");
       const [p, t, u] = await Promise.all([
         getProject(id, { assignedTo: userId }),
-        listTasks(id, { assigneeId: userId }),
+        listTasks(id), // get all tasks for the project
         listUsers(),
       ]);
       const normalizedProject = { ...p, priority: ensureProjectPriority(p.priority) };
+<<<<<<< Updated upstream:front-end/src/app/(dashboard)/projects/[id]/page.jsx
 
       // normalize tasks once here so we can reuse the array
       const normalizedTasks = (t || []).map((task) => {
+=======
+      setProject(normalizedProject);
+      // Show tasks where user is assignee or collaborator
+      const filteredTasks = (t || []).filter((task) => {
+        const collaborators = ensureArray(task.collaboratorsIds);
+        return task.assigneeId === userId || collaborators.includes(userId);
+      });
+      setTasks(filteredTasks.map((task) => {
+>>>>>>> Stashed changes:front-end/src/app/projects/[id]/page.jsx
         const priorityNumber = Number(task.priority);
         const priority = Number.isFinite(priorityNumber) ? String(priorityNumber) : "";
         return {

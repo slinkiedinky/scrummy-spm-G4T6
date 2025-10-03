@@ -313,6 +313,46 @@ def create_task(project_id):
         "tags": ensure_list(data.get("tags")),
     }
     ref = db.collection("projects").document(project_id).collection("tasks").add(doc)
+    # Add notification after task creation, including project name
+    try:
+        from notifications import add_notification
+        project_doc_data = project_doc.to_dict()
+        project_name = project_doc_data.get("name", "")
+        # Get assigner (creator) id from request or context
+        assigner_id = data.get("createdBy") or data.get("ownerId") or data.get("assigneeId")
+        assigner_name = ""
+        try:
+            user_doc = db.collection("users").document(assigner_id).get()
+            if user_doc.exists:
+                user_data = user_doc.to_dict()
+                assigner_name = user_data.get("fullName") or user_data.get("displayName") or user_data.get("name") or assigner_id
+            else:
+                assigner_name = assigner_id
+        except Exception:
+            assigner_name = assigner_id
+
+        notif_base = {
+            "projectId": project_id,
+            "taskId": ref[1].id,
+            "title": title,
+            "description": description,
+            "createdBy": assigner_id,
+            "assignedByName": assigner_name,
+            "dueDate": due_date,
+            "priority": doc["priority"],
+            "status": doc["status"],
+            "tags": doc["tags"],
+            "type": "add task"
+        }
+        # Only notify collaborators, not the creator/assignee
+        for collab_id in doc["collaboratorsIds"]:
+            if collab_id and collab_id != assignee_id:
+                notif_data = notif_base.copy()
+                notif_data["assigneeId"] = collab_id
+                notif_data["userId"] = collab_id
+                add_notification(notif_data, project_name)
+    except Exception as e:
+        print(f"Notification error: {e}")
     return jsonify({"id": ref[1].id, "message": "Task created"}), 201
 
 @projects_bp.route("/<project_id>/tasks/<task_id>", methods=["PUT"])
@@ -334,7 +374,57 @@ def update_task(project_id, task_id):
     if "ownerId" in patch and "assigneeId" not in patch:
         patch["assigneeId"] = patch.get("ownerId")
     patch["updatedAt"] = now_utc()
+    # Get previous collaborators before update
+    prev_doc = db.collection("projects").document(project_id).collection("tasks").document(task_id).get()
+    prev_data = prev_doc.to_dict() if prev_doc.exists else {}
+    prev_collaborators = set(prev_data.get("collaboratorsIds", []))
+    # Update the task
     db.collection("projects").document(project_id).collection("tasks").document(task_id).update(patch)
+    # After update, get new collaborators
+    new_collaborators = set(patch.get("collaboratorsIds", []))
+    added_collaborators = new_collaborators - prev_collaborators
+    # Send notification to new collaborators only
+    if added_collaborators:
+        try:
+            from notifications import add_notification
+            project_doc = db.collection("projects").document(project_id).get()
+            project_name = project_doc.to_dict().get("name", "") if project_doc.exists else ""
+            # Get latest task data for notification
+            task_doc = db.collection("projects").document(project_id).collection("tasks").document(task_id).get()
+            task_data = task_doc.to_dict() if task_doc.exists else {}
+            # Get assigner name
+            assigner_id = task_data.get("ownerId", "")
+            assigner_name = ""
+            try:
+                user_doc = db.collection("users").document(assigner_id).get()
+                if user_doc.exists:
+                    user_data = user_doc.to_dict()
+                    assigner_name = user_data.get("fullName") or user_data.get("displayName") or user_data.get("name") or assigner_id
+                else:
+                    assigner_name = assigner_id
+            except Exception:
+                assigner_name = assigner_id
+            notif_base = {
+                "projectId": project_id,
+                "taskId": task_id,
+                "title": task_data.get("title", ""),
+                "description": task_data.get("description", ""),
+                "createdBy": assigner_id,
+                "assignedByName": assigner_name,
+                "dueDate": task_data.get("dueDate", ""),
+                "priority": task_data.get("priority", ""),
+                "status": task_data.get("status", ""),
+                "tags": task_data.get("tags", []),
+                "type": "add collaborator"
+            }
+            for collab_id in added_collaborators:
+                if collab_id:
+                    notif_data = notif_base.copy()
+                    notif_data["assigneeId"] = collab_id
+                    notif_data["userId"] = collab_id
+                    add_notification(notif_data, project_name)
+        except Exception as e:
+            print(f"Notification error (collaborator add): {e}")
     return jsonify({"message": "Task updated"}), 200
 
 @projects_bp.route("/<project_id>/tasks/<task_id>", methods=["DELETE"])

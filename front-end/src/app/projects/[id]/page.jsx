@@ -173,6 +173,37 @@ export default function ProjectDetailPage() {
   const [deletingTaskId, setDeletingTaskId] = useState("");
   const isEditingTask = Boolean(editingTaskId);
 
+  // ⭐ ADDED: infer next project status from a list of tasks
+  const inferProjectStatusFromTasks = useCallback((arr) => {
+    const list = Array.isArray(arr) ? arr : [];
+    if (list.length === 0) return "to-do"; // default when no tasks
+    const statuses = list.map((t) => (t?.status || "").toLowerCase());
+    const allCompleted = statuses.length > 0 && statuses.every((s) => s === "completed");
+    if (allCompleted) return "completed";
+    const anyInProgress = statuses.some((s) => s === "in progress");
+    if (anyInProgress) return "in progress";
+    // fallback if nothing in progress and not all completed
+    return "to-do";
+  }, []);
+
+  // ⭐ ADDED: apply inferred status, persist to DB, and keep local state in sync
+  const syncProjectStatusWithTasks = useCallback(
+    async (arr) => {
+      const next = inferProjectStatusFromTasks(arr);
+      if (!next || next === pStatus) return;
+      const prev = pStatus;
+      setPStatus(next);
+      try {
+        await updateProject(id, { status: next }); // persist
+        setProject((prevProject) => (prevProject ? { ...prevProject, status: next } : prevProject));
+      } catch {
+        // on failure, revert local state
+        setPStatus(prev);
+      }
+    },
+    [id, inferProjectStatusFromTasks, pStatus]
+  );
+
   const load = useCallback(async (userId) => {
     if (!userId) return;
 
@@ -185,8 +216,9 @@ export default function ProjectDetailPage() {
         listUsers(),
       ]);
       const normalizedProject = { ...p, priority: ensureProjectPriority(p.priority) };
-      setProject(normalizedProject);
-      setTasks((t || []).map((task) => {
+
+      // normalize tasks once here so we can reuse the array
+      const normalizedTasks = (t || []).map((task) => {
         const priorityNumber = Number(task.priority);
         const priority = Number.isFinite(priorityNumber) ? String(priorityNumber) : "";
         return {
@@ -196,7 +228,10 @@ export default function ProjectDetailPage() {
           priorityNumber: Number.isFinite(priorityNumber) ? priorityNumber : null,
           collaboratorsIds: ensureArray(task.collaboratorsIds),
         };
-      }));
+      });
+
+      setProject(normalizedProject);
+      setTasks(normalizedTasks);
       setUsers(Array.isArray(u) ? u : []);
       setPStatus((p.status || "to-do").toLowerCase());
       setPPriority(ensureProjectPriority(p.priority));
@@ -205,6 +240,10 @@ export default function ProjectDetailPage() {
       setDescriptionDraft(p.description || "");
       setEditingDescription(false);
       setMetaError("");
+
+      // (Optional) You can uncomment this if you want auto-sync also on initial load
+      // await syncProjectStatusWithTasks(normalizedTasks);
+
     } catch (e) {
       setErr(e?.message || "Failed to load project");
       setProject(null);
@@ -214,7 +253,7 @@ export default function ProjectDetailPage() {
     } finally {
       setLoading(false);
     }
-  }, [id]);
+  }, [id /*, syncProjectStatusWithTasks*/]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -560,11 +599,23 @@ export default function ProjectDetailPage() {
       const uniqueCollaborators = [...new Set(collaboratorIds)];
       payload.collaboratorsIds = uniqueCollaborators;
 
+      // prepare a local updated list to drive auto-status
+      let updatedTasksLocal = tasks;
+
       if (isEditingTask && editingTaskId) {
         await updateTask(id, editingTaskId, payload);
+        updatedTasksLocal = tasks.map((t) =>
+          t.id === editingTaskId ? { ...t, ...payload, status: String(payload.status).toLowerCase() } : t
+        );
       } else {
         await createTask(id, payload);
+        // include the new task (id unknown yet; temp id is fine for inference)
+        updatedTasksLocal = [...tasks, { id: "temp", ...payload, status: String(payload.status).toLowerCase() }];
       }
+
+      // ⭐ ADDED: auto-sync project status after create/edit
+      await syncProjectStatusWithTasks(updatedTasksLocal);
+
       await load(currentUser.uid);
       handleTaskDialogChange(false);
     } catch (error) {
@@ -575,7 +626,11 @@ export default function ProjectDetailPage() {
 
   async function handleTaskStatus(taskId, status) {
     await updateTask(id, taskId, { status });
-    setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, status } : t)));
+    const updated = tasks.map((t) => (t.id === taskId ? { ...t, status } : t));
+    setTasks(updated);
+
+    // ⭐ ADDED: auto-sync project status after inline status change
+    await syncProjectStatusWithTasks(updated);
   }
 
   const requestDeleteTask = (task) => {
@@ -601,7 +656,12 @@ export default function ProjectDetailPage() {
     setDeleteError("");
     try {
       await deleteTask(id, taskId);
-      setTasks((prev) => prev.filter((t) => t.id !== taskId));
+      const remaining = tasks.filter((t) => t.id !== taskId);
+      setTasks(remaining);
+
+      // ⭐ ADDED: auto-sync project status after delete
+      await syncProjectStatusWithTasks(remaining);
+
       if (editingTaskId === taskId) {
         setEditingTaskId(null);
         setIsTaskDialogOpen(false);

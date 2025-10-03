@@ -1,20 +1,40 @@
 "use client";
 
 import { listProjects, createProject } from "@/lib/api";
-
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ProjectCard } from "@/components/ProjectCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Calendar } from "@/components/ui/calendar";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Search, Plus, TrendingDown, X, ArrowUpDown, ArrowUp, ArrowDown, Calendar as CalendarIcon, AlertCircle } from "lucide-react";
-import { format } from "date-fns";
+import {
+  Search,
+  Plus,
+  TrendingDown,
+  X,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  AlertCircle,
+} from "lucide-react";
 import { auth } from "@/lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
+
+/* ------------------- Constants ------------------- */
 
 const PROJECT_PRIORITIES = [
   { value: "low", label: "Low" },
@@ -22,18 +42,25 @@ const PROJECT_PRIORITIES = [
   { value: "high", label: "High" },
 ];
 
+const COMPLETION_BUCKETS = [
+  { value: "all", label: "Any %" },
+  { value: "0-24", label: "0–24%" },
+  { value: "25-49", label: "25–49%" },
+  { value: "50-74", label: "50–74%" },
+  { value: "75-99", label: "75–99%" },
+  { value: "100", label: "100%" },
+];
+
 const priorityOrder = { low: 1, medium: 2, high: 3 };
+
+/* ------------------- Helpers ------------------- */
 
 const ensureProjectPriority = (value) => {
   if (typeof value === "string") {
     const normalized = value.trim().toLowerCase();
-    if (priorityOrder[normalized]) {
-      return normalized;
-    }
+    if (priorityOrder[normalized]) return normalized;
     const parsed = Number(normalized);
-    if (Number.isFinite(parsed)) {
-      return ensureProjectPriority(parsed);
-    }
+    if (Number.isFinite(parsed)) return ensureProjectPriority(parsed);
     return "medium";
   }
   if (typeof value === "number") {
@@ -53,8 +80,40 @@ function canonUiStatus(s = "") {
   if (v === "doing") return "in progress";
   if (v === "done") return "completed";
   if (v === "to-do" || v === "todo") return "to-do";
-  return v; // e.g., "blocked"
+  return v;
 }
+
+const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
+
+function projectCompletion(p) {
+  // prefer explicit numeric progress
+  if (typeof p?.progress === "number" && !Number.isNaN(p.progress)) {
+    return clamp(Math.round(p.progress), 0, 100);
+  }
+  // compute from tasks if present
+  const tasks = p?.tasks ?? [];
+  if (tasks.length > 0) {
+    const done = tasks.filter((t) => canonUiStatus(t?.status) === "completed").length;
+    return clamp(Math.round((done / tasks.length) * 100), 0, 100);
+  }
+  // fallback based on project status
+  const s = canonUiStatus(p?.status);
+  if (s === "completed") return 100;
+  if (s === "to-do" || s === "blocked") return 0;
+  return 50; // neutral for "in progress"/unknown
+}
+
+function inCompletionBucket(percent, bucketValue) {
+  if (bucketValue === "all") return true;
+  if (bucketValue === "100") return percent === 100;
+  const [a, b] = bucketValue.split("-").map((x) => parseInt(x, 10));
+  if (Number.isFinite(a) && Number.isFinite(b)) {
+    return percent >= a && percent <= b;
+  }
+  return true;
+}
+
+/* ------------------- Page ------------------- */
 
 export default function ProjectsPage() {
   const [projects, setProjects] = useState([]);
@@ -64,13 +123,15 @@ export default function ProjectsPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [projectFilter, setProjectFilter] = useState("all");
   const [employeeFilter, setEmployeeFilter] = useState("");
-  const [taskStatusFilter, setTaskStatusFilter] = useState("all");
-  const [dateRange, setDateRange] = useState(undefined);
+  const [statusFilter, setStatusFilter] = useState("all"); // Project/Task status
+  const [completionFilter, setCompletionFilter] = useState("all");
+  const [priorityFilter, setPriorityFilter] = useState("all"); // NEW
 
   const [sortField, setSortField] = useState("completion"); // "completion" | "deadline"
-  const [sortOrder, setSortOrder] = useState("asc"); // "asc" | "desc"
+  const [sortOrder, setSortOrder] = useState("asc");
   const [currentUser, setCurrentUser] = useState(null);
   const [userLoading, setUserLoading] = useState(true);
+
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [newProjectName, setNewProjectName] = useState("");
   const [newProjectStatus, setNewProjectStatus] = useState("to-do");
@@ -91,14 +152,11 @@ export default function ProjectsPage() {
       setError(null);
       const data = await listProjects({ assignedTo: userId });
       setProjects(
-        (data || []).map((p) => {
-          const priority = ensureProjectPriority(p.priority);
-          return {
-            ...p,
-            status: canonUiStatus(p.status),
-            priority,
-          };
-        })
+        (data || []).map((p) => ({
+          ...p,
+          status: canonUiStatus(p.status),
+          priority: ensureProjectPriority(p.priority),
+        }))
       );
     } catch (e) {
       setError(e?.message ?? "Failed to load projects");
@@ -123,49 +181,69 @@ export default function ProjectsPage() {
     }
     load(currentUser.uid);
   }, [currentUser?.uid, load]);
+  
+  const { todoCount, inProgressCount, completedCount, blockedCount, medianDaysOverdue } =
+    useMemo(() => {
+      const todo = projects.filter((p) => p.status === "to-do").length;
+      const inProgress = projects.filter((p) => p.status === "in progress").length;
+      const completed = projects.filter((p) => p.status === "completed").length;
+      const blocked = projects.filter((p) => p.status === "blocked").length;
 
-  const { todoCount, inProgressCount, completedCount, blockedCount, medianDaysOverdue } = useMemo(() => {
-    const todo = projects.filter((p) => p.status === "to-do").length;
-    const inProgress = projects.filter((p) => p.status === "in progress").length;
-    const completed = projects.filter((p) => p.status === "completed").length;
-    const blocked = projects.filter((p) => p.status === "blocked").length;
+      const today = new Date();
+      const overdueDays = projects
+        .flatMap((p) => p.tasks ?? [])
+        .filter((t) => t?.dueDate && t.status !== "completed" && new Date(t.dueDate) < today)
+        .map((t) =>
+          Math.ceil((today.getTime() - new Date(t.dueDate).getTime()) / (1000 * 60 * 60 * 24))
+        )
+        .sort((a, b) => a - b);
 
-    const today = new Date();
-    const overdueDays = projects
-      .flatMap((p) => p.tasks ?? [])
-      .filter((t) => t?.dueDate && t.status !== "completed" && new Date(t.dueDate) < today)
-      .map((t) => Math.ceil((today.getTime() - new Date(t.dueDate).getTime()) / (1000 * 60 * 60 * 24)))
-      .sort((a, b) => a - b);
+      const median =
+        overdueDays.length === 0
+          ? 0
+          : overdueDays.length % 2
+          ? overdueDays[Math.floor(overdueDays.length / 2)]
+          : Math.round(
+              (overdueDays[overdueDays.length / 2 - 1] + overdueDays[overdueDays.length / 2]) / 2
+            );
 
-    const median =
-      overdueDays.length === 0
-        ? 0
-        : overdueDays.length % 2
-        ? overdueDays[Math.floor(overdueDays.length / 2)]
-        : Math.round((overdueDays[overdueDays.length / 2 - 1] + overdueDays[overdueDays.length / 2]) / 2);
-
-    return { todoCount: todo, inProgressCount: inProgress, completedCount: completed, blockedCount: blocked, medianDaysOverdue: median };
-  }, [projects]);
+      return {
+        todoCount: todo,
+        inProgressCount: inProgress,
+        completedCount: completed,
+        blockedCount: blocked,
+        medianDaysOverdue: median,
+      };
+    }, [projects]);
 
   const activeFilters = useMemo(() => {
     const arr = [];
     if (projectFilter !== "all") {
       const p = projects.find((x) => x.id === projectFilter);
-      arr.push({ type: "project", value: projectFilter, label: `Project: ${p?.name || projectFilter}` });
+      
+      arr.push({
+        type: "project",
+        value: projectFilter,
+        label: `Project: ${p?.name || projectFilter}`,
+      });
     }
     if (employeeFilter) {
       arr.push({ type: "employee", value: employeeFilter, label: `Employee: ${employeeFilter}` });
     }
-    if (taskStatusFilter !== "all") {
-      arr.push({ type: "taskStatus", value: taskStatusFilter, label: `Task Status: ${taskStatusFilter}` });
+   
+    if (statusFilter !== "all") {
+      arr.push({ type: "status", value: statusFilter, label: `Status: ${statusFilter}` });
     }
-    if (dateRange?.from || dateRange?.to) {
-      const fromStr = dateRange?.from ? format(dateRange.from, "MMM dd") : "Start";
-      const toStr = dateRange?.to ? format(dateRange.to, "MMM dd") : "End";
-      arr.push({ type: "dateRange", value: "dateRange", label: `Date: ${fromStr} - ${toStr}` });
+
+    if (completionFilter !== "all") {
+      const label = COMPLETION_BUCKETS.find((b) => b.value === completionFilter)?.label ?? completionFilter;
+      arr.push({ type: "completion", value: completionFilter, label: `Completion: ${label}` });
+    }
+    if (priorityFilter !== "all") {
+      arr.push({ type: "priority", value: priorityFilter, label: `Priority: ${priorityFilter}` });
     }
     return arr;
-  }, [projectFilter, employeeFilter, taskStatusFilter, dateRange, projects]);
+  }, [projectFilter, employeeFilter, statusFilter, completionFilter, priorityFilter, projects]);
 
   const filteredAndSortedProjects = useMemo(() => {
     const filtered = projects.filter((p) => {
@@ -185,22 +263,34 @@ export default function ProjectsPage() {
           return (m?.name ?? "").toLowerCase().includes(employeeFilter.toLowerCase());
         });
 
-      const matchesTaskStatus =
-        taskStatusFilter === "all" || (p.tasks ?? []).some((t) => t.status === taskStatusFilter);
+      
+      // FIX: status filter now matches project status OR any task status
+      const matchesStatus =
+        statusFilter === "all" ||
+        canonUiStatus(p.status) === statusFilter ||
+        (p.tasks ?? []).some((t) => canonUiStatus(t.status) === statusFilter);
 
-      const due = p.dueDate ? new Date(p.dueDate) : null;
-      const fromOk = dateRange?.from ? (due ? due >= dateRange.from : false) : true;
-      const toOk = dateRange?.to ? (due ? due <= dateRange.to : false) : true;
-      const matchesDate = fromOk && toOk;
+      const percent = projectCompletion(p);
+      const matchesCompletion = inCompletionBucket(percent, completionFilter);
 
-      return matchesSearch && matchesProject && matchesEmployee && matchesTaskStatus && matchesDate;
+      const matchesPriority =
+        priorityFilter === "all" || ensureProjectPriority(p.priority) === priorityFilter;
+
+      return (
+        matchesSearch &&
+        matchesProject &&
+        matchesEmployee &&
+        matchesStatus &&
+        matchesCompletion &&
+        matchesPriority
+      );
     });
 
     filtered.sort((a, b) => {
       let av, bv;
       if (sortField === "completion") {
-        av = a.progress ?? 0;
-        bv = b.progress ?? 0;
+        av = projectCompletion(a);
+        bv = projectCompletion(b);
       } else {
         av = a.dueDate ? new Date(a.dueDate).getTime() : Number.POSITIVE_INFINITY;
         bv = b.dueDate ? new Date(b.dueDate).getTime() : Number.POSITIVE_INFINITY;
@@ -210,27 +300,38 @@ export default function ProjectsPage() {
     });
 
     return filtered;
-  }, [projects, searchTerm, projectFilter, employeeFilter, taskStatusFilter, dateRange, sortField, sortOrder]);
+  }, [
+    projects,
+    searchTerm,
+    projectFilter,
+    employeeFilter,
+    statusFilter,
+    completionFilter,
+    priorityFilter,
+    sortField,
+    sortOrder,
+  ]);
 
   const removeFilterByType = (type) => {
     if (type === "project") setProjectFilter("all");
     else if (type === "employee") setEmployeeFilter("");
-    else if (type === "taskStatus") setTaskStatusFilter("all");
-    else if (type === "dateRange") setDateRange(undefined);
+    else if (type === "status") setStatusFilter("all");
+    else if (type === "completion") setCompletionFilter("all");
+    else if (type === "priority") setPriorityFilter("all");
   };
 
   const clearAll = () => {
     setProjectFilter("all");
     setEmployeeFilter("");
-    setTaskStatusFilter("all");
-    setDateRange(undefined);
+    setStatusFilter("all");
+    setCompletionFilter("all");
+    setPriorityFilter("all");
     setSearchTerm("");
   };
 
   const handleSort = (field) => {
-    if (sortField === field) {
-      setSortOrder((order) => (order === "asc" ? "desc" : "asc"));
-    } else {
+    if (sortField === field) setSortOrder((o) => (o === "asc" ? "desc" : "asc"));
+    else {
       setSortField(field);
       setSortOrder("asc");
     }
@@ -289,10 +390,16 @@ export default function ProjectsPage() {
     }
   }
 
-  const sortIcon = (field) => {
-    if (sortField !== field) return <ArrowUpDown className="h-4 w-4" />;
-    return sortOrder === "asc" ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />;
-  };
+  const sortIcon = (field) =>
+    sortField !== field ? (
+      <ArrowUpDown className="h-4 w-4" />
+    ) : sortOrder === "asc" ? (
+      <ArrowUp className="h-4 w-4" />
+    ) : (
+      <ArrowDown className="h-4 w-4" />
+    );
+
+  /* ------------------- Render ------------------- */
 
   if (userLoading) {
     return (
@@ -421,9 +528,7 @@ export default function ProjectsPage() {
       <div className="flex flex-col h-full bg-background">
         <div className="border-b border-border bg-card p-6">
           <div className="flex items-center justify-between mb-6">
-            <div>
-              <h1 className="text-3xl font-bold text-foreground">Project Dashboard</h1>
-            </div>
+            <h1 className="text-3xl font-bold text-foreground">Project Dashboard</h1>
             <Button
               className="bg-primary text-primary-foreground hover:bg-primary/90"
               onClick={() => handleCreateDialogChange(true)}
@@ -433,6 +538,7 @@ export default function ProjectsPage() {
             </Button>
           </div>
 
+          {/* KPI cards */}
           <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
             <div className="bg-background rounded-lg p-4 border border-border">
               <p className="text-sm text-muted-foreground">To Do</p>
@@ -454,11 +560,19 @@ export default function ProjectsPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">Median Days Overdue</p>
-                  <p className={`text-2xl font-bold ${medianDaysOverdue > 0 ? "text-destructive" : "text-foreground"}`}>
+                  <p
+                    className={`text-2xl font-bold ${
+                      medianDaysOverdue > 0 ? "text-destructive" : "text-foreground"
+                    }`}
+                  >
                     {medianDaysOverdue}
                   </p>
                 </div>
-                <TrendingDown className={`h-4 w-4 ${medianDaysOverdue > 0 ? "text-destructive" : "text-muted-foreground"}`} />
+                <TrendingDown
+                  className={`h-4 w-4 ${
+                    medianDaysOverdue > 0 ? "text-destructive" : "text-muted-foreground"
+                  }`}
+                />
               </div>
               <p className="text-xs text-muted-foreground mt-1">
                 {medianDaysOverdue === 0 ? "No overdue tasks" : "Across all projects"}
@@ -466,6 +580,7 @@ export default function ProjectsPage() {
             </div>
           </div>
 
+          {/* Filters */}
           <div className="space-y-4">
             <div className="flex flex-col lg:flex-row gap-4">
               <div className="relative flex-1">
@@ -486,9 +601,9 @@ export default function ProjectsPage() {
                   className="w-[180px]"
                 />
 
-                <Select value={taskStatusFilter} onValueChange={setTaskStatusFilter}>
-                  <SelectTrigger className="w-[180px]">
-                    <SelectValue placeholder="Task Status" />
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger className="w-[160px]">
+                    <SelectValue placeholder="Status" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Statuses</SelectItem>
@@ -499,30 +614,31 @@ export default function ProjectsPage() {
                   </SelectContent>
                 </Select>
 
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button variant="outline" className="w-[180px] justify-start text-left font-normal bg-transparent">
-                      <CalendarIcon className="mr-2 h-4 w-4" />
-                      {dateRange?.from
-                        ? (dateRange?.to
-                            ? <>
-                                {format(dateRange.from, "LLL dd")} - {format(dateRange.to, "LLL dd")}
-                              </>
-                            : format(dateRange.from, "LLL dd, y"))
-                        : <span>Date Range</span>}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0 z-[1000]">
-                    <Calendar
-                      mode="range"
-                      initialFocus
-                      defaultMonth={dateRange?.from ?? new Date()}
-                      selected={dateRange}
-                      onSelect={setDateRange}
-                      numberOfMonths={2}
-                    />
-                  </PopoverContent>
-                </Popover>
+                <Select value={completionFilter} onValueChange={setCompletionFilter}>
+                  <SelectTrigger className="w-[140px]">
+                    <SelectValue placeholder="Completion %" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {COMPLETION_BUCKETS.map((b) => (
+                      <SelectItem key={b.value} value={b.value}>
+                        {b.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                {/* NEW: Priority filter */}
+                <Select value={priorityFilter} onValueChange={setPriorityFilter}>
+                  <SelectTrigger className="w-[140px]">
+                    <SelectValue placeholder="Priority" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Priorities</SelectItem>
+                    <SelectItem value="low">Low</SelectItem>
+                    <SelectItem value="medium">Medium</SelectItem>
+                    <SelectItem value="high">High</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 

@@ -4,10 +4,11 @@ import { useState, useEffect } from "react"
 import { useRouter, usePathname } from "next/navigation"
 import Link from "next/link"
 import { signOut } from "firebase/auth"
-import { ChevronLeft, LayoutDashboard, FolderOpen, BarChart3, LogOut, Users } from "lucide-react"
+import { ChevronLeft, LayoutDashboard, FolderOpen, BarChart3, LogOut, Users, Bell } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { auth } from "@/lib/firebase"
-
+import { db, auth } from "@/lib/firebase"
+import { collection, query, where, onSnapshot } from "firebase/firestore"
+import { onAuthStateChanged } from "firebase/auth"
 
 const navigationItems = [
   {
@@ -65,6 +66,7 @@ const fetchUserData = async (userId) => {
 }
 
 export function Sidebar({ className }) {
+
   const pathname = usePathname()
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [userData, setUserData] = useState({
@@ -74,7 +76,7 @@ export function Sidebar({ className }) {
   })
   const [isLoadingUser, setIsLoadingUser] = useState(true)
   const router = useRouter()
-
+  const [unreadCount, setUnreadCount] = useState(0)
   useEffect(() => {
     const loadUserData = async () => {
       const userId = auth.currentUser?.uid
@@ -100,6 +102,36 @@ export function Sidebar({ className }) {
 
     loadUserData()
   }, [])
+  useEffect(() => {
+  let unsubscribeSnapshot = null
+
+  const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
+    // cleanup old listener
+    if (unsubscribeSnapshot) {
+      unsubscribeSnapshot()
+      unsubscribeSnapshot = null
+    }
+
+    if (user) {
+      const q = query(
+        collection(db, "notifications"),
+        where("userId", "==", user.uid),
+        where("isRead", "==", false)
+      )
+
+      unsubscribeSnapshot = onSnapshot(q, (snapshot) => {
+        setUnreadCount(snapshot.size)
+      })
+    } else {
+      setUnreadCount(0) // reset when logged out
+    }
+  })
+
+  return () => {
+    unsubscribeAuth()
+    if (unsubscribeSnapshot) unsubscribeSnapshot()
+  }
+}, [])
 
   const handleLogout = async () => {
     try {
@@ -162,7 +194,7 @@ export function Sidebar({ className }) {
         <div className={cn("flex items-center transition-all duration-300", isCollapsed ? "justify-center" : "justify-between")}>
           <div className="flex items-center gap-3">
             <div className="h-10 w-10 flex-shrink-0 rounded-full bg-blue-500 flex items-center justify-center">
-              <span className="text-white font-medium text-sm">{isLoadingUser ? "..." : userData.initials}</span> 
+              <span className="text-white font-medium text-sm">{isLoadingUser ? "..." : userData.initials}</span>
             </div>
             {!isCollapsed && (
               <div className="flex flex-col">
@@ -176,13 +208,30 @@ export function Sidebar({ className }) {
 
           {/* Logout Button */}
           {!isCollapsed && (
-            <button
-              onClick={handleLogout}
-              className="flex items-center justify-center h-8 w-8 rounded-md text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-colors"
-              title="Logout"
-            >
-              <LogOut className="h-4 w-4" />
-            </button>
+            <div className="flex items-center gap-2">
+              {/* Notification Bell */}
+              <button
+                onClick={() => router.push("/notifications")}
+                className="relative flex items-center justify-center h-8 w-8 rounded-md text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-colors"
+                title="Notifications"
+              >
+                <Bell className="h-4 w-4" />
+                {unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full h-4 w-4 flex items-center justify-center">
+                    {unreadCount}
+                  </span>
+                )}
+              </button>
+
+              {/* Logout Button */}
+              <button
+                onClick={handleLogout}
+                className="flex items-center justify-center h-8 w-8 rounded-md text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-colors"
+                title="Logout"
+              >
+                <LogOut className="h-4 w-4" />
+              </button>
+            </div>
           )}
         </div>
       </div>

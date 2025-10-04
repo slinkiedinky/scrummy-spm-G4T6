@@ -1,27 +1,36 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
+import { auth, db } from "@/lib/firebase";
+import { onAuthStateChanged } from "firebase/auth";
+import {
+  collectionGroup,
+  query,
+  where,
+  getDocs,
+  doc,
+  getDoc,
+} from "firebase/firestore";
 
-/**
- * Timeline: compact list of tasks assigned to the current user,
- * showing Task, Deadline, Updated, and Assigned by.
- *
- * Data sources it attempts:
- *   A) GET /api/tasks?assigneeId=<uid>
- *   B) Fallback per project:
- *        GET /api/projects?assignedTo=<uid>
- *        → GET /api/projects/:projectId/tasks?assigneeId=<uid>
- *
- * How it finds <uid>:
- *   1) from URL ?assignee=<uid> (same as your Tasks page pattern)
- *   2) localStorage.getItem("userId")
- *
- * If your API uses different field names, adjust mapTask().
- */
+/** Swallow permission-denied and continue so the page never crashes */
+async function safeGetDocs(q, label) {
+  try {
+    const snap = await getDocs(q);
+    console.log(`[Timeline] ${label} hits:`, snap.size);
+    return snap;
+  } catch (e) {
+    if (e.code === "permission-denied") {
+      console.warn(`[Timeline] ${label} query denied (continuing):`, e.message);
+      // minimal empty-snapshot shim
+      return { size: 0, forEach: () => {} };
+    }
+    throw e;
+  }
+}
 
 function formatDate(v) {
   if (!v) return "—";
-  const d = new Date(v);
+  const d = v?.toDate ? v.toDate() : new Date(v);
   if (Number.isNaN(d.getTime())) return "—";
   return d.toLocaleString(undefined, {
     year: "numeric",
@@ -32,143 +41,123 @@ function formatDate(v) {
   });
 }
 
-function getQueryParam(name) {
-  if (typeof window === "undefined") return null;
-  return new URLSearchParams(window.location.search).get(name);
-}
-
 export default function Timeline() {
-  const [loading, setLoading] = useState(true);
+  const [uid, setUid] = useState(null);
   const [tasks, setTasks] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  // Resolve current userId (assignee)
-  const userId = useMemo(() => {
-    const fromQuery = getQueryParam("assignee");
-    if (fromQuery) return fromQuery;
-    const fromLS = typeof window !== "undefined" ? localStorage.getItem("userId") : null;
-    return fromLS || "";
+  // 1) Wait for Firebase Auth
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (user) => {
+      console.log("[Auth] user:", user?.uid || "(none)");
+      setUid(user ? user.uid : "");
+    });
+    return () => unsub();
   }, []);
 
+  // 2) Query Firestore once we have a UID
   useEffect(() => {
-    let cancelled = false;
-
-    async function fetchAll() {
-      setLoading(true);
-      setError("");
-
-      try {
-        const collected = [];
-
-        // ------ Path A: /api/tasks?assigneeId=<uid>
-        if (userId) {
-          try {
-            const res = await fetch(`/api/tasks?assigneeId=${encodeURIComponent(userId)}`);
-            if (res.ok) {
-              const data = await res.json();
-              if (!cancelled && Array.isArray(data)) {
-                collected.push(...data);
-              }
-            }
-          } catch {
-            // ignore; we'll try fallback
-          }
-        }
-
-        // ------ Path B: projects → project tasks (fallback or enrich)
-        if (collected.length === 0) {
-          const projRes = await fetch(
-            userId ? `/api/projects?assignedTo=${encodeURIComponent(userId)}` : `/api/projects`
-          );
-          if (!projRes.ok) throw new Error(`Failed to load projects (${projRes.status})`);
-
-          const projects = await projRes.json();
-          if (Array.isArray(projects)) {
-            const reqs = projects.map(async (p) => {
-              const pid = p.id || p.projectId || p.projectID;
-              if (!pid) return [];
-              const url = userId
-                ? `/api/projects/${pid}/tasks?assigneeId=${encodeURIComponent(userId)}`
-                : `/api/projects/${pid}/tasks`;
-              try {
-                const tr = await fetch(url);
-                if (!tr.ok) return [];
-                const t = await tr.json();
-                return Array.isArray(t) ? t.map((x) => ({ ...x, _project: p })) : [];
-              } catch {
-                return [];
-              }
-            });
-
-            const perProject = await Promise.all(reqs);
-            perProject.forEach((arr) => collected.push(...arr));
-          }
-        }
-
-        // Normalize record shape for rendering
-        const mapTask = (t) => {
-          const id =
-            t.id || t.taskId || t.taskID || `${t.name || t.title}-${t.projectId || ""}-${t.assigneeId || ""}`;
-          const name = t.name || t.title || "(untitled)";
-          const dueDate = t.dueDate || t.deadline || t.due_by || t.due_on || null;
-          const updatedAt = t.updatedAt || t.updated || t.lastUpdated || null;
-          const assignedBy =
-            t.assignedByName ||
-            t.assignedBy ||
-            t.createdByName ||
-            t.createdBy ||
-            (t.assigner && (t.assigner.name || t.assigner.fullName)) ||
-            "—";
-          const projectName =
-            (t._project && (t._project.name || t._project.title)) ||
-            t.projectName ||
-            t.project_title ||
-            "—";
-          return { id, name, dueDate, updatedAt, assignedBy, projectName };
-        };
-
-        const normalized = collected.map(mapTask);
-
-        // De-dupe by id
-        const dedup = Array.from(new Map(normalized.map((x) => [x.id, x])).values());
-
-        // Sort by due date (earliest first), tie-break by most recently updated
-        dedup.sort((a, b) => {
-          const da = a.dueDate ? new Date(a.dueDate).getTime() : Infinity;
-          const db = b.dueDate ? new Date(b.dueDate).getTime() : Infinity;
-          if (da === db) {
-            const ua = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
-            const ub = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
-            return ub - ua;
-          }
-          return da - db;
-        });
-
-        if (!cancelled) setTasks(dedup);
-      } catch (e) {
-        if (!cancelled) setError(e.message || "Failed to load timeline.");
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
+    if (uid === null) return; // still resolving auth
+    if (!uid) {
+      setError("Please sign in.");
+      setLoading(false);
+      return;
     }
 
-    fetchAll();
-    return () => {
-      cancelled = true;
-    };
-  }, [userId]);
+    (async () => {
+      setLoading(true);
+      setError("");
+      try {
+        console.log("[Timeline] uid:", uid);
+        const cg = collectionGroup(db, "tasks");
+
+        // Use safe getter for all three paths
+        const [rAssignee, rCollab, rOwner] = await Promise.all([
+          safeGetDocs(query(cg, where("assigneeId", "==", uid)), "assigneeId"),
+          safeGetDocs(
+            query(cg, where("collaboratorsIds", "array-contains", uid)),
+            "collaboratorsIds"
+          ),
+          safeGetDocs(query(cg, where("ownerId", "==", uid)), "ownerId"),
+        ]);
+
+        const rows = [];
+        const push = (snap) =>
+          snap.forEach((d) => {
+            const pRef = d.ref.parent?.parent; // projects/{projectId}
+            rows.push({ _taskId: d.id, _projectId: pRef?.id || null, ...d.data() });
+          });
+        push(rAssignee);
+        push(rCollab);
+        push(rOwner);
+
+        const dedup = Array.from(
+          new Map(rows.map((t) => [`${t._projectId}-${t._taskId}`, t])).values()
+        );
+
+        // Project names – never fail UI if denied
+        const pids = Array.from(
+          new Set(dedup.map((t) => t._projectId).filter(Boolean))
+        );
+        const nameById = {};
+        await Promise.all(
+          pids.map(async (pid) => {
+            try {
+              const ps = await getDoc(doc(db, "projects", pid));
+              nameById[pid] = ps.exists() ? ps.data().name || `Project ${pid}` : pid;
+            } catch (e) {
+              console.warn(`[Timeline] project ${pid} read denied (ok):`, e.code);
+              nameById[pid] = pid; // fallback to id so UI still renders
+            }
+          })
+        );
+
+        const toMs = (x) =>
+          !x ? undefined : (x.toDate ? x.toDate() : new Date(x)).getTime();
+
+        const mapped = dedup
+          .map((t) => ({
+            id: `${t._projectId}-${t._taskId}`,
+            name: t.title || t.name || "(untitled)",
+            dueDate: t.dueDate || null,
+            updatedAt: t.updatedAt || null,
+            assignedBy: t.createdBy || t.ownerId || "—",
+            // fall back to projectId if we couldn't read the project doc
+            projectName: nameById[t._projectId] || t._projectId || "—",
+          }))
+          .sort((a, b) => {
+            const ad = toMs(a.dueDate) ?? Infinity,
+              bd = toMs(b.dueDate) ?? Infinity;
+            if (ad !== bd) return ad - bd;
+            const au = toMs(a.updatedAt) ?? 0,
+              bu = toMs(b.updatedAt) ?? 0;
+            return bu - au;
+          });
+
+        setTasks(mapped);
+      } catch (e) {
+        setError(e?.message || "Failed to load tasks.");
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [uid]);
 
   return (
     <div className="px-6 py-4">
       <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-2xl font-semibold">Timeline</h1>
-          <p className="text-sm text-gray-500">Tasks assigned to you, sorted by deadline.</p>
+          <p className="text-sm text-gray-500">
+            Tasks assigned to you or involving you, sorted by deadline.
+          </p>
         </div>
         <button
-          onClick={() => window.location.reload()}
+          onClick={() =>
+            typeof window !== "undefined" && window.location.reload()
+          }
           className="text-sm rounded-md border px-3 py-1 hover:bg-gray-50"
-          title="Refresh"
         >
           Refresh
         </button>
@@ -182,8 +171,14 @@ export default function Timeline() {
         <div className="col-span-1 text-right pr-2">Project</div>
       </div>
 
-      {loading && <div className="py-10 text-center text-gray-500">Loading your timeline…</div>}
-      {error && !loading && <div className="py-3 text-red-600">Error: {error}</div>}
+      {loading && (
+        <div className="py-10 text-center text-gray-500">
+          Loading your timeline…
+        </div>
+      )}
+      {error && !loading && (
+        <div className="py-3 text-red-600">Error: {error}</div>
+      )}
       {!loading && !error && tasks.length === 0 && (
         <div className="py-10 text-center text-gray-500">No tasks found.</div>
       )}

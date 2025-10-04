@@ -2,3 +2,4 @@ Flask==3.0.0
 Flask-CORS==4.0.0
 firebase-admin==6.5.0
 sendgrid==6.11.0
+schedule==1.2.0

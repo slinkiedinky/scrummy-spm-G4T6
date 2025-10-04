@@ -42,6 +42,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
 import { Plus, Trash2, AlertCircle, Loader2, Pencil, ChevronDown, Calendar as CalendarIcon, FileText } from "lucide-react";
 import { format, startOfDay } from "date-fns";
 import { auth } from "@/lib/firebase";
@@ -49,6 +55,7 @@ import { onAuthStateChanged } from "firebase/auth";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import * as XLSX from "xlsx";
+import { TeamTimeline } from "@/components/TeamTimeline";
 
 const STATUS = ["to-do", "in progress", "completed", "blocked"];
 const TASK_PRIORITY_VALUES = Array.from({ length: 10 }, (_, i) => String(i + 1));
@@ -451,7 +458,7 @@ export default function ProjectDetailPage() {
     .map((id) => resolveUserLabel(id))
     .filter(Boolean);
   const collaboratorButtonLabel = selectedCollaboratorNames.length === 0
-    ? "Select collaborators"
+    ? "Select assignees"
     : selectedCollaboratorNames.length <= 2
       ? selectedCollaboratorNames.join(", ")
       : `${selectedCollaboratorNames.slice(0, 2).join(", ")} +${selectedCollaboratorNames.length - 2} more`;
@@ -552,9 +559,15 @@ export default function ProjectDetailPage() {
       return;
     }
 
-    const assignee = taskForm.assigneeId.trim();
-    if (!assignee) {
-      setTaskError("Task assignee is required.");
+    // Validate due date is required
+    if (!taskForm.dueDate) {
+      setTaskError("Due date is required.");
+      return;
+    }
+
+    // Validate at least one assignee
+    if (selectedCollaborators.length === 0) {
+      setTaskError("At least one assignee is required.");
       return;
     }
 
@@ -573,31 +586,30 @@ export default function ProjectDetailPage() {
         .split(",")
         .map((tag) => tag.trim())
         .filter(Boolean);
+
+      // Use first assignee as primary, rest as collaborators
+      const [primaryAssignee, ...otherAssignees] = selectedCollaborators;
+
       const payload = {
         title,
         description: taskForm.description.trim(),
         status: taskForm.status,
         priority: priorityValue,
-        assigneeId: assignee,
+        assigneeId: primaryAssignee,
+        collaboratorsIds: otherAssignees.length > 0 ? otherAssignees : [],
         tags,
       };
 
-      if (taskForm.dueDate) {
-        const due = new Date(`${taskForm.dueDate}T00:00:00`);
-        if (Number.isNaN(due.getTime())) {
-          setTaskError("Please provide a valid due date.");
-          setSavingTask(false);
-          return;
-        }
-        payload.dueDate = due.toISOString();
-      } else {
-        payload.dueDate = null;
+      // Due date is required now
+      const due = new Date(`${taskForm.dueDate}T00:00:00`);
+      if (Number.isNaN(due.getTime())) {
+        setTaskError("Please provide a valid due date.");
+        setSavingTask(false);
+        return;
       }
+      payload.dueDate = due.toISOString();
 
-      const collaboratorIds = ensureArray(taskForm.collaboratorsIds)
-        .filter((id) => id && id !== assignee);
-      const uniqueCollaborators = [...new Set(collaboratorIds)];
-      payload.collaboratorsIds = uniqueCollaborators;
+      // Collaborators already set in payload above
 
       // prepare a local updated list to drive auto-status
       let updatedTasksLocal = tasks;
@@ -814,11 +826,11 @@ export default function ProjectDetailPage() {
                 />
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-4 grid-cols-2">
                 <div className="space-y-2">
                   <label htmlFor="task-status" className="text-sm font-medium text-foreground">Status</label>
                   <Select value={taskForm.status} onValueChange={(value) => updateTaskForm("status", value)}>
-                    <SelectTrigger id="task-status">
+                    <SelectTrigger id="task-status" className="w-full">
                       <SelectValue placeholder="Select status" />
                     </SelectTrigger>
                     <SelectContent>
@@ -832,43 +844,36 @@ export default function ProjectDetailPage() {
                 <div className="space-y-2">
                   <label htmlFor="task-priority" className="text-sm font-medium text-foreground">Priority</label>
                   <Select value={taskForm.priority} onValueChange={(value) => updateTaskForm("priority", value)}>
-                    <SelectTrigger id="task-priority">
+                    <SelectTrigger id="task-priority" className="w-full">
                       <SelectValue placeholder="Select priority" />
                     </SelectTrigger>
                     <SelectContent>
                       {TASK_PRIORITY_VALUES.map((p) => (
-                        <SelectItem key={p} value={p}>{`Priority ${p}`}</SelectItem>
+                        <SelectItem key={p} value={p}>{p}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <label htmlFor="task-due" className="text-sm font-medium text-foreground">Due date</label>
-                  <Input
-                    id="task-due"
-                    type="date"
-                    value={taskForm.dueDate}
-                    onChange={(e) => updateTaskForm("dueDate", e.target.value)}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <label htmlFor="task-assignee" className="text-sm font-medium text-foreground">Assignee ID</label>
-                  <Input
-                    id="task-assignee"
-                    value={taskForm.assigneeId}
-                    onChange={(e) => updateTaskForm("assigneeId", e.target.value)}
-                    placeholder="0ry9A6TRwFBT2c7O5jhr"
-                  />
-                  <p className="text-xs text-muted-foreground">You only see tasks assigned to you.</p>
-                </div>
+              <div className="space-y-2">
+                <label htmlFor="task-due" className="text-sm font-medium text-foreground">
+                  Due date <span className="text-destructive">*</span>
+                </label>
+                <Input
+                  id="task-due"
+                  type="date"
+                  value={taskForm.dueDate}
+                  onChange={(e) => updateTaskForm("dueDate", e.target.value)}
+                  required
+                />
+                <p className="text-xs text-muted-foreground">Required field</p>
               </div>
 
               <div className="space-y-2">
-                <label className="text-sm font-medium text-foreground">Collaborators</label>
+                <label className="text-sm font-medium text-foreground">
+                  Assignees <span className="text-destructive">*</span>
+                </label>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button type="button" variant="outline" className="w-full justify-between">
@@ -881,10 +886,10 @@ export default function ProjectDetailPage() {
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent className="w-64">
-                    <DropdownMenuLabel>Select collaborators</DropdownMenuLabel>
+                    <DropdownMenuLabel>Select assignees</DropdownMenuLabel>
                     <DropdownMenuSeparator />
                     {collaboratorOptions.length === 0 ? (
-                      <div className="px-2 py-1.5 text-sm text-muted-foreground">Add team members to this project to invite collaborators.</div>
+                      <div className="px-2 py-1.5 text-sm text-muted-foreground">Add team members to this project first.</div>
                     ) : (
                       collaboratorOptions.map((option) => (
                         <DropdownMenuCheckboxItem
@@ -903,7 +908,9 @@ export default function ProjectDetailPage() {
                     )}
                   </DropdownMenuContent>
                 </DropdownMenu>
-                <p className="text-xs text-muted-foreground">Select one or more teammates to collaborate on this task.</p>
+                <p className="text-xs text-muted-foreground">
+                  Required: Select at least one team member to assign this task to.
+                </p>
               </div>
 
               <div className="space-y-2">
@@ -1096,26 +1103,33 @@ export default function ProjectDetailPage() {
         </div>
 
         <div className="flex-1 overflow-auto p-6 print:p-8">
-          <div className="flex flex-col gap-6 xl:flex-row">
-            <div className="flex-1 space-y-6">
-              <Card className="p-4 not-print">
-                <div className="mb-4 flex items-center justify-between">
-                  <h2 className="text-xl font-semibold">Tasks</h2>
-                  <Button onClick={openCreateTaskDialog} className="bg-primary text-primary-foreground hover:bg-primary/90">
-                    <Plus className="mr-2 h-4 w-4" />
-                    Add Task
-                  </Button>
-                </div>
+          <Tabs defaultValue="tasks" className="flex flex-col gap-6">
+            <TabsList className="w-fit not-print">
+              <TabsTrigger value="tasks">Tasks</TabsTrigger>
+              <TabsTrigger value="timeline">Timeline</TabsTrigger>
+              <TabsTrigger value="team">Team</TabsTrigger>
+            </TabsList>
 
-                {tasks.length === 0 ? (
-                  <div className="text-sm text-muted-foreground">No tasks yet.</div>
-                ) : (
-                  <div className="divide-y divide-border">
+            <TabsContent value="tasks" className="mt-0">
+              <Card className="p-4 not-print">
+                  <div className="mb-4 flex items-center justify-between">
+                    <h2 className="text-xl font-semibold">Tasks</h2>
+                    <Button onClick={openCreateTaskDialog} className="bg-primary text-primary-foreground hover:bg-primary/90">
+                      <Plus className="mr-2 h-4 w-4" />
+                      Add Task
+                    </Button>
+                  </div>
+
+                  {tasks.length === 0 ? (
+                    <div className="text-sm text-muted-foreground">No tasks yet.</div>
+                  ) : (
+                    <div className="divide-y divide-border">
                     {tasks.map((t) => {
-                      const assigneeLabel = resolveUserLabel(t.assigneeId || t.ownerId);
-                      const collaboratorLabels = ensureArray(t.collaboratorsIds)
-                        .map((uid) => resolveUserLabel(uid))
-                        .filter(Boolean);
+                      const allAssigneeIds = [
+                        t.assigneeId,
+                        ...(t.collaboratorsIds || [])
+                      ].filter(Boolean);
+                      const allAssigneeNames = allAssigneeIds.map(id => resolveUserLabel(id));
                       const priorityValue = t.priority ? String(t.priority) : "";
                       const priorityLabel = priorityValue
                         ? TASK_PRIORITY_LABELS[priorityValue] || `Priority ${priorityValue}`
@@ -1135,11 +1149,26 @@ export default function ProjectDetailPage() {
                             <div className="mt-0.5 text-xs text-muted-foreground">
                               {t.description || "—"}
                             </div>
-                            <div className="mt-0.5 flex flex-wrap gap-2 text-xs text-muted-foreground">
-                              {t.dueDate && <span>Due: {format(toDate(t.dueDate), "dd MMM yyyy")}</span>}
-                              {assigneeLabel && <span>Assignee: {assigneeLabel}</span>}
-                              {collaboratorLabels.length > 0 && <span>Collaborators: {collaboratorLabels.join(", ")}</span>}
-                              {(t.tags || []).length > 0 && <span>Tags: {(t.tags || []).join(", ")}</span>}
+                            <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                              {t.dueDate && (
+                                <span className="text-xs text-muted-foreground">
+                                  Due: {format(toDate(t.dueDate), "dd MMM yyyy")}
+                                </span>
+                              )}
+                              {allAssigneeNames.length > 0 && (
+                                <div className="flex flex-wrap gap-1">
+                                  {allAssigneeNames.map((name, idx) => (
+                                    <span key={idx} className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-xs font-medium">
+                                      {name}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                              {(t.tags || []).length > 0 && (
+                                <span className="text-xs text-muted-foreground">
+                                  Tags: {(t.tags || []).join(", ")}
+                                </span>
+                              )}
                             </div>
                           </div>
 
@@ -1172,9 +1201,17 @@ export default function ProjectDetailPage() {
                   </div>
                 )}
               </Card>
-            </div>
+            </TabsContent>
 
-            <aside className="w-full flex-shrink-0 space-y-4 xl:w-80">
+            <TabsContent value="timeline" className="mt-0">
+              <TeamTimeline
+                tasks={tasks}
+                teamMembers={teamMembers}
+                resolveUserLabel={resolveUserLabel}
+              />
+            </TabsContent>
+
+            <TabsContent value="team" className="mt-0">
               <Card className="p-4 space-y-4 not-print">
                 <div className="space-y-2">
                   <h2 className="text-xl font-semibold">Team members</h2>
@@ -1221,7 +1258,7 @@ export default function ProjectDetailPage() {
                 {teamMembers.length === 0 ? (
                   <p className="text-sm text-muted-foreground">No team members yet.</p>
                 ) : (
-                  <div className="space-y-3">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {teamMembers.map((member) => {
                       const displayName = member.displayName || member.fullName || member.email || member.id;
                       const secondary =
@@ -1232,14 +1269,14 @@ export default function ProjectDetailPage() {
                             : "";
                       const isRemoving = removingMemberId === member.id;
                       return (
-                        <div
+                        <Card
                           key={member.id}
-                          className="flex items-start justify-between gap-3 rounded-md border border-border bg-muted/20 px-3 py-2"
+                          className="p-4 space-y-3"
                         >
-                          <div className="min-w-0 space-y-1">
+                          <div className="space-y-1">
                             <p className="truncate text-sm font-medium text-foreground">{displayName}</p>
                             {secondary && (
-                              <p className="truncate text-[11px] text-muted-foreground">{secondary}</p>
+                              <p className="truncate text-xs text-muted-foreground">{secondary}</p>
                             )}
                             <div className="flex flex-wrap items-center gap-2 text-[10px] text-muted-foreground uppercase">
                               {member.role && (
@@ -1258,31 +1295,31 @@ export default function ProjectDetailPage() {
                               type="button"
                               size="sm"
                               variant="outline"
-                              className="h-8 text-xs"
+                              className="w-full"
                               onClick={() => handleViewSchedule(member.id)}
                             >
                               <CalendarIcon className="mr-2 h-3.5 w-3.5" />
-                              Schedule
+                              View Schedule
                             </Button>
                             <Button
                               type="button"
                               size="sm"
                               variant="ghost"
-                              className="h-8 text-xs text-destructive hover:text-destructive"
+                              className="w-full text-destructive hover:text-destructive"
                               onClick={() => handleRemoveMember(member.id)}
                               disabled={isRemoving || member.isOwner}
                             >
                               {isRemoving ? "Removing..." : "Remove"}
                             </Button>
                           </div>
-                        </div>
+                        </Card>
                       );
                     })}
                   </div>
                 )}
               </Card>
-            </aside>
-          </div>
+            </TabsContent>
+          </Tabs>
         </div>
       </div>
       {showReport && (

@@ -55,7 +55,6 @@ function formatDateOnly(v) {
 }
 
 function priorityInfo(p) {
-  // normalize to number 1..10 if possible
   let n = null;
   if (typeof p === "number") n = p;
   else if (typeof p === "string") {
@@ -65,7 +64,6 @@ function priorityInfo(p) {
   if (!n || n < 1 || n > 10) n = 10;
 
   const label = `Priority ${n}`;
-  // rough color ramp: 1=red → 10=slate
   const ramps = {
     1: "bg-red-100 text-red-700 border-red-200",
     2: "bg-orange-100 text-orange-700 border-orange-200",
@@ -83,7 +81,6 @@ function priorityInfo(p) {
 
 function statusInfo(s) {
   const key = String(s || "").toLowerCase();
-  // normalize to the labels requested
   if (key === "to-do" || key === "todo") {
     return { label: "To Do", cls: "bg-gray-100 text-gray-700 border-gray-200", norm: "To Do" };
   }
@@ -111,11 +108,10 @@ function useClickOutside(ref, onClose) {
   }, [ref, onClose]);
 }
 
-// Generic Multi-Select Dropdown (with optional search)
 function MultiSelectDropdown({
   label,
-  options, // [{value, label}]
-  selected, // array of values
+  options,
+  selected,
   setSelected,
   searchable = false,
   placeholder = "Select...",
@@ -139,9 +135,7 @@ function MultiSelectDropdown({
   const clearAll = () => setSelected([]);
 
   const summary =
-    selected.length === 0
-      ? placeholder
-      : `${selected.length} selected`;
+    selected.length === 0 ? placeholder : `${selected.length} selected`;
 
   return (
     <div className="relative inline-block min-w-[220px]" ref={ref}>
@@ -239,9 +233,9 @@ export default function Timeline() {
   const [error, setError] = useState("");
 
   // filters
-  const [projectFilter, setProjectFilter] = useState([]); // project names
-  const [priorityFilter, setPriorityFilter] = useState([]); // numbers 1..10
-  const [statusFilter, setStatusFilter] = useState([]); // "To Do" | "In Progress" | "Completed" | "Blocked"
+  const [projectFilter, setProjectFilter] = useState([]);
+  const [priorityFilter, setPriorityFilter] = useState([]);
+  const [statusFilter, setStatusFilter] = useState([]);
 
   /* ------------------------------- Auth / Data ------------------------------ */
   useEffect(() => {
@@ -285,17 +279,38 @@ export default function Timeline() {
           new Map(rows.map((t) => [`${t._projectId}-${t._taskId}`, t])).values()
         );
 
+        // fetch project names
         const pids = Array.from(
           new Set(dedup.map((t) => t._projectId).filter(Boolean))
         );
-        const nameById = {};
+        const projectNameById = {};
         await Promise.all(
           pids.map(async (pid) => {
             try {
               const ps = await getDoc(doc(db, "projects", pid));
-              nameById[pid] = ps.exists() ? ps.data().name || `Project ${pid}` : pid;
+              projectNameById[pid] = ps.exists() ? ps.data().name || `Project ${pid}` : pid;
             } catch {
-              nameById[pid] = pid;
+              projectNameById[pid] = pid;
+            }
+          })
+        );
+
+        // fetch "assigned by" user names (from users/{uid}.fullName)
+        const userIds = Array.from(
+          new Set(
+            dedup
+              .map((t) => t.createdBy || t.ownerId)
+              .filter(Boolean)
+          )
+        );
+        const userNameById = {};
+        await Promise.all(
+          userIds.map(async (u) => {
+            try {
+              const us = await getDoc(doc(db, "users", u));
+              userNameById[u] = us.exists() ? (us.data().fullName || u) : u;
+            } catch {
+              userNameById[u] = u;
             }
           })
         );
@@ -303,22 +318,23 @@ export default function Timeline() {
         const normalized = dedup.map((t) => {
           const pr = priorityInfo(t.priority);
           const st = statusInfo(t.status);
+          const assignedById = t.createdBy || t.ownerId || "—";
           return {
             id: `${t._projectId}-${t._taskId}`,
             name: t.title || t.name || "(untitled)",
             dueDate: t.dueDate || null,
             updatedAt: t.updatedAt || null,
-            assignedBy: t.createdBy || t.ownerId || "—",
-            projectName: nameById[t._projectId] || t._projectId || "—",
-            priorityNumber: pr.number, // 1..10
+            assignedBy: userNameById[assignedById] || assignedById,
+            projectName: projectNameById[t._projectId] || t._projectId || "—",
+            priorityNumber: pr.number,
             priorityLabel: pr.label,
             priorityCls: pr.cls,
-            statusLabel: st.norm, // "To Do", ...
+            statusLabel: st.norm,
             statusCls: st.cls,
           };
         });
 
-        // sort chronologically by due date
+        // sort chronologically by due date, then by most recently updated
         normalized.sort((a, b) => {
           const ad = toDate(a.dueDate)?.getTime() ?? Infinity;
           const bd = toDate(b.dueDate)?.getTime() ?? Infinity;
@@ -366,7 +382,6 @@ export default function Timeline() {
     []
   );
 
-  // Apply filters
   const filtered = useMemo(() => {
     return tasks.filter((t) => {
       const okProj =
@@ -379,7 +394,6 @@ export default function Timeline() {
     });
   }, [tasks, projectFilter, priorityFilter, statusFilter]);
 
-  // Group by day for vertical timeline
   const groups = useMemo(() => {
     const map = new Map();
     for (const t of filtered) {
@@ -408,8 +422,6 @@ export default function Timeline() {
     setStatusFilter([]);
   };
 
-  /* ---------------------------- Tag helpers (UI) ---------------------------- */
-
   const removeProject = (v) =>
     setProjectFilter((prev) => prev.filter((x) => x !== v));
   const removePriority = (n) =>
@@ -417,7 +429,6 @@ export default function Timeline() {
   const removeStatus = (s) =>
     setStatusFilter((prev) => prev.filter((x) => x !== s));
 
-  // classes for priority/status tag chips (reuse same ramp)
   const priorityTagCls = (n) => priorityInfo(n).cls;
   const statusTagCls = (s) => statusInfo(s).cls;
 
@@ -482,12 +493,9 @@ export default function Timeline() {
         priorityFilter.length ||
         statusFilter.length) > 0 && (
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          {/* Projects */}
           {projectFilter.map((p) => (
             <Tag key={`pj-${p}`} label={`Project: ${p}`} onRemove={() => removeProject(p)} />
           ))}
-
-          {/* Priority (color-coded) */}
           {priorityFilter.map((n) => (
             <Tag
               key={`pr-${n}`}
@@ -496,8 +504,6 @@ export default function Timeline() {
               onRemove={() => removePriority(n)}
             />
           ))}
-
-          {/* Status (color-coded) */}
           {statusFilter.map((s) => (
             <Tag
               key={`st-${s}`}
@@ -511,108 +517,90 @@ export default function Timeline() {
 
       {/* Vertical timeline */}
       <div className="relative mt-6">
+        {/* timeline line */}
         <div className="absolute left-3 top-0 bottom-0 w-px bg-gray-200" />
-        {loading && (
-          <div className="py-10 text-center text-gray-500">
-            Loading your timeline…
-          </div>
-        )}
-        {error && !loading && (
-          <div className="py-3 text-red-600">Error: {error}</div>
-        )}
+
+        {loading && <div className="py-10 text-center text-gray-500">Loading your timeline…</div>}
+        {error && !loading && <div className="py-3 text-red-600">Error: {error}</div>}
         {!loading && !error && filtered.length === 0 && (
           <div className="py-10 text-center text-gray-500">No task available</div>
         )}
 
-        {!loading &&
-          !error &&
-          groups.map(([day, items], gi) => (
-            <div key={day} className="mb-6">
-              {/* Day header */}
-              <div className="flex items-center gap-2 mb-3 pl-8">
-                <div className="text-sm font-semibold text-gray-700">
-                  {day}
-                </div>
-              </div>
+        {!loading && !error && groups.map(([day, items], gi) => (
+          <div key={day} className="mb-6">
+            {/* Day header */}
+            <div className="flex items-center gap-2 mb-3 pl-8">
+              <div className="text-sm font-semibold text-gray-700">{day}</div>
+            </div>
 
-              {/* Entries */}
-              <div className="space-y-4">
-                {items.map((t, i) => (
-                  <div key={t.id} className="relative pl-8">
-                    {/* dot */}
-                    <div className="absolute left-2 top-3 -translate-x-1/2">
-                      <div
-                        className={`w-3 h-3 rounded-full border-2 ${t.priorityCls}`}
-                      />
-                    </div>
+            {/* Entries */}
+            <div className="space-y-4">
+              {items.map((t, i) => (
+                <div key={t.id} className="relative pl-8">
+                  {/* dot — centered on the line */}
+                  <div className="absolute left-3 top-3 -translate-x-1/2">
+                    <div className={`w-3 h-3 rounded-full border-2 ${t.priorityCls}`} />
+                  </div>
 
-                    {/* card */}
-                    <div className="rounded-lg border bg-white p-4 shadow-sm">
-                      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
-                        <div>
-                          <div className="text-base font-semibold text-gray-900">
-                            {t.name}
-                          </div>
-                          <div className="mt-1 flex items-center gap-2">
-                            <span
-                              className={`text-[11px] border rounded px-1.5 py-0.5 ${t.priorityCls}`}
-                              title="Priority"
-                            >
-                              {t.priorityLabel}
-                            </span>
-                            <span
-                              className={`text-[11px] border rounded px-1.5 py-0.5 ${t.statusCls}`}
-                              title="Status"
-                            >
-                              {t.statusLabel}
-                            </span>
-                          </div>
+                  {/* card */}
+                  <div className="rounded-lg border bg-white p-4 shadow-sm">
+                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+                      <div>
+                        <div className="text-base font-semibold text-gray-900">
+                          {t.name}
                         </div>
-                        <div className="text-sm text-gray-600">
-                          <div>
-                            <span className="font-medium text-gray-700">
-                              Project:
-                            </span>{" "}
-                            {t.projectName}
-                          </div>
-                          <div>
-                            <span className="font-medium text-gray-700">
-                              Deadline:
-                            </span>{" "}
-                            {formatDateTime(t.dueDate)}
-                          </div>
-                          <div>
-                            <span className="font-medium text-gray-700">
-                              Updated:
-                            </span>{" "}
-                            {formatDateTime(t.updatedAt)}
-                          </div>
-                          <div className="break-all">
-                            <span className="font-medium text-gray-700">
-                              Assigned by:
-                            </span>{" "}
-                            {t.assignedBy}
-                          </div>
+                        <div className="mt-1 flex items-center gap-2">
+                          <span
+                            className={`text-[11px] border rounded px-1.5 py-0.5 ${t.priorityCls}`}
+                            title="Priority"
+                          >
+                            {t.priorityLabel}
+                          </span>
+                          <span
+                            className={`text-[11px] border rounded px-1.5 py-0.5 ${t.statusCls}`}
+                            title="Status"
+                          >
+                            {t.statusLabel}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="text-sm text-gray-600">
+                        <div>
+                          <span className="font-medium text-gray-700">Project:</span>{" "}
+                          {t.projectName}
+                        </div>
+                        <div>
+                          <span className="font-medium text-gray-700">Deadline:</span>{" "}
+                          {formatDateTime(t.dueDate)}
+                        </div>
+                        <div>
+                          <span className="font-medium text-gray-700">Updated:</span>{" "}
+                          {formatDateTime(t.updatedAt)}
+                        </div>
+                        <div className="break-all">
+                          <span className="font-medium text-gray-700">Assigned by:</span>{" "}
+                          {t.assignedBy}
                         </div>
                       </div>
                     </div>
-
-                    {/* connector to next item */}
-                    {i !== items.length - 1 && (
-                      <div className="absolute left-3 top-7 bottom-[-16px] w-px bg-gray-200" />
-                    )}
                   </div>
-                ))}
-              </div>
 
-              {/* connector between groups */}
-              {gi !== groups.length - 1 && (
-                <div className="relative h-6">
-                  <div className="absolute left-3 right-0 top-0 bottom-0 w-px bg-gray-200" />
+                  {/* connector to next item */}
+                  {i !== items.length - 1 && (
+                    <div className="absolute left-3 top-7 bottom-[-16px] w-px bg-gray-200" />
+                  )}
                 </div>
-              )}
+              ))}
             </div>
-          ))}
+
+            {/* connector between groups */}
+            {gi !== groups.length - 1 && (
+              <div className="relative h-6">
+                <div className="absolute left-3 right-0 top-0 bottom-0 w-px bg-gray-200" />
+              </div>
+            )}
+          </div>
+        ))}
       </div>
     </div>
   );

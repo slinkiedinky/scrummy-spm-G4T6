@@ -150,6 +150,8 @@ export default function ProjectsPage() {
   const [createProjectError, setCreateProjectError] = useState("");
   const [allUsers, setAllUsers] = useState([]);
 
+  
+  
   const load = useCallback(async (userId) => {
     if (!userId) {
       setProjects([]);
@@ -174,6 +176,42 @@ export default function ProjectsPage() {
       setLoading(false);
     }
   }, []);
+
+  const [memberQuery, setMemberQuery] = useState("");
+// Whether the suggestion panel is visible (optional)
+const [showMemberSuggestions, setShowMemberSuggestions] = useState(false);
+
+// Add/remove helpers
+const addMember = (user) => {
+  setNewProjectMembers((prev) =>
+    prev.includes(user.id) ? prev : [...prev, user.id]
+  );
+  setMemberQuery("");
+  setShowMemberSuggestions(false);
+};
+
+const removeMember = (userId) => {
+  setNewProjectMembers((prev) => prev.filter((id) => id !== userId));
+};
+
+// Derived list: users matching the query and not already selected
+const filteredMemberOptions = useMemo(() => {
+  const q = memberQuery.trim().toLowerCase();
+  if (!q) return [];
+  return (allUsers || [])
+    .filter((u) =>
+      [u.fullName, u.email].filter(Boolean).some((s) => s.toLowerCase().includes(q))
+    )
+    .filter((u) => !newProjectMembers?.includes(u.id))
+    .slice(0, 8); // show up to 8 suggestions
+}, [allUsers, memberQuery, newProjectMembers]);
+
+// Convenience map to read full user records for selected ids
+const selectedMemberRecords = useMemo(() => {
+  const byId = Object.fromEntries((allUsers || []).map((u) => [u.id, u]));
+  return (newProjectMembers || []).map((id) => byId[id]).filter(Boolean);
+}, [allUsers, newProjectMembers]);
+
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -518,56 +556,91 @@ export default function ProjectsPage() {
                 </div>
               </div>
 
+              {/* Project members */}
               <div className="space-y-2">
-                <label className="text-sm font-medium text-foreground">
-                  Project Members
+                <label htmlFor="project-members" className="block text-sm font-medium text-gray-700">
+                  Project members
                 </label>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="outline"
-                      className="w-full justify-between"
-                    >
-                      <span className="truncate">
-                        {newProjectMembers.length === 0
-                          ? "Select project members"
-                          : `${newProjectMembers.length} member${newProjectMembers.length !== 1 ? 's' : ''} selected`}
-                      </span>
-                      <ChevronDown className="ml-2 h-4 w-4 opacity-50 flex-shrink-0" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent className="w-[400px]">
-                    {allUsers.map((user) => {
-                      const isCurrentUser = user.id === currentUser?.uid;
-                      const isSelected = newProjectMembers.includes(user.id);
-                      return (
-                        <DropdownMenuCheckboxItem
-                          key={user.id}
-                          checked={isSelected}
-                          onCheckedChange={(checked) => {
-                            if (checked) {
-                              setNewProjectMembers([...newProjectMembers, user.id]);
-                            } else {
-                              setNewProjectMembers(newProjectMembers.filter(id => id !== user.id));
-                            }
-                          }}
-                          disabled={isCurrentUser}
+
+                {/* Search input */}
+                <div className="relative">
+                  <Input
+                    id="project-members"
+                    placeholder="Type a name or email…"
+                    value={memberQuery}
+                    onChange={(e) => {
+                      setMemberQuery(e.target.value);
+                      setShowMemberSuggestions(true);
+                    }}
+                    onFocus={() => setShowMemberSuggestions(true)}
+                    onBlur={() => {
+                      // tiny delay so a click on a suggestion still registers
+                      setTimeout(() => setShowMemberSuggestions(false), 120);
+                    }}
+                    className="w-full"
+                  />
+
+                  {/* Autocomplete suggestions */}
+                  {showMemberSuggestions && filteredMemberOptions.length > 0 && (
+                    <div className="absolute z-50 mt-1 w-full rounded-md border border-gray-200 bg-white shadow-lg">
+                      <ul className="max-h-60 overflow-auto py-1">
+                        {filteredMemberOptions.map((u) => (
+                          <li
+                            key={u.id}
+                            className="flex cursor-pointer items-center gap-2 px-3 py-2 hover:bg-gray-50"
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => addMember(u)}
+                          >
+                            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-gray-100 text-xs font-semibold text-gray-700">
+                              {(u.fullName || u.email || "?")
+                                .trim()
+                                .slice(0, 1)
+                                .toUpperCase()}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="truncate text-sm font-medium text-gray-900">
+                                {u.fullName || u.email}
+                              </div>
+                              {u.email && (
+                                <div className="truncate text-xs text-gray-500">{u.email}</div>
+                              )}
+                            </div>
+                            <span className="ml-auto text-xs text-blue-600">Add</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+
+                {/* Selected members as chips */}
+                {selectedMemberRecords.length > 0 && (
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    {selectedMemberRecords.map((u) => (
+                      <span
+                        key={u.id}
+                        className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-xs text-gray-700"
+                      >
+                        <span className="font-medium">{u.fullName || u.email}</span>
+                        <button
+                          type="button"
+                          onClick={() => removeMember(u.id)}
+                          className="rounded-full p-0.5 text-gray-400 hover:bg-gray-200 hover:text-gray-700"
+                          aria-label={`Remove ${u.fullName || u.email}`}
                         >
-                          <div className="flex items-center gap-2">
-                            <span>{user.displayName || user.email}</span>
-                            {isCurrentUser && (
-                              <span className="text-xs text-muted-foreground">(You)</span>
-                            )}
-                          </div>
-                        </DropdownMenuCheckboxItem>
-                      );
-                    })}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-                <p className="text-xs text-muted-foreground">
-                  You are automatically added to the project.
+                          ✕
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                {/* Helper text */}
+                <p className="text-xs text-gray-500">
+                  Start typing to search by name or email. Click a suggestion to add. You can remove someone by clicking the × on a chip.
                 </p>
               </div>
+
 
               {createProjectError && (
                 <div className="flex items-center gap-2 rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">

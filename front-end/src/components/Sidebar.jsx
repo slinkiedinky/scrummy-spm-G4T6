@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { useRouter, usePathname } from "next/navigation"
 import Link from "next/link"
 import { signOut } from "firebase/auth"
-import { ChevronLeft, LayoutDashboard, FolderOpen, BarChart3, LogOut, Users, Bell } from "lucide-react"
+import { Clock, ChevronLeft, LayoutDashboard, FolderOpen, BarChart3, LogOut, Users, Bell } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { db, auth } from "@/lib/firebase"
 import { collection, query, where, onSnapshot } from "firebase/firestore"
@@ -31,6 +31,11 @@ const navigationItems = [
     icon: Users,
     href: "/team",
   },
+  {
+  name: "Timeline",
+  icon: Clock,
+  href: "/timeline",
+}
 ]
 
 const fetchUserData = async (userId) => {

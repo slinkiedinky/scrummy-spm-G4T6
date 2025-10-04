@@ -83,7 +83,7 @@ function priorityInfo(p) {
 
 function statusInfo(s) {
   const key = String(s || "").toLowerCase();
-  // normalize to the labels you requested
+  // normalize to the labels requested
   if (key === "to-do" || key === "todo") {
     return { label: "To Do", cls: "bg-gray-100 text-gray-700 border-gray-200", norm: "To Do" };
   }
@@ -211,6 +211,25 @@ function MultiSelectDropdown({
   );
 }
 
+/* ------------------------------ Tag Component ------------------------------ */
+
+function Tag({ label, className = "", onRemove }) {
+  return (
+    <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 text-xs shadow-sm bg-white ${className}`}>
+      <span className="truncate max-w-[200px]">{label}</span>
+      <button
+        type="button"
+        onClick={onRemove}
+        className="ml-0.5 inline-flex h-4 w-4 items-center justify-center rounded-full hover:bg-gray-100"
+        aria-label="Remove"
+        title="Remove"
+      >
+        ×
+      </button>
+    </span>
+  );
+}
+
 /* ---------------------------------- Page ---------------------------------- */
 
 export default function Timeline() {
@@ -220,9 +239,9 @@ export default function Timeline() {
   const [error, setError] = useState("");
 
   // filters
-  const [projectFilter, setProjectFilter] = useState([]); // values are project names
-  const [priorityFilter, setPriorityFilter] = useState([]); // values are numbers 1..10
-  const [statusFilter, setStatusFilter] = useState([]); // values are labels: "To Do", ...
+  const [projectFilter, setProjectFilter] = useState([]); // project names
+  const [priorityFilter, setPriorityFilter] = useState([]); // numbers 1..10
+  const [statusFilter, setStatusFilter] = useState([]); // "To Do" | "In Progress" | "Completed" | "Blocked"
 
   /* ------------------------------- Auth / Data ------------------------------ */
   useEffect(() => {
@@ -248,10 +267,7 @@ export default function Timeline() {
 
         const [rAssignee, rCollab, rOwner] = await Promise.all([
           safeGetDocs(query(cg, where("assigneeId", "==", uid)), "assigneeId"),
-          safeGetDocs(
-            query(cg, where("collaboratorsIds", "array-contains", uid)),
-            "collaboratorsIds"
-          ),
+          safeGetDocs(query(cg, where("collaboratorsIds", "array-contains", uid)), "collaboratorsIds"),
           safeGetDocs(query(cg, where("ownerId", "==", uid)), "ownerId"),
         ]);
 
@@ -323,7 +339,6 @@ export default function Timeline() {
 
   /* --------------------------------- Filters -------------------------------- */
 
-  // Options for dropdowns
   const projectOptions = useMemo(
     () =>
       Array.from(new Set(tasks.map((t) => t.projectName)))
@@ -393,6 +408,19 @@ export default function Timeline() {
     setStatusFilter([]);
   };
 
+  /* ---------------------------- Tag helpers (UI) ---------------------------- */
+
+  const removeProject = (v) =>
+    setProjectFilter((prev) => prev.filter((x) => x !== v));
+  const removePriority = (n) =>
+    setPriorityFilter((prev) => prev.filter((x) => x !== n));
+  const removeStatus = (s) =>
+    setStatusFilter((prev) => prev.filter((x) => x !== s));
+
+  // classes for priority/status tag chips (reuse same ramp)
+  const priorityTagCls = (n) => priorityInfo(n).cls;
+  const statusTagCls = (s) => statusInfo(s).cls;
+
   /* ---------------------------------- UI ---------------------------------- */
 
   return (
@@ -413,7 +441,9 @@ export default function Timeline() {
             Clear filters
           </button>
           <button
-            onClick={() => typeof window !== "undefined" && window.location.reload()}
+            onClick={() =>
+              typeof window !== "undefined" && window.location.reload()
+            }
             className="text-sm rounded-md border px-3 py-1 hover:bg-gray-50"
           >
             Refresh
@@ -422,7 +452,7 @@ export default function Timeline() {
       </div>
 
       {/* Filter Row */}
-      <div className="flex flex-wrap gap-4 mb-6">
+      <div className="flex flex-wrap gap-4">
         <MultiSelectDropdown
           label="Project"
           options={projectOptions}
@@ -447,8 +477,40 @@ export default function Timeline() {
         />
       </div>
 
+      {/* Selected filter TAGS just below dropdowns */}
+      {(projectFilter.length ||
+        priorityFilter.length ||
+        statusFilter.length) > 0 && (
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          {/* Projects */}
+          {projectFilter.map((p) => (
+            <Tag key={`pj-${p}`} label={`Project: ${p}`} onRemove={() => removeProject(p)} />
+          ))}
+
+          {/* Priority (color-coded) */}
+          {priorityFilter.map((n) => (
+            <Tag
+              key={`pr-${n}`}
+              label={`Priority ${n}`}
+              className={priorityTagCls(n)}
+              onRemove={() => removePriority(n)}
+            />
+          ))}
+
+          {/* Status (color-coded) */}
+          {statusFilter.map((s) => (
+            <Tag
+              key={`st-${s}`}
+              label={`Status: ${s}`}
+              className={statusTagCls(s)}
+              onRemove={() => removeStatus(s)}
+            />
+          ))}
+        </div>
+      )}
+
       {/* Vertical timeline */}
-      <div className="relative">
+      <div className="relative mt-6">
         <div className="absolute left-3 top-0 bottom-0 w-px bg-gray-200" />
         {loading && (
           <div className="py-10 text-center text-gray-500">
@@ -468,7 +530,9 @@ export default function Timeline() {
             <div key={day} className="mb-6">
               {/* Day header */}
               <div className="flex items-center gap-2 mb-3 pl-8">
-                <div className="text-sm font-semibold text-gray-700">{day}</div>
+                <div className="text-sm font-semibold text-gray-700">
+                  {day}
+                </div>
               </div>
 
               {/* Entries */}
@@ -477,7 +541,9 @@ export default function Timeline() {
                   <div key={t.id} className="relative pl-8">
                     {/* dot */}
                     <div className="absolute left-2 top-3 -translate-x-1/2">
-                      <div className={`w-3 h-3 rounded-full border-2 ${t.priorityCls}`} />
+                      <div
+                        className={`w-3 h-3 rounded-full border-2 ${t.priorityCls}`}
+                      />
                     </div>
 
                     {/* card */}
@@ -504,19 +570,27 @@ export default function Timeline() {
                         </div>
                         <div className="text-sm text-gray-600">
                           <div>
-                            <span className="font-medium text-gray-700">Project:</span>{" "}
+                            <span className="font-medium text-gray-700">
+                              Project:
+                            </span>{" "}
                             {t.projectName}
                           </div>
                           <div>
-                            <span className="font-medium text-gray-700">Deadline:</span>{" "}
+                            <span className="font-medium text-gray-700">
+                              Deadline:
+                            </span>{" "}
                             {formatDateTime(t.dueDate)}
                           </div>
                           <div>
-                            <span className="font-medium text-gray-700">Updated:</span>{" "}
+                            <span className="font-medium text-gray-700">
+                              Updated:
+                            </span>{" "}
                             {formatDateTime(t.updatedAt)}
                           </div>
                           <div className="break-all">
-                            <span className="font-medium text-gray-700">Assigned by:</span>{" "}
+                            <span className="font-medium text-gray-700">
+                              Assigned by:
+                            </span>{" "}
                             {t.assignedBy}
                           </div>
                         </div>

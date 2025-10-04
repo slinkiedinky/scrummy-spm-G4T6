@@ -426,7 +426,12 @@ export default function Timeline() {
   const removeStatus = (s) =>
     setStatusFilter((prev) => prev.filter((x) => x !== s));
 
-  const priorityTagCls = (n) => priorityInfo(n).cls;
+  const priorityTagCls = (n) => {
+    const p = Number(n);
+    if (p >= 8) return "bg-white text-red-600 border-red-300";        // 8–10
+    if (p >= 4) return "bg-white text-yellow-600 border-yellow-300";  // 4–7
+    return "bg-white text-emerald-600 border-emerald-300";            // 1–3
+    };
   const statusTagCls = (s) => statusInfo(s).cls;
 
   /* ---------------------------------- UI ---------------------------------- */

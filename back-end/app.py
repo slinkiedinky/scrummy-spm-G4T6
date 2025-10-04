@@ -48,22 +48,16 @@ if ENABLE_DEADLINE_NOTIFICATIONS:
     # Background scheduler for deadline notifications
     def run_scheduler():
         """Run scheduled jobs in a background thread"""
-        # Wait longer before starting to ensure Flask is fully ready
-        print("📅 Deadline notification scheduler will start in 30 seconds...")
-        time.sleep(30)
-
-        # Schedule deadline check every 30 minutes
-        schedule.every(30).minutes.do(safe_deadline_check)
-
-        # Also schedule daily check at 9:00 AM
-        schedule.every().day.at("09:00").do(safe_deadline_check)
+        # Schedule deadline check daily at midnight (12:00 AM)
+        schedule.every().day.at("00:00").do(safe_deadline_check)
 
         print("📅 Deadline notification scheduler started")
-        print("   - Checks every 30 minutes")
-        print("   - Daily check at 9:00 AM")
-        print("   - First check will run in 30 minutes")
+        print("   - Daily check at 12:00 AM (midnight)")
 
-        # Keep running scheduled tasks (removed immediate check)
+        # Run once immediately on startup
+        safe_deadline_check()
+
+        # Keep running scheduled tasks
         while True:
             schedule.run_pending()
             time.sleep(60)  # Check every minute for pending jobs

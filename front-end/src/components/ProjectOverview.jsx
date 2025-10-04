@@ -203,11 +203,11 @@ export function ProjectOverview({ project }) {
               <div className="mt-1">
                 <Badge className={(() => {
                   const status = (project.status || "").toLowerCase();
-                  if (status === "to-do") return "bg-blue-400 text-white";
-                  if (status === "in progress") return "bg-yellow-300 text-secondary-foreground";
-                  if (status === "completed") return "bg-emerald-600 text-white";
-                  if (status === "blocked") return "bg-red-500 text-white";
-                  return "bg-secondary text-secondary-foreground";
+                  if (status === "to-do") return "bg-gray-100 text-gray-700 border border-gray-200";
+                  if (status === "in progress") return "bg-blue-100 text-blue-700 border border-blue-200";
+                  if (status === "completed") return "bg-emerald-100 text-emerald-700 border border-emerald-200";
+                  if (status === "blocked") return "bg-rose-100 text-rose-700 border border-rose-200";
+                  return "bg-muted text-muted-foreground border border-border/50";
                 })()}>
                   {project.status
                     ? project.status.charAt(0).toUpperCase() + project.status.slice(1).replace("-", " ")

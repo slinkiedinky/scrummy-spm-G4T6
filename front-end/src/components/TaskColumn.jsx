@@ -12,27 +12,45 @@ function toDate(value) {
   return null
 }
 
-const getPriorityBadgeClass = (priority) => {
-  const value = Number(priority)
-  if (!Number.isFinite(value)) {
-    return "bg-muted text-muted-foreground border border-border/50"
-  }
-  if (value >= 8) {
-    return "bg-red-100 text-red-700 border border-red-200"
-  }
-  if (value >= 4) {
-    return "bg-yellow-100 text-yellow-700 border border-yellow-200"
-  }
-  return "bg-emerald-100 text-emerald-700 border-emerald-200"
-}
+const TAG_BASE = "rounded-full px-2.5 py-1 text-xs font-medium inline-flex items-center gap-1";
+const getStatusColor = (sRaw) => {
+  const s = String(sRaw || "").toLowerCase();
+  if (s === "to-do" || s === "todo") return `${TAG_BASE} bg-gray-100 text-gray-700 border border-gray-200`;
+  if (s === "in progress" || s === "in-progress") return `${TAG_BASE} bg-blue-100 text-blue-700 border border-blue-200`;
+  if (s === "completed" || s === "done") return `${TAG_BASE} bg-emerald-100 text-emerald-700 border border-emerald-200`;
+  if (s === "blocked") return `${TAG_BASE} bg-red-100 text-red-700 border border-red-200`;
+  return `${TAG_BASE} bg-gray-100 text-gray-700 border border-gray-200`;
+};
+const getPriorityColor = (nRaw) => {
+  const n = Number(nRaw);
+  if (!Number.isFinite(n)) return `${TAG_BASE} bg-gray-100 text-gray-700 border border-gray-200`;
+  if (n >= 8) return `${TAG_BASE} bg-red-100 text-red-700 border border-red-200`;
+  if (n >= 4) return `${TAG_BASE} bg-white text-yellow-700 border border-yellow-300`;
+  return `${TAG_BASE} bg-emerald-100 text-emerald-700 border border-emerald-200`;
+};
 
 
-const statusClasses = {
-  "to-do": "bg-blue-400 text-white",
-  "in progress": "bg-yellow-400 text-black",
-  completed: "bg-green-400 text-white",
-  blocked: "bg-muted text-muted-foreground",
-}
+// const getPriorityBadgeClass = (priority) => {
+//   const value = Number(priority)
+//   if (!Number.isFinite(value)) {
+//     return "bg-muted text-muted-foreground border border-border/50"
+//   }
+//   if (value >= 8) {
+//     return "bg-red-100 text-red-700 border border-red-200"
+//   }
+//   if (value >= 4) {
+//     return "bg-yellow-100 text-yellow-700 border border-yellow-200"
+//   }
+//   return "bg-emerald-100 text-emerald-700 border-emerald-200"
+// }
+
+
+// const statusClasses = {
+//   "to-do": "bg-blue-400 text-white",
+//   "in progress": "bg-yellow-400 text-black",
+//   completed: "bg-green-400 text-white",
+//   blocked: "bg-muted text-muted-foreground",
+// }
 
 export function TaskColumn({ title, color, tasks, onTaskClick }) {
   return (
@@ -67,20 +85,10 @@ export function TaskColumn({ title, color, tasks, onTaskClick }) {
               </CardHeader>
               <CardContent className="space-y-2">
                 <div className="flex flex-wrap gap-2">
-                  <Badge
-                    className={statusClasses[task.status] || "bg-muted text-muted-foreground"}
-                  >
-                    {task.status
-                      ? task.status.charAt(0).toUpperCase() +
-                        task.status.slice(1).replace("-", " ")
-                      : "Unknown"}
+                  <Badge className={getStatusColor(task.status)}>
+                    {task.status === "to-do" ? "To Do" : task.status === "in progress" ? "In Progress" : task.status === "blocked" ? "Blocked" : "Completed"}
                   </Badge>
-                  <Badge
-                    className={getPriorityBadgeClass(task.priority)}
-                    variant="outline"
-                  >
-                    {task.priority ? `Priority ${task.priority}` : "Priority —"}
-                  </Badge>
+                  <Badge className={getPriorityColor(task.priority)}>Priority {task.priority}</Badge>
                 </div>
 
                 {task.tags?.length > 0 && (

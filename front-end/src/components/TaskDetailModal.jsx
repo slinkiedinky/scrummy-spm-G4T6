@@ -109,35 +109,24 @@ export function TaskDetailModal({ task, isOpen, onClose, onEdit, onDelete, disab
     return Number.isFinite(value) ? String(value) : ""
   })()
 
-  const getPriorityColor = (priority) => {
-    const value = Number(priority)
-    if (!Number.isFinite(value)) {
-      return "bg-muted text-muted-foreground border-muted"
-    }
-    if (value >= 8) {
-      return "bg-red-100 text-red-700 border border-red-200"
-    }
-    if (value >= 5) {
-      return "bg-yellow-100 text-yellow-700 border border-yellow-200"
-    }
-    return "bg-emerald-100 text-emerald-700 border border-emerald-200"
-  }
+const TAG_BASE = "rounded-full px-2.5 py-1 text-xs font-medium inline-flex items-center gap-1";
 
-  const getStatusColor = (status) => {
-  switch (status) {
-    case "to-do":
-      return "bg-blue-400 text-white"
-    case "in progress":
-      return "bg-yellow-400 text-black"
-    case "completed":
-      return "bg-green-400 text-white"
-    case "blocked":
-      return "bg-muted text-muted-foreground"
-    default:
-      return "bg-muted text-muted-foreground"
-  }
-}
+const getStatusColor = (statusRaw) => {
+  const s = String(statusRaw || "").toLowerCase();
+  if (s === "to-do" || s === "todo") return `${TAG_BASE} bg-gray-100 text-gray-700 border border-gray-200`;
+  if (s === "in progress" || s === "in-progress") return `${TAG_BASE} bg-blue-100 text-blue-700 border border-blue-200`;
+  if (s === "completed" || s === "done") return `${TAG_BASE} bg-emerald-100 text-emerald-700 border border-emerald-200`;
+  if (s === "blocked") return `${TAG_BASE} bg-red-100 text-red-700 border border-red-200`;
+  return `${TAG_BASE} bg-gray-100 text-gray-700 border border-gray-200`;
+};
 
+const getPriorityColor = (priorityRaw) => {
+  const n = Number(priorityRaw);
+  if (!Number.isFinite(n)) return `${TAG_BASE} bg-gray-100 text-gray-700 border border-gray-200`;
+  if (n >= 8) return `${TAG_BASE} bg-red-100 text-red-700 border border-red-200`;
+  if (n >= 4) return `${TAG_BASE} bg-white text-yellow-700 border border-yellow-300`;
+  return `${TAG_BASE} bg-emerald-100 text-emerald-700 border border-emerald-200`;
+};
 
   const fmt = (d) =>
     d && toDate(d)
@@ -164,9 +153,9 @@ export function TaskDetailModal({ task, isOpen, onClose, onEdit, onDelete, disab
               <DialogTitle className="text-xl font-bold text-foreground pr-4">{task.title}</DialogTitle>
               <div className="flex items-center gap-2 mt-2">
                 <Badge className={getStatusColor(task.status)}>
-                  {task.status.charAt(0).toUpperCase() + task.status.slice(1).replace("-", " ")}
+                  {task.status?.charAt(0).toUpperCase() + task.status?.slice(1).replace("-", " ")}
                 </Badge>
-                <Badge className={getPriorityColor(priorityDisplay)} variant="outline">
+                <Badge className={getPriorityColor(priorityDisplay)}>
                   {priorityDisplay ? `Priority ${priorityDisplay}` : "Priority —"}
                 </Badge>
                 {isOverdue && <Badge variant="destructive">Overdue</Badge>}

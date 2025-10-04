@@ -1,23 +1,33 @@
-"use client"
+"use client";
 
-import Link from "next/link"
-import { Card, CardContent, CardHeader } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { Progress } from "@/components/ui/progress"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Calendar, Users, DollarSign, MoreVertical, Eye, AlertTriangle } from "lucide-react"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import Link from "next/link";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Calendar, Users, DollarSign, MoreVertical, Eye, AlertTriangle } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
 // Robust initials from real names
 function getInitials(member) {
-  const source = (member.name || member.email || member.id || "").trim()
-  if (!source) return "?"
-  const parts = source.split(/\s+/).filter(Boolean)
-  if (parts.length >= 2) return `${parts[0][0] ?? ""}${parts[parts.length - 1][0] ?? ""}`.toUpperCase()
-  const token = parts[0].includes("@") ? parts[0].split("@")[0] : parts[0]
-  return token.slice(0, 2).toUpperCase()
+  const source = (member.name || member.email || member.id || "").trim();
+  if (!source) return "?";
+  const parts = source.split(/\s+/).filter(Boolean);
+  if (parts.length >= 2)
+    return `${parts[0][0] ?? ""}${parts[parts.length - 1][0] ?? ""}`.toUpperCase();
+  const token = parts[0].includes("@") ? parts[0].split("@")[0] : parts[0];
+  return token.slice(0, 2).toUpperCase();
 }
+
+// Light chip set (match Timeline)
+const STATUS_CHIP = {
+  "to-do":       "bg-gray-100 text-gray-700 border border-gray-200",
+  "in progress": "bg-blue-100 text-blue-700 border border-blue-200",
+  "completed":   "bg-emerald-100 text-emerald-700 border border-emerald-200",
+  "blocked":     "bg-rose-100 text-rose-700 border border-rose-200",
+  fallback:      "bg-muted text-muted-foreground border border-border/50",
+};
 
 const priorityMeta = {
   low: {
@@ -47,37 +57,31 @@ const resolveProjectPriority = (raw) => {
   return "medium";
 };
 
-export function ProjectCard({ project }) {
-  const getStatusColor = (status) => {
-    switch (status) {
-        case "to-do":        return "bg-blue-400 text-white border-muted"
-        case "in progress":  return "bg-yellow-300 text-secondary-foreground border-yellow-300"
-        case "completed":    return "bg-emerald-600 text-white border-emerald-600"
-        case "blocked":      return "bg-red-500 text-white border-red-500"
-        default:             return "bg-muted text-muted-foreground border-muted"
-    }
-    }
+const getStatusColor = (status) =>
+  STATUS_CHIP[String(status || "").toLowerCase()] ?? STATUS_CHIP.fallback;
 
-  const priorityKey = resolveProjectPriority(project.priority)
-  const priorityBadge = priorityMeta[priorityKey] ?? priorityMeta.medium
+export function ProjectCard({ project }) {
+  const priorityKey = resolveProjectPriority(project?.priority);
+  const priorityBadge = priorityMeta[priorityKey] ?? priorityMeta.medium;
 
   const getRiskLevel = () => {
-    const overdueCount = project.overdueTasksCount || 0
-    if (overdueCount > 5) return { level: "High", color: "bg-red-500 text-white border-red-500" }
-    if (overdueCount > 2) return { level: "Medium", color: "bg-yellow-400 text-black border-yellow-400" }
-    return { level: "Low", color: "bg-green-500 text-white border-green-500" }
-  }
+    const overdueCount = project?.overdueTasksCount || 0;
+    if (overdueCount > 5) return { level: "High", color: "bg-red-500 text-white border-red-500" };
+    if (overdueCount > 2) return { level: "Medium", color: "bg-yellow-400 text-black border-yellow-400" };
+    return { level: "Low", color: "bg-green-500 text-white border-green-500" };
+  };
 
   const calculateProgress = () => {
-    if (!project.tasks || project.tasks.length === 0) return 0
-    const completedTasks = project.tasks.filter(task => task.status === 'completed').length
-    return Math.round((completedTasks / project.tasks.length) * 100)
-  }
-  const formatDate = (s) =>
-    new Date(s).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+    if (!project?.tasks || project.tasks.length === 0) return 0;
+    const completedTasks = project.tasks.filter((t) => t.status === "completed").length;
+    return Math.round((completedTasks / project.tasks.length) * 100);
+  };
 
-  const risk = getRiskLevel()
-  const progress = calculateProgress()
+  const formatDate = (s) =>
+    new Date(s).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+
+  const risk = getRiskLevel();
+  const progress = calculateProgress();
 
   return (
     <Card className="hover:shadow-lg transition-shadow duration-200 bg-card border-border">
@@ -90,12 +94,16 @@ export function ProjectCard({ project }) {
         </div>
 
         <div className="flex items-center gap-2 mt-3 flex-wrap">
-          <Badge className={getStatusColor(project.status)} variant="secondary">
-            {project.status.charAt(0).toUpperCase() + project.status.slice(1)}
+          <Badge className={getStatusColor(project.status)} variant="outline">
+            {project.status
+              ? project.status.charAt(0).toUpperCase() + project.status.slice(1)
+              : "Unknown"}
           </Badge>
+
           <Badge className={priorityBadge.badge} variant="outline">
             {`${priorityBadge.label} Priority`}
           </Badge>
+
           <Badge className={`${risk.color} flex items-center gap-1`} variant="outline">
             <AlertTriangle className="h-3 w-3" />
             {risk.level} Risk
@@ -106,7 +114,11 @@ export function ProjectCard({ project }) {
         {project.tags && project.tags.length > 0 && (
           <div className="flex items-center gap-1 mt-2 flex-wrap">
             {project.tags.slice(0, 3).map((tag, index) => (
-              <Badge key={index} variant="outline" className="text-xs bg-slate-100 text-slate-700 border-slate-300">
+              <Badge
+                key={index}
+                variant="outline"
+                className="text-xs bg-slate-100 text-slate-700 border-slate-300"
+              >
                 {tag}
               </Badge>
             ))}
@@ -129,7 +141,8 @@ export function ProjectCard({ project }) {
           <Progress value={progress} className="h-2" />
           {project.tasks && project.tasks.length > 0 && (
             <div className="text-xs text-muted-foreground mt-1">
-              {project.tasks.filter(task => task.status === 'completed').length} of {project.tasks.length} tasks completed
+              {project.tasks.filter((t) => t.status === "completed").length} of {project.tasks.length} tasks
+              completed
             </div>
           )}
         </div>
@@ -154,7 +167,7 @@ export function ProjectCard({ project }) {
           )}
         </div>
 
-        {/* Team member count and actions */}
+        {/* Action */}
         <div className="flex items-center justify-end">
           <Link href={`/projects/${project.id}`}>
             <Button size="sm" className="bg-primary text-primary-foreground hover:bg-primary/90">
@@ -164,5 +177,5 @@ export function ProjectCard({ project }) {
         </div>
       </CardContent>
     </Card>
-  )
+  );
 }

@@ -458,7 +458,7 @@ export default function ProjectDetailPage() {
     .map((id) => resolveUserLabel(id))
     .filter(Boolean);
   const collaboratorButtonLabel = selectedCollaboratorNames.length === 0
-    ? "Select collaborators"
+    ? "Select assignees"
     : selectedCollaboratorNames.length <= 2
       ? selectedCollaboratorNames.join(", ")
       : `${selectedCollaboratorNames.slice(0, 2).join(", ")} +${selectedCollaboratorNames.length - 2} more`;
@@ -559,9 +559,15 @@ export default function ProjectDetailPage() {
       return;
     }
 
-    const assignee = taskForm.assigneeId.trim();
-    if (!assignee) {
-      setTaskError("Task assignee is required.");
+    // Validate due date is required
+    if (!taskForm.dueDate) {
+      setTaskError("Due date is required.");
+      return;
+    }
+
+    // Validate at least one assignee
+    if (selectedCollaborators.length === 0) {
+      setTaskError("At least one assignee is required.");
       return;
     }
 
@@ -580,31 +586,30 @@ export default function ProjectDetailPage() {
         .split(",")
         .map((tag) => tag.trim())
         .filter(Boolean);
+
+      // Use first assignee as primary, rest as collaborators
+      const [primaryAssignee, ...otherAssignees] = selectedCollaborators;
+
       const payload = {
         title,
         description: taskForm.description.trim(),
         status: taskForm.status,
         priority: priorityValue,
-        assigneeId: assignee,
+        assigneeId: primaryAssignee,
+        collaboratorsIds: otherAssignees.length > 0 ? otherAssignees : [],
         tags,
       };
 
-      if (taskForm.dueDate) {
-        const due = new Date(`${taskForm.dueDate}T00:00:00`);
-        if (Number.isNaN(due.getTime())) {
-          setTaskError("Please provide a valid due date.");
-          setSavingTask(false);
-          return;
-        }
-        payload.dueDate = due.toISOString();
-      } else {
-        payload.dueDate = null;
+      // Due date is required now
+      const due = new Date(`${taskForm.dueDate}T00:00:00`);
+      if (Number.isNaN(due.getTime())) {
+        setTaskError("Please provide a valid due date.");
+        setSavingTask(false);
+        return;
       }
+      payload.dueDate = due.toISOString();
 
-      const collaboratorIds = ensureArray(taskForm.collaboratorsIds)
-        .filter((id) => id && id !== assignee);
-      const uniqueCollaborators = [...new Set(collaboratorIds)];
-      payload.collaboratorsIds = uniqueCollaborators;
+      // Collaborators already set in payload above
 
       // prepare a local updated list to drive auto-status
       let updatedTasksLocal = tasks;
@@ -821,11 +826,11 @@ export default function ProjectDetailPage() {
                 />
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-4 grid-cols-2">
                 <div className="space-y-2">
                   <label htmlFor="task-status" className="text-sm font-medium text-foreground">Status</label>
                   <Select value={taskForm.status} onValueChange={(value) => updateTaskForm("status", value)}>
-                    <SelectTrigger id="task-status">
+                    <SelectTrigger id="task-status" className="w-full">
                       <SelectValue placeholder="Select status" />
                     </SelectTrigger>
                     <SelectContent>
@@ -839,43 +844,36 @@ export default function ProjectDetailPage() {
                 <div className="space-y-2">
                   <label htmlFor="task-priority" className="text-sm font-medium text-foreground">Priority</label>
                   <Select value={taskForm.priority} onValueChange={(value) => updateTaskForm("priority", value)}>
-                    <SelectTrigger id="task-priority">
+                    <SelectTrigger id="task-priority" className="w-full">
                       <SelectValue placeholder="Select priority" />
                     </SelectTrigger>
                     <SelectContent>
                       {TASK_PRIORITY_VALUES.map((p) => (
-                        <SelectItem key={p} value={p}>{`Priority ${p}`}</SelectItem>
+                        <SelectItem key={p} value={p}>{p}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <label htmlFor="task-due" className="text-sm font-medium text-foreground">Due date</label>
-                  <Input
-                    id="task-due"
-                    type="date"
-                    value={taskForm.dueDate}
-                    onChange={(e) => updateTaskForm("dueDate", e.target.value)}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <label htmlFor="task-assignee" className="text-sm font-medium text-foreground">Assignee ID</label>
-                  <Input
-                    id="task-assignee"
-                    value={taskForm.assigneeId}
-                    onChange={(e) => updateTaskForm("assigneeId", e.target.value)}
-                    placeholder="0ry9A6TRwFBT2c7O5jhr"
-                  />
-                  <p className="text-xs text-muted-foreground">You only see tasks assigned to you.</p>
-                </div>
+              <div className="space-y-2">
+                <label htmlFor="task-due" className="text-sm font-medium text-foreground">
+                  Due date <span className="text-destructive">*</span>
+                </label>
+                <Input
+                  id="task-due"
+                  type="date"
+                  value={taskForm.dueDate}
+                  onChange={(e) => updateTaskForm("dueDate", e.target.value)}
+                  required
+                />
+                <p className="text-xs text-muted-foreground">Required field</p>
               </div>
 
               <div className="space-y-2">
-                <label className="text-sm font-medium text-foreground">Collaborators</label>
+                <label className="text-sm font-medium text-foreground">
+                  Assignees <span className="text-destructive">*</span>
+                </label>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button type="button" variant="outline" className="w-full justify-between">
@@ -888,10 +886,10 @@ export default function ProjectDetailPage() {
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent className="w-64">
-                    <DropdownMenuLabel>Select collaborators</DropdownMenuLabel>
+                    <DropdownMenuLabel>Select assignees</DropdownMenuLabel>
                     <DropdownMenuSeparator />
                     {collaboratorOptions.length === 0 ? (
-                      <div className="px-2 py-1.5 text-sm text-muted-foreground">Add team members to this project to invite collaborators.</div>
+                      <div className="px-2 py-1.5 text-sm text-muted-foreground">Add team members to this project first.</div>
                     ) : (
                       collaboratorOptions.map((option) => (
                         <DropdownMenuCheckboxItem
@@ -910,7 +908,9 @@ export default function ProjectDetailPage() {
                     )}
                   </DropdownMenuContent>
                 </DropdownMenu>
-                <p className="text-xs text-muted-foreground">Select one or more teammates to collaborate on this task.</p>
+                <p className="text-xs text-muted-foreground">
+                  Required: Select at least one team member to assign this task to.
+                </p>
               </div>
 
               <div className="space-y-2">
@@ -1125,10 +1125,11 @@ export default function ProjectDetailPage() {
                   ) : (
                     <div className="divide-y divide-border">
                     {tasks.map((t) => {
-                      const assigneeLabel = resolveUserLabel(t.assigneeId || t.ownerId);
-                      const collaboratorLabels = ensureArray(t.collaboratorsIds)
-                        .map((uid) => resolveUserLabel(uid))
-                        .filter(Boolean);
+                      const allAssigneeIds = [
+                        t.assigneeId,
+                        ...(t.collaboratorsIds || [])
+                      ].filter(Boolean);
+                      const allAssigneeNames = allAssigneeIds.map(id => resolveUserLabel(id));
                       const priorityValue = t.priority ? String(t.priority) : "";
                       const priorityLabel = priorityValue
                         ? TASK_PRIORITY_LABELS[priorityValue] || `Priority ${priorityValue}`
@@ -1148,11 +1149,26 @@ export default function ProjectDetailPage() {
                             <div className="mt-0.5 text-xs text-muted-foreground">
                               {t.description || "—"}
                             </div>
-                            <div className="mt-0.5 flex flex-wrap gap-2 text-xs text-muted-foreground">
-                              {t.dueDate && <span>Due: {format(toDate(t.dueDate), "dd MMM yyyy")}</span>}
-                              {assigneeLabel && <span>Assignee: {assigneeLabel}</span>}
-                              {collaboratorLabels.length > 0 && <span>Collaborators: {collaboratorLabels.join(", ")}</span>}
-                              {(t.tags || []).length > 0 && <span>Tags: {(t.tags || []).join(", ")}</span>}
+                            <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                              {t.dueDate && (
+                                <span className="text-xs text-muted-foreground">
+                                  Due: {format(toDate(t.dueDate), "dd MMM yyyy")}
+                                </span>
+                              )}
+                              {allAssigneeNames.length > 0 && (
+                                <div className="flex flex-wrap gap-1">
+                                  {allAssigneeNames.map((name, idx) => (
+                                    <span key={idx} className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-xs font-medium">
+                                      {name}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                              {(t.tags || []).length > 0 && (
+                                <span className="text-xs text-muted-foreground">
+                                  Tags: {(t.tags || []).join(", ")}
+                                </span>
+                              )}
                             </div>
                           </div>
 

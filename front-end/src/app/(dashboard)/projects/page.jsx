@@ -1,10 +1,11 @@
 "use client";
 
-import { listProjects, createProject } from "@/lib/api";
+import { listProjects, createProject, listUsers } from "@/lib/api";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ProjectCard } from "@/components/ProjectCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -20,6 +21,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
 import {
   Search,
@@ -30,6 +37,7 @@ import {
   ArrowUp,
   ArrowDown,
   AlertCircle,
+  ChevronDown,
 } from "lucide-react";
 import { auth } from "@/lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
@@ -134,11 +142,13 @@ export default function ProjectsPage() {
 
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [newProjectName, setNewProjectName] = useState("");
+  const [newProjectDescription, setNewProjectDescription] = useState("");
   const [newProjectStatus, setNewProjectStatus] = useState("to-do");
   const [newProjectPriority, setNewProjectPriority] = useState("medium");
-  const [newProjectMembers, setNewProjectMembers] = useState("");
+  const [newProjectMembers, setNewProjectMembers] = useState([]);
   const [creatingProject, setCreatingProject] = useState(false);
   const [createProjectError, setCreateProjectError] = useState("");
+  const [allUsers, setAllUsers] = useState([]);
 
   const load = useCallback(async (userId) => {
     if (!userId) {
@@ -181,6 +191,18 @@ export default function ProjectsPage() {
     }
     load(currentUser.uid);
   }, [currentUser?.uid, load]);
+
+  useEffect(() => {
+    async function fetchUsers() {
+      try {
+        const users = await listUsers();
+        setAllUsers(users || []);
+      } catch (err) {
+        console.error("Failed to fetch users:", err);
+      }
+    }
+    fetchUsers();
+  }, []);
   
   const { todoCount, inProgressCount, completedCount, blockedCount, medianDaysOverdue } =
     useMemo(() => {
@@ -339,9 +361,10 @@ export default function ProjectsPage() {
 
   const resetCreateProjectForm = () => {
     setNewProjectName("");
+    setNewProjectDescription("");
     setNewProjectStatus("to-do");
     setNewProjectPriority("medium");
-    setNewProjectMembers("");
+    setNewProjectMembers([]);
   };
 
   const handleCreateDialogChange = (open) => {
@@ -369,14 +392,11 @@ export default function ProjectsPage() {
     setCreateProjectError("");
 
     try {
-      const additionalMembers = newProjectMembers
-        .split(",")
-        .map((member) => member.trim())
-        .filter(Boolean);
-      const teamIds = Array.from(new Set([currentUser.uid, ...additionalMembers]));
+      const teamIds = Array.from(new Set([currentUser.uid, ...newProjectMembers]));
 
       await createProject({
         name: newProjectName.trim(),
+        description: newProjectDescription.trim(),
         status: newProjectStatus,
         priority: newProjectPriority,
         teamIds,
@@ -448,13 +468,26 @@ export default function ProjectsPage() {
                 />
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <label htmlFor="project-description" className="text-sm font-medium text-foreground">
+                  Description
+                </label>
+                <Textarea
+                  id="project-description"
+                  value={newProjectDescription}
+                  onChange={(e) => setNewProjectDescription(e.target.value)}
+                  placeholder="Enter project description"
+                  rows={3}
+                />
+              </div>
+
+              <div className="grid gap-4 grid-cols-2">
                 <div className="space-y-2">
                   <label htmlFor="project-status" className="text-sm font-medium text-foreground">
                     Status
                   </label>
                   <Select value={newProjectStatus} onValueChange={setNewProjectStatus}>
-                    <SelectTrigger id="project-status">
+                    <SelectTrigger id="project-status" className="w-full">
                       <SelectValue placeholder="Select status" />
                     </SelectTrigger>
                     <SelectContent>
@@ -471,7 +504,7 @@ export default function ProjectsPage() {
                     Priority
                   </label>
                   <Select value={newProjectPriority} onValueChange={setNewProjectPriority}>
-                    <SelectTrigger id="project-priority">
+                    <SelectTrigger id="project-priority" className="w-full">
                       <SelectValue placeholder="Select priority" />
                     </SelectTrigger>
                     <SelectContent>
@@ -486,17 +519,53 @@ export default function ProjectsPage() {
               </div>
 
               <div className="space-y-2">
-                <label htmlFor="project-members" className="text-sm font-medium text-foreground">
-                  Additional team member IDs
+                <label className="text-sm font-medium text-foreground">
+                  Project Members
                 </label>
-                <Input
-                  id="project-members"
-                  value={newProjectMembers}
-                  onChange={(e) => setNewProjectMembers(e.target.value)}
-                  placeholder="uid1, uid2"
-                />
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className="w-full justify-between"
+                    >
+                      <span className="truncate">
+                        {newProjectMembers.length === 0
+                          ? "Select project members"
+                          : `${newProjectMembers.length} member${newProjectMembers.length !== 1 ? 's' : ''} selected`}
+                      </span>
+                      <ChevronDown className="ml-2 h-4 w-4 opacity-50 flex-shrink-0" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent className="w-[400px]">
+                    {allUsers.map((user) => {
+                      const isCurrentUser = user.id === currentUser?.uid;
+                      const isSelected = newProjectMembers.includes(user.id);
+                      return (
+                        <DropdownMenuCheckboxItem
+                          key={user.id}
+                          checked={isSelected}
+                          onCheckedChange={(checked) => {
+                            if (checked) {
+                              setNewProjectMembers([...newProjectMembers, user.id]);
+                            } else {
+                              setNewProjectMembers(newProjectMembers.filter(id => id !== user.id));
+                            }
+                          }}
+                          disabled={isCurrentUser}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span>{user.displayName || user.email}</span>
+                            {isCurrentUser && (
+                              <span className="text-xs text-muted-foreground">(You)</span>
+                            )}
+                          </div>
+                        </DropdownMenuCheckboxItem>
+                      );
+                    })}
+                  </DropdownMenuContent>
+                </DropdownMenu>
                 <p className="text-xs text-muted-foreground">
-                  Separate members with commas. You are automatically added to the project.
+                  You are automatically added to the project.
                 </p>
               </div>
 

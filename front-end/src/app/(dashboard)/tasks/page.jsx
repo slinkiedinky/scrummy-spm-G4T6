@@ -887,25 +887,34 @@ export default function TasksPage() {
                               {statusLabel(task.status)}
                             </Badge>
                           </div>
-                          <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                          <div className="mt-3 flex flex-wrap items-center gap-2">
                             <Badge
                               className={getPriorityBadgeClass(task.priority)}
                               variant="outline"
                             >
                               {priorityLabel(task.priority)}
                             </Badge>
-                            <span className={overdue ? "text-destructive font-medium" : ""}>
+                            <span className={`text-xs text-muted-foreground ${overdue ? "text-destructive font-medium" : ""}`}>
                               Due: {due ? due.toLocaleDateString() : "—"}
                             </span>
-                            <span>Updated: {updated ? updated.toLocaleDateString() : "—"}</span>
-                            {task.assigneeSummary?.name && (
-                              <span>Assignee: {task.assigneeSummary.name}</span>
-                            )}
-                            {task.collaboratorNames?.length > 0 && (
-                              <span>Collaborators: {task.collaboratorNames.join(", ")}</span>
-                            )}
+                            <span className="text-xs text-muted-foreground">Updated: {updated ? updated.toLocaleDateString() : "—"}</span>
+                            {(() => {
+                              const allAssigneeNames = [
+                                task.assigneeSummary?.name,
+                                ...(task.collaboratorNames || [])
+                              ].filter(Boolean);
+                              return allAssigneeNames.length > 0 && (
+                                <div className="flex flex-wrap gap-1">
+                                  {allAssigneeNames.map((name, idx) => (
+                                    <span key={idx} className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-xs font-medium">
+                                      {name}
+                                    </span>
+                                  ))}
+                                </div>
+                              );
+                            })()}
                             {task.tags?.length > 0 && (
-                              <span>Tags: {task.tags.join(", ")}</span>
+                              <span className="text-xs text-muted-foreground">Tags: {task.tags.join(", ")}</span>
                             )}
                           </div>
                         </button>

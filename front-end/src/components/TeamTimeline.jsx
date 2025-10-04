@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { format, startOfWeek, endOfWeek, addDays, isSameDay } from "date-fns";
@@ -14,22 +14,52 @@ const STATUS_COLORS = {
 
 export function TeamTimeline({ tasks, teamMembers, resolveUserLabel }) {
   const [expandedDay, setExpandedDay] = useState(null);
+  const timelineRef = useRef(null);
+  const todayRef = useRef(null);
 
-  // Calculate timeline range (current week by default)
+  // Calculate timeline range dynamically based on tasks
   const today = new Date();
   const weekStart = startOfWeek(today, { weekStartsOn: 1 }); // Monday
-  const weekEnd = endOfWeek(today, { weekStartsOn: 1 }); // Sunday
 
-  // Generate timeline days for the current week
+  // Find the latest task date
+  const { timelineStart, timelineEnd } = useMemo(() => {
+    const tasksWithDates = tasks.filter(t => t.dueDate).map(t => new Date(t.dueDate));
+
+    if (tasksWithDates.length === 0) {
+      // Default to current week if no tasks
+      return {
+        timelineStart: weekStart,
+        timelineEnd: endOfWeek(today, { weekStartsOn: 1 })
+      };
+    }
+
+    const latestTaskDate = new Date(Math.max(...tasksWithDates));
+    const earliestTaskDate = new Date(Math.min(...tasksWithDates));
+
+    // Start from the earlier of: current week start or earliest task
+    const start = earliestTaskDate < weekStart ? startOfWeek(earliestTaskDate, { weekStartsOn: 1 }) : weekStart;
+
+    // End at the later of: current week end or latest task
+    const currentWeekEnd = endOfWeek(today, { weekStartsOn: 1 });
+    const end = latestTaskDate > currentWeekEnd ? endOfWeek(latestTaskDate, { weekStartsOn: 1 }) : currentWeekEnd;
+
+    return { timelineStart: start, timelineEnd: end };
+  }, [tasks, today, weekStart]);
+
+  // Generate timeline days from start to end
   const timelineDays = useMemo(() => {
     const days = [];
-    for (let i = 0; i < 7; i++) {
-      days.push(addDays(weekStart, i));
-    }
-    return days;
-  }, [weekStart]);
+    let currentDay = new Date(timelineStart);
 
-  // Group tasks by day and member
+    while (currentDay <= timelineEnd) {
+      days.push(new Date(currentDay));
+      currentDay = addDays(currentDay, 1);
+    }
+
+    return days;
+  }, [timelineStart, timelineEnd]);
+
+  // Group tasks by day (no longer grouping by member since all assignees are equal)
   const tasksByDay = useMemo(() => {
     const grouped = new Map();
 
@@ -44,13 +74,19 @@ export function TeamTimeline({ tasks, teamMembers, resolveUserLabel }) {
       timelineDays.forEach((day) => {
         if (isSameDay(dueDate, day)) {
           const dayKey = day.toISOString();
-          const assigneeId = task.assigneeId || task.ownerId;
-          const assigneeName = assigneeId ? resolveUserLabel(assigneeId) : "Unassigned";
+
+          // Get all assignees (primary + collaborators)
+          const allAssigneeIds = [
+            task.assigneeId,
+            ...(task.collaboratorsIds || [])
+          ].filter(Boolean);
+
+          const allAssigneeNames = allAssigneeIds.map(id => resolveUserLabel(id));
 
           grouped.get(dayKey).push({
             ...task,
-            assigneeId,
-            assigneeName,
+            allAssigneeIds,
+            allAssigneeNames,
           });
         }
       });
@@ -63,55 +99,68 @@ export function TeamTimeline({ tasks, teamMembers, resolveUserLabel }) {
     setExpandedDay(expandedDay === dayKey ? null : dayKey);
   };
 
-  // Group tasks by assignee for a specific day
-  const getTasksByMember = (dayTasks) => {
-    const grouped = new Map();
+  // Auto-scroll to today on mount only
+  useEffect(() => {
+    if (todayRef.current && timelineRef.current) {
+      const container = timelineRef.current;
+      const todayElement = todayRef.current;
+      const containerWidth = container.offsetWidth;
+      const todayOffset = todayElement.offsetLeft;
+      const todayWidth = todayElement.offsetWidth;
 
-    dayTasks.forEach((task) => {
-      const key = task.assigneeId || "unassigned";
-      if (!grouped.has(key)) {
-        grouped.set(key, {
-          assigneeId: task.assigneeId,
-          assigneeName: task.assigneeName,
-          tasks: [],
-        });
-      }
-      grouped.get(key).tasks.push(task);
-    });
-
-    return Array.from(grouped.values());
-  };
+      // Scroll to center today in the view
+      container.scrollLeft = todayOffset - (containerWidth / 2) + (todayWidth / 2);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <Card className="p-6">
-      <div className="mb-6">
-        <h2 className="text-xl font-semibold mb-2">Team Schedule</h2>
-        <p className="text-sm text-muted-foreground">Click on a day to see who has tasks and their details</p>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-semibold mb-2">Team Schedule</h2>
+          <p className="text-sm text-muted-foreground">Click on a day to see who has tasks and their details • Scroll horizontally to see more days</p>
+        </div>
+        <div className="text-sm text-muted-foreground">
+          {timelineDays.length} days ({format(timelineStart, 'MMM d')} - {format(timelineEnd, 'MMM d')})
+        </div>
       </div>
 
       {/* Condensed Timeline */}
       <div className="space-y-4">
-        {/* Timeline Bar */}
-        <div className="relative">
-          {/* Horizontal line */}
-          <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-border -translate-y-1/2" />
-
-          {/* Days with events */}
-          <div className="relative flex justify-between items-center">
-            {timelineDays.map((day) => {
+        {/* Timeline Bar - Scrollable */}
+        <div ref={timelineRef} className="relative overflow-x-auto pb-6 scroll-smooth">
+          <div className="relative min-w-max px-8 py-6">
+            {/* Days with events */}
+            <div className="relative flex items-start gap-16">
+              {timelineDays.map((day, index) => {
               const dayKey = day.toISOString();
               const dayTasks = tasksByDay.get(dayKey) || [];
               const isToday = isSameDay(day, today);
               const isExpanded = expandedDay === dayKey;
               const hasActiveTasks = dayTasks.some(t => t.status !== "completed");
 
+              // Check if this is the first day of a new month
+              const isFirstOfMonth = day.getDate() === 1 || index === 0;
+              const showMonthLabel = isFirstOfMonth || (index > 0 && timelineDays[index - 1].getMonth() !== day.getMonth());
+
               return (
-                <div key={dayKey} className="flex flex-col items-center">
+                <div key={dayKey} ref={isToday ? todayRef : null} className="flex flex-col items-center flex-shrink-0 relative">
+                  {/* Month label */}
+                  {showMonthLabel && (
+                    <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-xs font-semibold text-foreground whitespace-nowrap bg-background px-2">
+                      {format(day, "MMM yyyy")}
+                    </div>
+                  )}
+
                   {/* Day label */}
-                  <div className={`text-xs mb-2 ${isToday ? "font-bold text-primary" : "text-muted-foreground"}`}>
+                  <div className={`text-xs mb-4 whitespace-nowrap text-center ${isToday ? "font-bold text-primary" : "text-muted-foreground"}`}>
                     <div>{format(day, "EEE")}</div>
-                    <div className="text-center">{format(day, "d")}</div>
+                    <div>{format(day, "d")}</div>
                   </div>
+
+                  {/* Vertical connector line */}
+                  <div className="h-6 w-0.5 bg-border mb-1" />
 
                   {/* Event dot */}
                   <button
@@ -122,7 +171,7 @@ export function TeamTimeline({ tasks, teamMembers, resolveUserLabel }) {
                         ? `${hasActiveTasks ? 'bg-primary' : 'bg-emerald-500'} hover:scale-125 cursor-pointer`
                         : 'bg-muted border-2 border-border'
                       }
-                      ${isExpanded ? 'w-6 h-6 ring-4 ring-primary/30' : 'w-4 h-4'}
+                      ${isExpanded ? 'w-6 h-6 ring-4 ring-primary/30' : 'w-5 h-5'}
                       ${isToday && dayTasks.length > 0 ? 'ring-2 ring-primary ring-offset-2' : ''}
                     `}
                     title={dayTasks.length > 0 ? `${dayTasks.length} task${dayTasks.length !== 1 ? 's' : ''}` : 'No tasks'}
@@ -133,9 +182,15 @@ export function TeamTimeline({ tasks, teamMembers, resolveUserLabel }) {
                       </span>
                     )}
                   </button>
+
+                  {/* Horizontal line extending to next day */}
+                  {index < timelineDays.length - 1 && (
+                    <div className="absolute top-[calc(100%-2.5rem)] left-1/2 w-16 h-0.5 bg-border" />
+                  )}
                 </div>
               );
             })}
+            </div>
           </div>
         </div>
 
@@ -167,63 +222,58 @@ export function TeamTimeline({ tasks, teamMembers, resolveUserLabel }) {
               </p>
             </div>
 
-            {/* Group by team member */}
-            <div className="space-y-4">
-              {getTasksByMember(tasksByDay.get(expandedDay) || []).map((memberGroup) => (
-                <div key={memberGroup.assigneeId || "unassigned"} className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <div className="h-8 w-8 rounded-full bg-primary/20 flex items-center justify-center text-xs font-semibold">
-                      {memberGroup.assigneeName.charAt(0).toUpperCase()}
-                    </div>
-                    <div>
-                      <div className="font-medium text-sm">{memberGroup.assigneeName}</div>
-                      <div className="text-xs text-muted-foreground">
-                        {memberGroup.tasks.length} task{memberGroup.tasks.length !== 1 ? 's' : ''}
+            {/* Tasks for this day - no grouping by member */}
+            <div className="space-y-3">
+              {(tasksByDay.get(expandedDay) || []).map((task) => (
+                <div
+                  key={task.id}
+                  className="rounded-md border border-border bg-background p-4"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-medium text-sm">{task.title}</span>
+                        <Badge
+                          variant="outline"
+                          className={`${STATUS_COLORS[task.status?.toLowerCase()] || STATUS_COLORS["to-do"]} text-white text-xs`}
+                        >
+                          {task.status}
+                        </Badge>
+                        {task.priority && (
+                          <Badge variant="secondary" className="text-xs">
+                            Priority {task.priority}
+                          </Badge>
+                        )}
                       </div>
-                    </div>
-                  </div>
+                      {task.description && (
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {task.description}
+                        </p>
+                      )}
 
-                  {/* Tasks for this member */}
-                  <div className="ml-10 space-y-2">
-                    {memberGroup.tasks.map((task) => (
-                      <div
-                        key={task.id}
-                        className="rounded-md border border-border bg-background p-3"
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className="font-medium text-sm">{task.title}</span>
-                              <Badge
-                                variant="outline"
-                                className={`${STATUS_COLORS[task.status?.toLowerCase()] || STATUS_COLORS["to-do"]} text-white text-xs`}
-                              >
-                                {task.status}
-                              </Badge>
-                              {task.priority && (
-                                <Badge variant="secondary" className="text-xs">
-                                  Priority {task.priority}
-                                </Badge>
-                              )}
-                            </div>
-                            {task.description && (
-                              <p className="mt-1 text-xs text-muted-foreground">
-                                {task.description}
-                              </p>
-                            )}
-                            {task.tags && task.tags.length > 0 && (
-                              <div className="mt-2 flex flex-wrap gap-1">
-                                {task.tags.map((tag, idx) => (
-                                  <span key={idx} className="text-xs bg-muted px-2 py-0.5 rounded">
-                                    {tag}
-                                  </span>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        </div>
+                      {/* Show all assigned members equally */}
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {task.allAssigneeNames && task.allAssigneeNames.length > 0 ? (
+                          task.allAssigneeNames.map((name, idx) => (
+                            <span key={idx} className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-xs font-medium">
+                              {name}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="text-xs text-muted-foreground">Unassigned</span>
+                        )}
                       </div>
-                    ))}
+
+                      {task.tags && task.tags.length > 0 && (
+                        <div className="mt-2 flex flex-wrap gap-1">
+                          {task.tags.map((tag, idx) => (
+                            <span key={idx} className="text-xs bg-muted px-2 py-0.5 rounded">
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               ))}

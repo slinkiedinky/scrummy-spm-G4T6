@@ -8,15 +8,27 @@ import { useState, useEffect } from "react"
 
 export default function AnalyticsPage() {
     const [projects, setProjects] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
 
     useEffect(() => {
         async function fetchProjects() {
         try {
-            const res = await fetch("http://localhost:5000/api/projects");
+            setLoading(true);
+            setError(null);
+            const res = await fetch("http://localhost:5000/api/projects", {
+                signal: AbortSignal.timeout(10000) // 10 second timeout
+            });
+            if (!res.ok) {
+                throw new Error(`Failed to fetch: ${res.status} ${res.statusText}`);
+            }
             const data = await res.json();
             setProjects(data);
         } catch (err) {
             console.error("Error fetching projects:", err);
+            setError(err.message);
+        } finally {
+            setLoading(false);
         }
         }
         fetchProjects();

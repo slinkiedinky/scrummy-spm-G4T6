@@ -64,20 +64,18 @@ function priorityInfo(p) {
   if (!n || n < 1 || n > 10) n = 10;
 
   const label = `Priority ${n}`;
-  const ramps = {
-    1: "bg-red-100 text-red-700 border-red-200",
-    2: "bg-orange-100 text-orange-700 border-orange-200",
-    3: "bg-amber-100 text-amber-700 border-amber-200",
-    4: "bg-yellow-100 text-yellow-700 border-yellow-200",
-    5: "bg-lime-100 text-lime-700 border-lime-200",
-    6: "bg-green-100 text-green-700 border-green-200",
-    7: "bg-emerald-100 text-emerald-700 border-emerald-200",
-    8: "bg-cyan-100 text-cyan-700 border-cyan-200",
-    9: "bg-sky-100 text-sky-700 border-sky-200",
-    10: "bg-slate-100 text-slate-700 border-slate-200",
-  };
-  return { label, cls: ramps[n], number: n };
+
+  // Standardized tri-band:
+  // 1–3 => green, 4–7 => yellow, 8–10 => red
+  if (n >= 8) {
+    return { label, cls: "bg-red-100 text-red-700 border-red-200", number: n };
+  }
+  if (n >= 4) {
+    return { label, cls: "bg-yellow-100 text-yellow-700 border-yellow-200", number: n };
+  }
+  return { label, cls: "bg-emerald-100 text-emerald-700 border-emerald-200", number: n };
 }
+
 
 function statusInfo(s) {
   const key = String(s || "").toLowerCase();
@@ -108,24 +106,18 @@ function useClickOutside(ref, onClose) {
   }, [ref, onClose]);
 }
 
-function MultiSelectDropdown({
-  label,
-  options,
-  selected,
-  setSelected,
-  searchable = false,
-  placeholder = "Select...",
-}) {
+function MultiSelectDropdown({ label, options, selected, setSelected, searchable=false, placeholder="Select..." }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const ref = useRef(null);
   useClickOutside(ref, () => setOpen(false));
 
   const filtered = useMemo(() => {
-    if (!searchable || !q.trim()) return options;
-    const s = q.toLowerCase();
-    return options.filter((o) => o.label.toLowerCase().includes(s));
-  }, [q, options, searchable]);
+  if (!searchable || !q.trim()) return options;
+  const s = q.toLowerCase();
+  return options.filter((o) => o.label.toLowerCase().includes(s));
+}, [options, q, searchable]);
+
 
   const toggle = (v) =>
     setSelected((prev) =>
@@ -383,16 +375,21 @@ export default function Timeline() {
   );
 
   const filtered = useMemo(() => {
-    return tasks.filter((t) => {
-      const okProj =
-        projectFilter.length === 0 || projectFilter.includes(t.projectName);
-      const okPrio =
-        priorityFilter.length === 0 || priorityFilter.includes(t.priorityNumber);
-      const okStat =
-        statusFilter.length === 0 || statusFilter.includes(t.statusLabel);
-      return okProj && okPrio && okStat;
-    });
-  }, [tasks, projectFilter, priorityFilter, statusFilter]);
+  return tasks.filter((t) => {
+    // hide completed (whether overdue or not)
+    if (t.statusLabel === "Completed") return false;
+
+    const okProj =
+      projectFilter.length === 0 || projectFilter.includes(t.projectName);
+    const okPrio =
+      priorityFilter.length === 0 || priorityFilter.includes(t.priorityNumber);
+    const okStat =
+      statusFilter.length === 0 || statusFilter.includes(t.statusLabel);
+
+    return okProj && okPrio && okStat;
+  });
+}, [tasks, projectFilter, priorityFilter, statusFilter]);
+
 
   const groups = useMemo(() => {
     const map = new Map();
@@ -516,7 +513,7 @@ export default function Timeline() {
       )}
 
       {/* Vertical timeline */}
-      <div className="relative mt-6">
+      <div className="relative mt-6 h-[calc(100vh-220px)] overflow-y-auto pr-2">
         {/* timeline line */}
         <div className="absolute left-3 top-0 bottom-0 w-px bg-gray-200" />
 

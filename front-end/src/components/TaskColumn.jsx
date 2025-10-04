@@ -20,11 +20,12 @@ const getPriorityBadgeClass = (priority) => {
   if (value >= 8) {
     return "bg-red-100 text-red-700 border border-red-200"
   }
-  if (value >= 5) {
+  if (value >= 4) {
     return "bg-yellow-100 text-yellow-700 border border-yellow-200"
   }
-  return "bg-emerald-100 text-emerald-700 border border-emerald-200"
+  return "bg-emerald-100 text-emerald-700 border-emerald-200"
 }
+
 
 const statusClasses = {
   "to-do": "bg-blue-400 text-white",

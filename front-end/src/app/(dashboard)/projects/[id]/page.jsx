@@ -42,6 +42,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
 import { Plus, Trash2, AlertCircle, Loader2, Pencil, ChevronDown, Calendar as CalendarIcon, FileText } from "lucide-react";
 import { format, startOfDay } from "date-fns";
 import { auth } from "@/lib/firebase";
@@ -49,6 +55,7 @@ import { onAuthStateChanged } from "firebase/auth";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import * as XLSX from "xlsx";
+import { TeamTimeline } from "@/components/TeamTimeline";
 
 const STATUS = ["to-do", "in progress", "completed", "blocked"];
 const TASK_PRIORITY_VALUES = Array.from({ length: 10 }, (_, i) => String(i + 1));
@@ -1096,21 +1103,27 @@ export default function ProjectDetailPage() {
         </div>
 
         <div className="flex-1 overflow-auto p-6 print:p-8">
-          <div className="flex flex-col gap-6 xl:flex-row">
-            <div className="flex-1 space-y-6">
-              <Card className="p-4 not-print">
-                <div className="mb-4 flex items-center justify-between">
-                  <h2 className="text-xl font-semibold">Tasks</h2>
-                  <Button onClick={openCreateTaskDialog} className="bg-primary text-primary-foreground hover:bg-primary/90">
-                    <Plus className="mr-2 h-4 w-4" />
-                    Add Task
-                  </Button>
-                </div>
+          <Tabs defaultValue="tasks" className="flex flex-col gap-6">
+            <TabsList className="w-fit not-print">
+              <TabsTrigger value="tasks">Tasks</TabsTrigger>
+              <TabsTrigger value="timeline">Timeline</TabsTrigger>
+              <TabsTrigger value="team">Team</TabsTrigger>
+            </TabsList>
 
-                {tasks.length === 0 ? (
-                  <div className="text-sm text-muted-foreground">No tasks yet.</div>
-                ) : (
-                  <div className="divide-y divide-border">
+            <TabsContent value="tasks" className="mt-0">
+              <Card className="p-4 not-print">
+                  <div className="mb-4 flex items-center justify-between">
+                    <h2 className="text-xl font-semibold">Tasks</h2>
+                    <Button onClick={openCreateTaskDialog} className="bg-primary text-primary-foreground hover:bg-primary/90">
+                      <Plus className="mr-2 h-4 w-4" />
+                      Add Task
+                    </Button>
+                  </div>
+
+                  {tasks.length === 0 ? (
+                    <div className="text-sm text-muted-foreground">No tasks yet.</div>
+                  ) : (
+                    <div className="divide-y divide-border">
                     {tasks.map((t) => {
                       const assigneeLabel = resolveUserLabel(t.assigneeId || t.ownerId);
                       const collaboratorLabels = ensureArray(t.collaboratorsIds)
@@ -1172,9 +1185,17 @@ export default function ProjectDetailPage() {
                   </div>
                 )}
               </Card>
-            </div>
+            </TabsContent>
 
-            <aside className="w-full flex-shrink-0 space-y-4 xl:w-80">
+            <TabsContent value="timeline" className="mt-0">
+              <TeamTimeline
+                tasks={tasks}
+                teamMembers={teamMembers}
+                resolveUserLabel={resolveUserLabel}
+              />
+            </TabsContent>
+
+            <TabsContent value="team" className="mt-0">
               <Card className="p-4 space-y-4 not-print">
                 <div className="space-y-2">
                   <h2 className="text-xl font-semibold">Team members</h2>
@@ -1221,7 +1242,7 @@ export default function ProjectDetailPage() {
                 {teamMembers.length === 0 ? (
                   <p className="text-sm text-muted-foreground">No team members yet.</p>
                 ) : (
-                  <div className="space-y-3">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {teamMembers.map((member) => {
                       const displayName = member.displayName || member.fullName || member.email || member.id;
                       const secondary =
@@ -1232,14 +1253,14 @@ export default function ProjectDetailPage() {
                             : "";
                       const isRemoving = removingMemberId === member.id;
                       return (
-                        <div
+                        <Card
                           key={member.id}
-                          className="flex items-start justify-between gap-3 rounded-md border border-border bg-muted/20 px-3 py-2"
+                          className="p-4 space-y-3"
                         >
-                          <div className="min-w-0 space-y-1">
+                          <div className="space-y-1">
                             <p className="truncate text-sm font-medium text-foreground">{displayName}</p>
                             {secondary && (
-                              <p className="truncate text-[11px] text-muted-foreground">{secondary}</p>
+                              <p className="truncate text-xs text-muted-foreground">{secondary}</p>
                             )}
                             <div className="flex flex-wrap items-center gap-2 text-[10px] text-muted-foreground uppercase">
                               {member.role && (
@@ -1258,31 +1279,31 @@ export default function ProjectDetailPage() {
                               type="button"
                               size="sm"
                               variant="outline"
-                              className="h-8 text-xs"
+                              className="w-full"
                               onClick={() => handleViewSchedule(member.id)}
                             >
                               <CalendarIcon className="mr-2 h-3.5 w-3.5" />
-                              Schedule
+                              View Schedule
                             </Button>
                             <Button
                               type="button"
                               size="sm"
                               variant="ghost"
-                              className="h-8 text-xs text-destructive hover:text-destructive"
+                              className="w-full text-destructive hover:text-destructive"
                               onClick={() => handleRemoveMember(member.id)}
                               disabled={isRemoving || member.isOwner}
                             >
                               {isRemoving ? "Removing..." : "Remove"}
                             </Button>
                           </div>
-                        </div>
+                        </Card>
                       );
                     })}
                   </div>
                 )}
               </Card>
-            </aside>
-          </div>
+            </TabsContent>
+          </Tabs>
         </div>
       </div>
       {showReport && (

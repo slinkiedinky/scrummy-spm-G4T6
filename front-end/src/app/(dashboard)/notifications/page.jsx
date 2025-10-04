@@ -222,6 +222,52 @@ export default function NotificationsPage() {
                   {notif.createdAt ? formatTimeAgo(notif.createdAt) : ""}
                 </div>
               </>
+            ) : notif.type === "deadline_reminder" ? (
+              <>
+                <h2 className="font-medium text-gray-900">📅 Upcoming Deadline Tomorrow</h2>
+                <div className="text-sm text-gray-700">
+                  <span className="font-semibold">Task:</span> {notif.title || "-"}
+                </div>
+                <div className="text-sm text-gray-700">
+                  <span className="font-semibold">Project:</span> {notif.projectName || "-"}
+                </div>
+                {notif.message && (
+                  <div className="text-sm text-orange-600 mt-1 font-medium">
+                    {notif.message}
+                  </div>
+                )}
+                {notif.description && (
+                  <div className="text-sm text-gray-600 mt-1">
+                    <span className="font-semibold">Description:</span> {notif.description}
+                  </div>
+                )}
+                <div className="text-xs text-gray-400 mt-1">
+                  {notif.createdAt ? formatTimeAgo(notif.createdAt) : ""}
+                </div>
+              </>
+            ) : notif.type === "deadline_today" ? (
+              <>
+                <h2 className="font-medium text-red-600">⚠️ Deadline Today!</h2>
+                <div className="text-sm text-gray-700">
+                  <span className="font-semibold">Task:</span> {notif.title || "-"}
+                </div>
+                <div className="text-sm text-gray-700">
+                  <span className="font-semibold">Project:</span> {notif.projectName || "-"}
+                </div>
+                {notif.message && (
+                  <div className="text-sm text-red-600 mt-1 font-medium">
+                    {notif.message}
+                  </div>
+                )}
+                {notif.description && (
+                  <div className="text-sm text-gray-600 mt-1">
+                    <span className="font-semibold">Description:</span> {notif.description}
+                  </div>
+                )}
+                <div className="text-xs text-gray-400 mt-1">
+                  {notif.createdAt ? formatTimeAgo(notif.createdAt) : ""}
+                </div>
+              </>
             ) : (
               <>
                 <h2 className="font-medium text-gray-900">{notif.title}</h2>

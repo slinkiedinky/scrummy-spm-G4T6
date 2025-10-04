@@ -26,11 +26,6 @@ const navigationItems = [
     icon: BarChart3,
     href: "/analytics",
   },
-  {
-    name: "Team",
-    icon: Users,
-    href: "/team",
-  },
 ]
 
 const fetchUserData = async (userId) => {

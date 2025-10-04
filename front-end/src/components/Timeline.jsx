@@ -367,7 +367,7 @@ export default function Timeline() {
 
   const statusOptions = useMemo(
     () =>
-      ["To Do", "In Progress", "Completed", "Blocked"].map((s) => ({
+      ["To Do", "In Progress", "Blocked"].map((s) => ({
         value: s,
         label: s,
       })),

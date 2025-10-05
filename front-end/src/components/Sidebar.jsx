@@ -15,23 +15,39 @@ const navigationItems = [
     name: "Tasks",
     icon: LayoutDashboard,
     href: "/tasks",
+    roles: ["Staff", "Manager", "HR"]
   },
   {
     name: "Projects",
     icon: FolderOpen,
     href: "/projects",
+    roles: ["Staff", "Manager", "HR"]
   },
   {
     name: "Analytics",
     icon: BarChart3,
     href: "/analytics",
+    roles: ["Staff", "Manager", "HR"]
   },
   {
     name: "Timeline",
     icon: Clock,
     href: "/timeline",
-  }
+    roles: ["Staff", "Manager", "HR"]
+  }, 
+  {
+    name: "User Management",
+    icon: Users,
+    href: "/usermgmt",
+    roles: ["HR"]
+  },
 ]
+
+// {
+//     name: "Team",
+//     icon: Users,
+//     href: "/team",
+//   },
 
 const fetchUserData = async (userId) => {
   try {
@@ -168,7 +184,7 @@ export function Sidebar({ className }) {
 
       {/* Navigation */}
       <nav className="flex-1 space-y-2 p-4">
-        {navigationItems.map((item) => {
+        {navigationItems.filter(item => item.roles.includes(userData.role)).map((item) => {
           const Icon = item.icon
           const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`)
 

@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from 'react';
 import { Eye, EyeOff, Mail, Lock, AlertCircle, User } from 'lucide-react';
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword, 
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword, setPersistence, browserSessionPersistence,
   sendPasswordResetEmail, updateProfile, onAuthStateChanged  } from 'firebase/auth';
 import { doc, setDoc } from "firebase/firestore";
 import {db, auth} from '@/lib/firebase';
@@ -25,7 +25,7 @@ export default function LoginPage() {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
         // User is signed in, redirect to task landing
-        router.push("/projects");
+        router.push("/tasks");
       } else {
         // User is signed out, stay on login page
         setAuthChecking(false);
@@ -67,6 +67,8 @@ export default function LoginPage() {
     e.preventDefault();
     setIsLoading(true);
     setError('');
+
+    await setPersistence(auth, browserSessionPersistence);
     
     // Validate email for both login and signup
     if (!validateEmail(email)) {
@@ -116,8 +118,12 @@ export default function LoginPage() {
         console.log("Sign up successful!", user.uid);
         router.push("/tasks");
         } catch (err) {
-          setError("Failed to create account. Please try again.");
-          console.error("Sign up error:", err);
+          if (err.code === 'auth/email-already-in-use') {
+            setError('Email is already in use. Please use a different email or log in.');
+          } else {
+            setError("Unknown error, failed to create account.");
+            console.error("Sign up error:", err);
+          }
         }
     } else {
         // Login Logic
@@ -131,11 +137,17 @@ export default function LoginPage() {
         // Redirect to dashboard
         router.push("/tasks");
       } catch (err) {
-        setError("Failed to login. Check credentials.");
-        console.error("Login error:", err);
+        if (err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password') {
+          setError('Invalid credentials. Please try again.');
+        } else if (err.code === 'auth/too-many-requests') {
+          setError('Too many failed login attempts. Please try again later.');
+        } else {
+          setError("Unknown error, failed to login.");
+          console.error("Login error:", err);
+        }
       }
     }
-    
+
     setIsLoading(false);
   };
 
@@ -155,7 +167,7 @@ export default function LoginPage() {
       console.log('Password reset email sent to:', email);
       alert('Password reset email sent! Check your inbox.');
     } catch (error) {
-      setError('Failed to send password reset email.');
+      setError('Unknown error. Failed to send password reset email');
       console.error('Password reset error:', error);
     }
   };

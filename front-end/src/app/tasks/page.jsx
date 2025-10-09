@@ -41,7 +41,7 @@ const fallbackUserLabel = (id, index = 0) => {
 };
 
 const STATUS_COLUMNS = [
-  { id: "to-do", title: "To Do", status: "to-do" },
+  { id: "to-do", title: "To-Do", status: "to-do" },
   { id: "in progress", title: "In Progress", status: "in progress" },
   { id: "completed", title: "Completed", status: "completed" },
   { id: "blocked", title: "Blocked", status: "blocked" },
@@ -63,29 +63,39 @@ const toDate = (value) => {
   return null;
 };
 
-const statusBadgeClasses = {
-  "to-do": "bg-blue-400 text-white",
-  "in progress": "bg-yellow-400 text-black",
-  completed: "bg-green-400 text-white",
-  blocked: "bg-muted text-muted-foreground",
+const TAG_BASE = "rounded-full px-2.5 py-1 text-xs font-medium inline-flex items-center gap-1";
+
+const getStatusBadgeClass = (status) => {
+  const s = (status || "").toLowerCase();
+  if (s === "to-do" || s === "todo") return `${TAG_BASE} bg-gray-100 text-gray-700 border border-gray-200`;
+  if (s === "in progress" || s === "in-progress") return `${TAG_BASE} bg-blue-100 text-blue-700 border border-blue-200`;
+  if (s === "completed" || s === "done") return `${TAG_BASE} bg-emerald-100 text-emerald-700 border border-emerald-200`;
+  if (s === "blocked") return `${TAG_BASE} bg-red-100 text-red-700 border border-red-200`;
+  return `${TAG_BASE} bg-gray-100 text-gray-700 border border-gray-200`; // fallback
 };
 
 const getPriorityBadgeClass = (priority) => {
   const value = Number(priority);
   if (!Number.isFinite(value)) {
-    return "bg-muted text-muted-foreground border border-border/50";
+    return `${TAG_BASE} bg-muted text-muted-foreground border border-border/50`;
   }
   if (value >= 8) {
-    return "bg-red-100 text-red-700 border border-red-200";
+    return `${TAG_BASE} bg-red-100 text-red-700 border border-red-200`;
   }
   if (value >= 5) {
-    return "bg-yellow-100 text-yellow-700 border border-yellow-200";
+    return `${TAG_BASE} bg-yellow-100 text-yellow-700 border border-yellow-200`;
   }
-  return "bg-emerald-100 text-emerald-700 border border-emerald-200";
+  return `${TAG_BASE} bg-emerald-100 text-emerald-700 border border-emerald-200`;
 };
 
-const statusLabel = (status) =>
-  status ? status.charAt(0).toUpperCase() + status.slice(1).replace("-", " ") : "Unknown";
+const statusLabel = (status) => {
+  const s = (status || "").toLowerCase();
+  if (s === "to-do" || s === "todo") return "To-Do";
+  if (s === "in progress" || s === "in-progress") return "In Progress";
+  if (s === "completed" || s === "done") return "Completed";
+  if (s === "blocked") return "Blocked";
+  return "Unknown";
+};
 
 const priorityLabel = (priority) =>
   priority ? `Priority ${priority}` : "Priority —";
@@ -883,15 +893,12 @@ export default function TasksPage() {
                                 </p>
                               )}
                             </div>
-                            <Badge className={statusBadgeClasses[task.status] || "bg-muted text-muted-foreground"}>
+                            <Badge className={getStatusBadgeClass(task.status)}>
                               {statusLabel(task.status)}
                             </Badge>
                           </div>
                           <div className="mt-3 flex flex-wrap items-center gap-2">
-                            <Badge
-                              className={getPriorityBadgeClass(task.priority)}
-                              variant="outline"
-                            >
+                            <Badge className={getPriorityBadgeClass(task.priority)}>
                               {priorityLabel(task.priority)}
                             </Badge>
                             <span className={`text-xs text-muted-foreground ${overdue ? "text-destructive font-medium" : ""}`}>

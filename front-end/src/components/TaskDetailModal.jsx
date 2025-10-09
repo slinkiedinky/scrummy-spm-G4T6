@@ -116,7 +116,7 @@ const getStatusColor = (statusRaw) => {
   if (s === "to-do" || s === "todo") return `${TAG_BASE} bg-gray-100 text-gray-700 border border-gray-200`;
   if (s === "in progress" || s === "in-progress") return `${TAG_BASE} bg-blue-100 text-blue-700 border border-blue-200`;
   if (s === "completed" || s === "done") return `${TAG_BASE} bg-emerald-100 text-emerald-700 border border-emerald-200`;
-  if (s === "blocked") return `${TAG_BASE} bg-red-100 text-red-700 border border-red-200`;
+  if (s === "blocked") return `${TAG_BASE} bg-red-100 text-red-700 border-red-200`;
   return `${TAG_BASE} bg-gray-100 text-gray-700 border border-gray-200`;
 };
 
@@ -158,7 +158,7 @@ const getPriorityColor = (priorityRaw) => {
                 <Badge className={getPriorityColor(priorityDisplay)}>
                   {priorityDisplay ? `Priority ${priorityDisplay}` : "Priority —"}
                 </Badge>
-                {isOverdue && <Badge variant="destructive">Overdue</Badge>}
+                {isOverdue && <Badge className={`${TAG_BASE} bg-red-100 text-red-700 border border-red-200`}>Overdue</Badge>}
               </div>
               {task.projectName && (
                 <p className="text-xs text-muted-foreground mt-2 truncate">

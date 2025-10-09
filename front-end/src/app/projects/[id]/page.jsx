@@ -56,6 +56,7 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import * as XLSX from "xlsx";
 import { TeamTimeline } from "@/components/TeamTimeline";
+const TAG_BASE = "rounded-full px-2.5 py-1 text-xs font-medium inline-flex items-center gap-1";
 
 const STATUS = ["to-do", "in progress", "completed", "blocked"];
 const TASK_PRIORITY_VALUES = Array.from({ length: 10 }, (_, i) => String(i + 1));
@@ -65,7 +66,7 @@ const PROJECT_PRIORITIES = [
   { value: "high", label: "High" },
 ];
 const STATUS_LABELS = {
-  "to-do": "To Do",
+  "to-do": "To-Do",
   "in progress": "In Progress",
   "completed": "Completed",
   "blocked": "Blocked",
@@ -105,15 +106,15 @@ const ensureProjectPriority = (value) => {
 const getPriorityBadgeClass = (value) => {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) {
-    return "bg-muted text-muted-foreground border border-border/50";
+    return `${TAG_BASE} bg-muted text-muted-foreground border border-border/50`;
   }
   if (numeric >= 8) {
-    return "bg-red-100 text-red-700 border border-red-200";
+    return `${TAG_BASE} bg-red-100 text-red-700 border border-red-200`;
   }
-  if (numeric >= 5) {
-    return "bg-yellow-100 text-yellow-700 border border-yellow-200";
+  if (numeric >= 4) {
+    return `${TAG_BASE} bg-yellow-100 text-yellow-700 border border-yellow-200`;
   }
-  return "bg-emerald-100 text-emerald-700 border border-emerald-200";
+  return `${TAG_BASE} bg-emerald-100 text-emerald-700 border border-emerald-200`;
 };
 
 const ensureArray = (value) => {
@@ -179,6 +180,8 @@ export default function ProjectDetailPage() {
   const [deleteError, setDeleteError] = useState("");
   const [deletingTaskId, setDeletingTaskId] = useState("");
   const isEditingTask = Boolean(editingTaskId);
+
+
 
   // ⭐ ADDED: infer next project status from a list of tasks
   const inferProjectStatusFromTasks = useCallback((arr) => {
@@ -835,7 +838,9 @@ export default function ProjectDetailPage() {
                     </SelectTrigger>
                     <SelectContent>
                       {STATUS.map((s) => (
-                        <SelectItem key={s} value={s}>{s}</SelectItem>
+                        <SelectItem key={s} value={s}>
+                          {STATUS_LABELS[s] || s}
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -1175,7 +1180,13 @@ export default function ProjectDetailPage() {
                           <div className="flex items-center gap-2">
                             <Select value={(t.status || "to-do").toLowerCase()} onValueChange={(value) => handleTaskStatus(t.id, value)}>
                               <SelectTrigger className="w-[160px]"><SelectValue placeholder="Status" /></SelectTrigger>
-                              <SelectContent>{STATUS.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+                              <SelectContent>
+                                {STATUS.map((s) => (
+                                  <SelectItem key={s} value={s}>
+                                    {STATUS_LABELS[s] || s}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
                             </Select>
                             <Button
                               variant="ghost"
@@ -1591,7 +1602,7 @@ function ReportPanel({ project, tasks, onClose, resolveUserLabel }) {
             <h4 className="text-lg font-semibold">{project.name}</h4>
             <p className="text-muted-foreground">{project.description}</p>
             <div className="mt-2 flex flex-wrap gap-2">
-              <StatusBadge status={project.status} />
+              <StatusBadge status={t.status} />
               <Badge variant="secondary">Priority: {(project.priority || "medium").toLowerCase()}</Badge>
               {project.dueDate && <Badge variant="secondary">Due: {format(toDate(project.dueDate), "dd MMM yyyy")}</Badge>}
               <Badge variant="outline">Team: {(project.teamIds || []).length}</Badge>
@@ -1705,12 +1716,18 @@ function ReportPanel({ project, tasks, onClose, resolveUserLabel }) {
 
 function StatusBadge({ status }) {
   const s = (status || "").toLowerCase();
-  const cls =
-    s === "completed" ? "bg-emerald-600" :
-    s === "in progress" ? "bg-blue-600" :
-    s === "blocked" ? "bg-red-600" : "bg-slate-600";
+  
+  const getStatusStyle = (status) => {
+    const s = (status || "").toLowerCase();
+    if (s === "to-do" || s === "todo") return `${TAG_BASE} bg-gray-100 text-gray-700 border border-gray-200`;
+    if (s === "in progress" || s === "in-progress") return `${TAG_BASE} bg-blue-100 text-blue-700 border border-blue-200`;
+    if (s === "completed" || s === "done") return `${TAG_BASE} bg-emerald-100 text-emerald-700 border border-emerald-200`;
+    if (s === "blocked") return `${TAG_BASE} bg-red-100 text-red-700 border border-red-200`;
+    return `${TAG_BASE} bg-gray-100 text-gray-700 border border-gray-200`; // fallback
+  };
+
   const label = STATUS_LABELS[s] || STATUS_LABELS["to-do"];
-  return <span className={`text-white text-xs px-2 py-0.5 rounded ${cls}`}>{label}</span>;
+  return <span className={getStatusStyle(s)}>{label}</span>;
 }
 
 function toDate(v) {

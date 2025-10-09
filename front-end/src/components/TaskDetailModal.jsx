@@ -116,15 +116,21 @@ const getStatusColor = (statusRaw) => {
   if (s === "to-do" || s === "todo") return `${TAG_BASE} bg-gray-100 text-gray-700 border border-gray-200`;
   if (s === "in progress" || s === "in-progress") return `${TAG_BASE} bg-blue-100 text-blue-700 border border-blue-200`;
   if (s === "completed" || s === "done") return `${TAG_BASE} bg-emerald-100 text-emerald-700 border border-emerald-200`;
-  if (s === "blocked") return `${TAG_BASE} bg-red-100 text-red-700 border-red-200`;
+  if (s === "blocked") return `${TAG_BASE} bg-red-100 text-red-700 border border-red-200`;
   return `${TAG_BASE} bg-gray-100 text-gray-700 border border-gray-200`;
 };
 
 const getPriorityColor = (priorityRaw) => {
-  const n = Number(priorityRaw);
-  if (!Number.isFinite(n)) return `${TAG_BASE} bg-gray-100 text-gray-700 border border-gray-200`;
-  if (n >= 8) return `${TAG_BASE} bg-red-100 text-red-700 border border-red-200`;
-  if (n >= 4) return `${TAG_BASE} bg-white text-yellow-700 border border-yellow-300`;
+  const value = Number(priorityRaw);
+  if (!Number.isFinite(value)) {
+    return `${TAG_BASE} bg-gray-100 text-gray-700 border border-gray-200`;
+  }
+  if (value >= 8) {
+    return `${TAG_BASE} bg-red-100 text-red-700 border border-red-200`;
+  }
+  if (value >= 5) {
+    return `${TAG_BASE} bg-yellow-100 text-yellow-700 border border-yellow-200`;
+  }
   return `${TAG_BASE} bg-emerald-100 text-emerald-700 border border-emerald-200`;
 };
 
@@ -144,6 +150,15 @@ const getPriorityColor = (priorityRaw) => {
     return !!due && due < new Date() && task.status !== "completed"
   })()
 
+  const getStatusLabel = (status) => {
+    const s = String(status || "").toLowerCase();
+    if (s === "to-do" || s === "todo") return "To-Do";
+    if (s === "in progress" || s === "in-progress") return "In Progress";
+    if (s === "completed" || s === "done") return "Completed";
+    if (s === "blocked") return "Blocked";
+    return "Unknown";
+  };
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-auto">
@@ -153,7 +168,7 @@ const getPriorityColor = (priorityRaw) => {
               <DialogTitle className="text-xl font-bold text-foreground pr-4">{task.title}</DialogTitle>
               <div className="flex items-center gap-2 mt-2">
                 <Badge className={getStatusColor(task.status)}>
-                  {task.status?.charAt(0).toUpperCase() + task.status?.slice(1).replace("-", " ")}
+                  {getStatusLabel(task.status)}
                 </Badge>
                 <Badge className={getPriorityColor(priorityDisplay)}>
                   {priorityDisplay ? `Priority ${priorityDisplay}` : "Priority —"}

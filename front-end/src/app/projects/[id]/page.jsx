@@ -1146,7 +1146,7 @@ export default function ProjectDetailPage() {
                           <div className="min-w-0">
                             <div className="flex items-center gap-2">
                               <span className="font-medium truncate">{t.title}</span>
-                              <StatusBadge status={t.status} />
+                              <StatusBadge status={project.status} />
                               <Badge className={priorityBadgeClass} variant="outline">
                                 {priorityLabel}
                               </Badge>
@@ -1602,7 +1602,7 @@ function ReportPanel({ project, tasks, onClose, resolveUserLabel }) {
             <h4 className="text-lg font-semibold">{project.name}</h4>
             <p className="text-muted-foreground">{project.description}</p>
             <div className="mt-2 flex flex-wrap gap-2">
-              <StatusBadge status={t.status} />
+              <StatusBadge status={project.status} />
               <Badge variant="secondary">Priority: {(project.priority || "medium").toLowerCase()}</Badge>
               {project.dueDate && <Badge variant="secondary">Due: {format(toDate(project.dueDate), "dd MMM yyyy")}</Badge>}
               <Badge variant="outline">Team: {(project.teamIds || []).length}</Badge>

@@ -562,6 +562,10 @@ export default function ProjectDetailPage() {
       const current = ensureArray(prev.collaboratorsIds);
       if (isActive) {
         if (current.includes(id)) return prev;
+        if (current.length >= 10) {
+          toast.error("Maximum 10 assignees allowed per task");
+          return prev;
+        }
         return { ...prev, collaboratorsIds: [...current, id] };
       }
       return {
@@ -659,12 +663,14 @@ export default function ProjectDetailPage() {
       return;
     }
 
-    // Validate at least one assignee
     if (selectedCollaborators.length === 0) {
       setTaskError("At least one assignee is required.");
       return;
     }
-
+    if (selectedCollaborators.length > 10) {
+      setTaskError("Maximum 10 assignees allowed per task.");
+      return;
+    }
     if (!currentUser?.uid) {
       setTaskError("You must be signed in to create tasks.");
       return;
@@ -705,10 +711,6 @@ export default function ProjectDetailPage() {
         return;
       }
       payload.dueDate = due.toISOString();
-
-      // Collaborators already set in payload above
-
-      // prepare a local updated list to drive auto-status
       let updatedTasksLocal = tasks;
 
       if (isEditingTask && editingTaskId) {
@@ -1027,13 +1029,23 @@ export default function ProjectDetailPage() {
                     <Button
                       type="button"
                       variant="outline"
-                      className="w-full justify-between"
+                      className={`w-full justify-between ${
+                        selectedCollaborators.length > 10
+                          ? "border-destructive"
+                          : ""
+                      }`}
                     >
                       <span className="truncate text-left">
                         {collaboratorButtonLabel}
                       </span>
-                      <span className="text-xs text-muted-foreground">
-                        {selectedCollaborators.length} selected
+                      <span
+                        className={`text-xs ${
+                          selectedCollaborators.length > 10
+                            ? "text-destructive font-semibold"
+                            : "text-muted-foreground"
+                        }`}
+                      >
+                        {selectedCollaborators.length}/10 selected
                       </span>
                     </Button>
                   </DropdownMenuTrigger>
@@ -1069,8 +1081,7 @@ export default function ProjectDetailPage() {
                   </DropdownMenuContent>
                 </DropdownMenu>
                 <p className="text-xs text-muted-foreground">
-                  Required: Select at least one team member to assign this task
-                  to.
+                  Required: Select 1-10 team members to assign this task to.
                 </p>
               </div>
 

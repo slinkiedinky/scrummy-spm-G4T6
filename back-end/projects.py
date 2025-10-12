@@ -265,6 +265,9 @@ def list_tasks_across_projects():
     query = db.collection_group("tasks").where(filter=firestore.FieldFilter("assigneeId", "==", assigned_to))
     docs = list(query.stream())
 
+    query = db.collection_group("tasks").where(filter=firestore.FieldFilter("assigneeId", "==", assigned_to))
+    docs = list(query.stream())
+
     # backfill support: legacy tasks might still use ownerId
     owner_query = db.collection_group("tasks").where(filter=firestore.FieldFilter("ownerId", "==", assigned_to))
     owner_docs = owner_query.stream()
@@ -274,7 +277,17 @@ def list_tasks_across_projects():
         if d.reference.path not in seen:
             docs.append(d)
             seen.add(d.reference.path)
-
+    
+    try:
+        collab_query = db.collection_group("tasks").where("collaboratorsIds", "array_contains", assigned_to)
+        collab_docs = collab_query.stream()
+        
+        for d in collab_docs:
+            if d.reference.path not in seen:
+                docs.append(d)
+                seen.add(d.reference.path)
+    except Exception as e:
+        print(f"Warning: Could not query collaborators: {e}")
     items = []
     for doc in docs:
         data = normalize_task_out({**doc.to_dict(), "id": doc.id})

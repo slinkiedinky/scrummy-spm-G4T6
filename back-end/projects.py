@@ -212,20 +212,25 @@ def delete_project(project_id):
     return jsonify({"message": "Project deleted"}), 200
 
 # -------- Tasks (under a project) --------
-
 @projects_bp.route("/<project_id>/tasks", methods=["GET"])
 def list_tasks(project_id):
-    q = db.collection("projects").document(project_id).collection("tasks")
     assignee = request.args.get("assigneeId") or request.args.get("assignedTo")
+    
+    project_doc = db.collection("projects").document(project_id).get()
+    if not project_doc.exists:
+        return jsonify({"error": "Project not found"}), 404
+    
+    project_data = project_doc.to_dict()
+    team_ids = ensure_list(project_data.get("teamIds"))
+    owner_id = project_data.get("ownerId") or project_data.get("createdBy")
+    
     if assignee:
-        docs = list(q.where("assigneeId", "==", assignee).stream())
-        if not docs:
-            docs = list(q.where("ownerId", "==", assignee).stream())
-    else:
-        docs = q.stream()
-    items = [normalize_task_out({**d.to_dict(), "id": d.id}) for d in docs]
-    return jsonify(items), 200
-
+        if assignee in team_ids or assignee == owner_id:
+            q = db.collection("projects").document(project_id).collection("tasks")
+            docs = q.stream()
+            items = [normalize_task_out({**d.to_dict(), "id": d.id}) for d in docs]
+            return jsonify(items), 200
+    return jsonify([]), 200
 
 @projects_bp.route("/assigned/tasks", methods=["GET"])
 def list_tasks_across_projects():

@@ -1,5 +1,6 @@
 # back-end/projects.py
 from flask import Blueprint, request, jsonify, current_app
+from flask_cors import cross_origin
 from firebase_admin import firestore
 from datetime import datetime, timezone
 
@@ -118,6 +119,9 @@ def normalize_task_out(doc):
     d["priority"] = canon_task_priority(d.get("priority"))
     d["collaboratorsIds"] = ensure_list(d.get("collaboratorsIds"))
     d["tags"] = ensure_list(d.get("tags"))
+    d.setdefault("subtaskCount", 0)
+    d.setdefault("subtaskCompletedCount", 0)
+    d.setdefault("subtaskProgress", 0)
     return d
 
 # -------- Projects --------
@@ -212,6 +216,18 @@ def delete_project(project_id):
     return jsonify({"message": "Project deleted"}), 200
 
 # -------- Tasks (under a project) --------
+@projects_bp.route("/<project_id>/tasks/<task_id>", methods=["GET"])
+def get_task(project_id, task_id):
+    """Get a single task with updated progress"""
+    task_ref = db.collection("projects").document(project_id).collection("tasks").document(task_id)
+    task_doc = task_ref.get()
+    if not task_doc.exists:
+        return jsonify({"error": "Task not found"}), 404
+
+    task_data = task_doc.to_dict()
+    task_data["id"] = task_id 
+    task_data["projectId"] = project_id
+    return jsonify(normalize_task_out(task_data)), 200
 @projects_bp.route("/<project_id>/tasks", methods=["GET"])
 def list_tasks(project_id):
     assignee = request.args.get("assigneeId") or request.args.get("assignedTo")
@@ -438,3 +454,175 @@ def update_task(project_id, task_id):
 def delete_task(project_id, task_id):
     db.collection("projects").document(project_id).collection("tasks").document(task_id).delete()
     return jsonify({"message": "Task deleted"}), 200
+
+# -------- Subtasks --------
+
+@projects_bp.route("/<project_id>/tasks/<task_id>/subtasks", methods=["GET"])
+@cross_origin()
+def list_subtasks(project_id, task_id):
+    """List all subtasks under a parent task"""
+    q = db.collection("projects").document(project_id).collection("tasks").document(task_id).collection("subtasks")
+    docs = q.stream()
+    items = [normalize_task_out({**d.to_dict(), "id": d.id}) for d in docs]
+    return jsonify(items), 200
+
+
+@projects_bp.route("/<project_id>/tasks/<task_id>/subtasks", methods=["POST"])
+@cross_origin()
+def create_subtask(project_id, task_id):
+    """Create a subtask under a parent task"""
+    data = request.json or {}
+    now = now_utc()
+    
+    # Verify parent task exists
+    parent_task_ref = db.collection("projects").document(project_id).collection("tasks").document(task_id)
+    parent_task_doc = parent_task_ref.get()
+    if not parent_task_doc.exists:
+        return jsonify({"error": "Parent task not found"}), 404
+    
+    # Verify project exists
+    project_ref = db.collection("projects").document(project_id)
+    project_doc = project_ref.get()
+    if not project_doc.exists:
+        return jsonify({"error": "Project not found"}), 404
+    
+    assignee_id = data.get("assigneeId") or data.get("ownerId")
+    if not assignee_id:
+        return jsonify({"error": "assigneeId is required"}), 400
+    
+    # Ensure assignee is in project team
+    team_ids = ensure_list(project_doc.to_dict().get("teamIds"))
+    if assignee_id not in team_ids:
+        project_ref.update({
+            "teamIds": firestore.ArrayUnion([assignee_id]),
+            "updatedAt": now,
+        })
+    
+    title = (data.get("title") or "Untitled subtask").strip() or "Untitled subtask"
+    description = (data.get("description") or "").strip()
+    due_date = data.get("dueDate") or None
+    created_by = data.get("createdBy") or data.get("currentUserId") or assignee_id
+    
+    doc = {
+        "assigneeId": assignee_id,
+        "ownerId": assignee_id,
+        "createdBy": created_by,
+        "collaboratorsIds": ensure_list(data.get("collaboratorsIds")),
+        "createdAt": now,
+        "description": description,
+        "dueDate": due_date,
+        "priority": canon_task_priority(data.get("priority")),
+        "status": canon_status(data.get("status")),
+        "title": title,
+        "updatedAt": now,
+        "tags": ensure_list(data.get("tags")),
+        "parentTaskId": task_id,  # Link to parent
+    }
+    
+    ref = parent_task_ref.collection("subtasks").add(doc)
+    
+    # Update parent task's subtask count and completion percentage
+    update_parent_task_progress(project_id, task_id)
+    
+    return jsonify({"id": ref[1].id, "message": "Subtask created"}), 201
+
+
+@projects_bp.route("/<project_id>/tasks/<task_id>/subtasks/<subtask_id>", methods=["PUT"])
+@cross_origin()
+def update_subtask(project_id, task_id, subtask_id):
+    """Update a subtask"""
+    patch = request.json or {}
+    if "status" in patch:
+        patch["status"] = canon_status(patch["status"])
+    if "priority" in patch:
+        patch["priority"] = canon_task_priority(patch["priority"])
+    if "collaboratorsIds" in patch:
+        patch["collaboratorsIds"] = ensure_list(patch["collaboratorsIds"])
+    if "tags" in patch:
+        patch["tags"] = ensure_list(patch["tags"])
+    if "title" in patch:
+        title = (patch["title"] or "").strip()
+        patch["title"] = title or "Untitled subtask"
+    if "description" in patch:
+        patch["description"] = patch["description"] or ""
+    if "dueDate" in patch and not patch["dueDate"]:
+        patch["dueDate"] = None
+    if "assigneeId" in patch:
+        patch["ownerId"] = patch.get("assigneeId")
+    if "ownerId" in patch and "assigneeId" not in patch:
+        patch["assigneeId"] = patch.get("ownerId")
+    
+    patch["updatedAt"] = now_utc()
+    
+    db.collection("projects").document(project_id).collection("tasks").document(task_id).collection("subtasks").document(subtask_id).update(patch)
+    
+    # Update parent task progress after subtask status change
+    if "status" in patch:
+        update_parent_task_progress(project_id, task_id)
+    
+    return jsonify({"message": "Subtask updated"}), 200
+
+
+@projects_bp.route("/<project_id>/tasks/<task_id>/subtasks/<subtask_id>", methods=["DELETE"])
+@cross_origin()
+def delete_subtask(project_id, task_id, subtask_id):
+    """Delete a subtask"""
+    db.collection("projects").document(project_id).collection("tasks").document(task_id).collection("subtasks").document(subtask_id).delete()
+    
+    # Update parent task progress after deletion
+    update_parent_task_progress(project_id, task_id)
+    
+    return jsonify({"message": "Subtask deleted"}), 200
+
+
+# -------- Helper function to update parent task progress --------
+
+def update_parent_task_progress(project_id, task_id):
+    """Calculate and update parent task's subtask completion progress"""
+    parent_task_ref = db.collection("projects").document(project_id).collection("tasks").document(task_id)
+    
+    # Get all subtasks
+    subtasks_query = parent_task_ref.collection("subtasks").stream()
+    subtasks = list(subtasks_query)
+    
+    total_subtasks = len(subtasks)
+    
+    if total_subtasks == 0:
+        # No subtasks, clear progress
+        parent_task_ref.update({
+            "subtaskCount": 0,
+            "subtaskCompletedCount": 0,
+            "subtaskProgress": 0,
+            "updatedAt": now_utc(),
+        })
+        return
+    
+    # Count completed subtasks
+    completed_subtasks = sum(
+        1 for subtask in subtasks 
+        if canon_status(subtask.to_dict().get("status")) == "completed"
+    )
+    
+    # Calculate progress percentage
+    progress = int((completed_subtasks / total_subtasks) * 100)
+    
+    # Update parent task
+    updates = {
+        "subtaskCount": total_subtasks,
+        "subtaskCompletedCount": completed_subtasks,
+        "subtaskProgress": progress,
+        "updatedAt": now_utc(),
+    }
+    
+    # Optional: Auto-complete parent task when all subtasks are done
+    if progress == 100:
+        parent_doc = parent_task_ref.get()
+        if parent_doc.exists:
+            current_status = canon_status(parent_doc.to_dict().get("status"))
+            # Only auto-complete if not already completed
+            if current_status != "completed":
+                updates["status"] = "completed"
+    
+    parent_task_ref.update(updates)
+    new_status = "completed" if progress == 100 else "to-do"
+    parent_task_ref.update({"status": new_status})

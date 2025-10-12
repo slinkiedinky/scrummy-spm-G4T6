@@ -21,7 +21,11 @@ export async function getProject(id, params = {}) {
     data = null;
   }
   if (!r.ok) {
-    const message = data?.error || data?.message || text || `Project request failed (${r.status})`;
+    const message =
+      data?.error ||
+      data?.message ||
+      text ||
+      `Project request failed (${r.status})`;
     throw new Error(message);
   }
   return data;
@@ -41,7 +45,8 @@ export async function createProject(payload) {
     data = null;
   }
   if (!r.ok) {
-    const message = data?.error || data?.message || text || `Create failed (${r.status})`;
+    const message =
+      data?.error || data?.message || text || `Create failed (${r.status})`;
     throw new Error(message);
   }
   return data; // { id, message }
@@ -74,7 +79,11 @@ export async function listUsers() {
     data = null;
   }
   if (!r.ok) {
-    const message = data?.error || data?.message || text || `Failed to load users (${r.status})`;
+    const message =
+      data?.error ||
+      data?.message ||
+      text ||
+      `Failed to load users (${r.status})`;
     throw new Error(message);
   }
   return data || [];
@@ -93,15 +102,24 @@ export const listTasks = async (projectId, params = {}) => {
     data = null;
   }
   if (!r.ok) {
-    const message = data?.error || data?.message || text || "Failed to load tasks";
+    const message =
+      data?.error || data?.message || text || "Failed to load tasks";
     throw new Error(message);
   }
   return data;
 };
 
+export const getTask = async (projectId, taskId) => {
+  const r = await fetch(`${API}/projects/${projectId}/tasks/${taskId}`);
+  if (!r.ok) throw new Error("Failed to load task");
+  return await r.json();
+};
+
 export const createTask = async (projectId, payload) => {
   const r = await fetch(`${API}/projects/${projectId}/tasks`, {
-    method: "POST", headers: { "Content-Type":"application/json" }, body: JSON.stringify(payload)
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
   });
   const text = await r.text();
   let data;
@@ -111,7 +129,8 @@ export const createTask = async (projectId, payload) => {
     data = null;
   }
   if (!r.ok) {
-    const message = data?.error || data?.message || text || "Create task failed";
+    const message =
+      data?.error || data?.message || text || "Create task failed";
     throw new Error(message);
   }
   return data;
@@ -119,14 +138,18 @@ export const createTask = async (projectId, payload) => {
 
 export const updateTask = async (projectId, taskId, patch) => {
   const r = await fetch(`${API}/projects/${projectId}/tasks/${taskId}`, {
-    method: "PUT", headers: { "Content-Type":"application/json" }, body: JSON.stringify(patch)
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(patch),
   });
   if (!r.ok) throw new Error("Update task failed");
   return r.json();
 };
 
 export const deleteTask = async (projectId, taskId) => {
-  const r = await fetch(`${API}/projects/${projectId}/tasks/${taskId}`, { method: "DELETE" });
+  const r = await fetch(`${API}/projects/${projectId}/tasks/${taskId}`, {
+    method: "DELETE",
+  });
   if (!r.ok) throw new Error("Delete task failed");
   return r.json();
 };
@@ -143,8 +166,76 @@ export const listAssignedTasks = async (params = {}) => {
     data = null;
   }
   if (!r.ok) {
-    const message = data?.error || data?.message || text || "Failed to load assigned tasks";
+    const message =
+      data?.error || data?.message || text || "Failed to load assigned tasks";
     throw new Error(message);
   }
   return data;
+};
+
+// ---- Subtasks ----
+export const listSubtasks = async (projectId, taskId) => {
+  const url = `${API}/projects/${projectId}/tasks/${taskId}/subtasks`;
+  const r = await fetch(url, { cache: "no-store" });
+  const text = await r.text();
+  let data;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch (err) {
+    data = null;
+  }
+  if (!r.ok) {
+    const message =
+      data?.error || data?.message || text || "Failed to load subtasks";
+    throw new Error(message);
+  }
+  return data || [];
+};
+
+export const createSubtask = async (projectId, taskId, payload) => {
+  const r = await fetch(
+    `${API}/projects/${projectId}/tasks/${taskId}/subtasks`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }
+  );
+  const text = await r.text();
+  let data;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch (err) {
+    data = null;
+  }
+  if (!r.ok) {
+    const message =
+      data?.error || data?.message || text || "Create subtask failed";
+    throw new Error(message);
+  }
+  return data;
+};
+
+export const updateSubtask = async (projectId, taskId, subtaskId, patch) => {
+  const r = await fetch(
+    `${API}/projects/${projectId}/tasks/${taskId}/subtasks/${subtaskId}`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(patch),
+    }
+  );
+  if (!r.ok) throw new Error("Update subtask failed");
+  return r.json();
+};
+
+export const deleteSubtask = async (projectId, taskId, subtaskId) => {
+  const r = await fetch(
+    `${API}/projects/${projectId}/tasks/${taskId}/subtasks/${subtaskId}`,
+    {
+      method: "DELETE",
+    }
+  );
+  if (!r.ok) throw new Error("Delete subtask failed");
+  return r.json();
 };

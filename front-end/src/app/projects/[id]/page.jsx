@@ -61,6 +61,8 @@ import autoTable from "jspdf-autotable";
 import * as XLSX from "xlsx";
 import { TeamTimeline } from "@/components/TeamTimeline";
 import { toast } from "sonner";
+import { TaskDetailModal } from "@/components/TaskDetailModal";
+import { getTask } from "@/lib/api";
 
 const TAG_BASE =
   "rounded-full px-2.5 py-1 text-xs font-medium inline-flex items-center gap-1";
@@ -163,6 +165,7 @@ export default function ProjectDetailPage() {
 
   const [project, setProject] = useState(null);
   const [tasks, setTasks] = useState([]);
+  const [selectedTask, setSelectedTask] = useState(null);
   const [showReport, setShowReport] = useState(false);
   const [users, setUsers] = useState([]);
   const [currentUser, setCurrentUser] = useState(null);
@@ -265,6 +268,7 @@ export default function ProjectDetailPage() {
 
           return {
             ...task,
+            projectId: id,
             status: (task.status || "").toLowerCase(),
             priority,
             priorityNumber: Number.isFinite(priorityNumber)
@@ -1356,7 +1360,8 @@ export default function ProjectDetailPage() {
                       return (
                         <div
                           key={t.id}
-                          className="flex items-center justify-between gap-3 py-3"
+                          className="flex items-center justify-between gap-3 py-3 cursor-pointer hover:bg-muted/50 rounded-lg px-2 transition"
+                          onClick={() => setSelectedTask(t)}
                         >
                           <div className="min-w-0">
                             <div className="flex items-center gap-2">
@@ -1603,6 +1608,31 @@ export default function ProjectDetailPage() {
           tasks={tasks}
           resolveUserLabel={resolveUserLabel}
           onClose={() => setShowReport(false)}
+        />
+      )}
+      {selectedTask && (
+        <TaskDetailModal
+          task={selectedTask}
+          isOpen={!!selectedTask}
+          onClose={() => setSelectedTask(null)}
+          onEdit={handleEditTask}
+          onDelete={requestDeleteTask}
+          disableActions={Boolean(deletingTaskId) || savingTask}
+          teamMembers={teamMembers}
+          currentUserId={currentUser?.uid}
+          onSubtaskChange={async () => {
+            try {
+              const updatedTask = await getTask(project.id, selectedTask.id);
+              setSelectedTask(updatedTask);
+              return updatedTask;
+            } catch (err) {
+              console.error(
+                "Failed to refresh selected task after subtask change:",
+                err
+              );
+              throw err
+            }
+          }}
         />
       )}
     </>

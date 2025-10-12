@@ -248,7 +248,9 @@ export default function ProjectDetailPage() {
             ? String(priorityNumber)
             : "";
           const creatorId = task.createdBy;
-          const creatorInfo = creatorId ? userLookup.get(creatorId) : null;
+          const creatorInfo = creatorId
+            ? u.find((user) => user?.id === creatorId)
+            : null;
           const creatorName = creatorInfo
             ? creatorInfo.fullName ||
               creatorInfo.displayName ||
@@ -279,14 +281,6 @@ export default function ProjectDetailPage() {
               : null,
           };
         });
-        console.log(
-          "Normalized tasks with creators:",
-          normalizedTasks.map((t) => ({
-            title: t.title,
-            createdBy: t.createdBy,
-            creatorName: t.creatorName,
-          }))
-        );
         setProject(normalizedProject);
         setTasks(normalizedTasks);
         setUsers(Array.isArray(u) ? u : []);
@@ -297,9 +291,6 @@ export default function ProjectDetailPage() {
         setDescriptionDraft(p.description || "");
         setEditingDescription(false);
         setMetaError("");
-
-        // (Optional) You can uncomment this if you want auto-sync also on initial load
-        // await syncProjectStatusWithTasks(normalizedTasks);
       } catch (e) {
         setErr(e?.message || "Failed to load project");
         setProject(null);

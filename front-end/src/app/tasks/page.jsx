@@ -7,13 +7,25 @@ import { TaskDetailModal } from "@/components/TaskDetailModal";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Search, Filter, RefreshCw, AlertCircle, Trash2 } from "lucide-react";
 
 import { auth } from "@/lib/firebase";
-import { listAssignedTasks, listUsers, updateTask, deleteTask } from "@/lib/api";
+import {
+  listAssignedTasks,
+  listUsers,
+  updateTask,
+  deleteTask,
+  getTask,
+} from "@/lib/api";
 import {
   Dialog,
   DialogContent,
@@ -58,19 +70,26 @@ const PRIORITY_OPTIONS = [
 const toDate = (value) => {
   if (!value) return null;
   if (value instanceof Date) return value;
-  if (typeof value === "string" || typeof value === "number") return new Date(value);
-  if (typeof value === "object" && "seconds" in value) return new Date(value.seconds * 1000);
+  if (typeof value === "string" || typeof value === "number")
+    return new Date(value);
+  if (typeof value === "object" && "seconds" in value)
+    return new Date(value.seconds * 1000);
   return null;
 };
 
-const TAG_BASE = "rounded-full px-2.5 py-1 text-xs font-medium inline-flex items-center gap-1";
+const TAG_BASE =
+  "rounded-full px-2.5 py-1 text-xs font-medium inline-flex items-center gap-1";
 
 const getStatusBadgeClass = (status) => {
   const s = (status || "").toLowerCase();
-  if (s === "to-do" || s === "todo") return `${TAG_BASE} bg-gray-100 text-gray-700 border border-gray-200`;
-  if (s === "in progress" || s === "in-progress") return `${TAG_BASE} bg-blue-100 text-blue-700 border border-blue-200`;
-  if (s === "completed" || s === "done") return `${TAG_BASE} bg-emerald-100 text-emerald-700 border border-emerald-200`;
-  if (s === "blocked") return `${TAG_BASE} bg-red-100 text-red-700 border border-red-200`;
+  if (s === "to-do" || s === "todo")
+    return `${TAG_BASE} bg-gray-100 text-gray-700 border border-gray-200`;
+  if (s === "in progress" || s === "in-progress")
+    return `${TAG_BASE} bg-blue-100 text-blue-700 border border-blue-200`;
+  if (s === "completed" || s === "done")
+    return `${TAG_BASE} bg-emerald-100 text-emerald-700 border border-emerald-200`;
+  if (s === "blocked")
+    return `${TAG_BASE} bg-red-100 text-red-700 border border-red-200`;
   return `${TAG_BASE} bg-gray-100 text-gray-700 border border-gray-200`; // fallback
 };
 
@@ -154,16 +173,22 @@ export default function TasksPage() {
       setTasks(
         (data || []).map((t) => {
           const projectId = t.projectId || "unassigned";
-          const projectName = t.projectName || (projectId === "unassigned" ? "Unassigned Project" : projectId);
+          const projectName =
+            t.projectName ||
+            (projectId === "unassigned" ? "Unassigned Project" : projectId);
           const priorityNumber = Number(t.priority);
-          const priority = Number.isFinite(priorityNumber) ? String(priorityNumber) : "";
+          const priority = Number.isFinite(priorityNumber)
+            ? String(priorityNumber)
+            : "";
           return {
             ...t,
             projectId,
             projectName,
             status: (t.status || "").toLowerCase(),
             priority,
-            priorityNumber: Number.isFinite(priorityNumber) ? priorityNumber : null,
+            priorityNumber: Number.isFinite(priorityNumber)
+              ? priorityNumber
+              : null,
             tags: Array.isArray(t.tags) ? t.tags : [],
             collaboratorsIds: ensureArray(t.collaboratorsIds),
           };
@@ -256,9 +281,13 @@ export default function TasksPage() {
           avatar: "",
         };
       }
-      const nameCandidate = [info.fullName, info.displayName, info.name, info.email, key].find(
-        (value) => typeof value === "string" && value.trim()
-      );
+      const nameCandidate = [
+        info.fullName,
+        info.displayName,
+        info.name,
+        info.email,
+        key,
+      ].find((value) => typeof value === "string" && value.trim());
       return {
         id: key,
         name: nameCandidate ? nameCandidate.trim() : fallbackUserLabel(key),
@@ -282,7 +311,8 @@ export default function TasksPage() {
     const unique = new Map();
     tasks.forEach((task) => {
       const id = task.projectId || "unassigned";
-      const name = task.projectName || (id === "unassigned" ? "Unassigned Project" : id);
+      const name =
+        task.projectName || (id === "unassigned" ? "Unassigned Project" : id);
       if (!unique.has(id)) {
         unique.set(id, { id, name });
       }
@@ -300,29 +330,40 @@ export default function TasksPage() {
           (task.description || "").toLowerCase().includes(search) ||
           (task.projectName || "").toLowerCase().includes(search);
 
-        const matchesPriority = priorityFilter === "all" || task.priority === priorityFilter;
-        const matchesStatus = statusFilter === "all" || task.status === statusFilter;
-        const matchesProject = projectFilter === "all" || task.projectId === projectFilter;
+        const matchesPriority =
+          priorityFilter === "all" || task.priority === priorityFilter;
+        const matchesStatus =
+          statusFilter === "all" || task.status === statusFilter;
+        const matchesProject =
+          projectFilter === "all" || task.projectId === projectFilter;
 
-        return matchesSearch && matchesPriority && matchesStatus && matchesProject;
+        return (
+          matchesSearch && matchesPriority && matchesStatus && matchesProject
+        );
       })
       .map((task) => {
         const collaboratorIds = ensureArray(task.collaboratorsIds);
         const dedupedCollaboratorIds = Array.from(
-          new Set(collaboratorIds.filter((id) => id !== undefined && id !== null && String(id).trim()))
+          new Set(
+            collaboratorIds.filter(
+              (id) => id !== undefined && id !== null && String(id).trim()
+            )
+          )
         ).map((id) => String(id).trim());
 
-        const collaboratorSummaries = dedupedCollaboratorIds.map((id, index) => {
-          const summary = summarizeUser(id);
-          if (summary) return summary;
-          return {
-            id,
-            name: fallbackUserLabel(id, index),
-            email: "",
-            role: "",
-            avatar: "",
-          };
-        });
+        const collaboratorSummaries = dedupedCollaboratorIds.map(
+          (id, index) => {
+            const summary = summarizeUser(id);
+            if (summary) return summary;
+            return {
+              id,
+              name: fallbackUserLabel(id, index),
+              email: "",
+              role: "",
+              avatar: "",
+            };
+          }
+        );
 
         const assigneeSummary = summarizeUser(task.assigneeId || task.ownerId);
 
@@ -334,7 +375,14 @@ export default function TasksPage() {
           collaboratorNames: collaboratorSummaries.map((item) => item.name),
         };
       });
-  }, [tasks, searchTerm, priorityFilter, statusFilter, projectFilter, summarizeUser]);
+  }, [
+    tasks,
+    searchTerm,
+    priorityFilter,
+    statusFilter,
+    projectFilter,
+    summarizeUser,
+  ]);
 
   const statusOrder = useMemo(
     () => STATUS_COLUMNS.map((column) => column.status),
@@ -349,7 +397,9 @@ export default function TasksPage() {
       if (!map.has(id)) {
         map.set(id, {
           projectId: id,
-          projectName: task.projectName || (id === "unassigned" ? "Unassigned Project" : id),
+          projectName:
+            task.projectName ||
+            (id === "unassigned" ? "Unassigned Project" : id),
           tasks: [],
         });
       }
@@ -364,7 +414,8 @@ export default function TasksPage() {
     return Array.from(map.values())
       .map((entry) => {
         const sortedTasks = entry.tasks.slice().sort((a, b) => {
-          const statusDiff = orderForStatus(a.status) - orderForStatus(b.status);
+          const statusDiff =
+            orderForStatus(a.status) - orderForStatus(b.status);
           if (statusDiff !== 0) return statusDiff;
           const dueA = toDate(a.dueDate)?.getTime() ?? Number.POSITIVE_INFINITY;
           const dueB = toDate(b.dueDate)?.getTime() ?? Number.POSITIVE_INFINITY;
@@ -398,19 +449,27 @@ export default function TasksPage() {
       if (!task) return;
 
       const resolved = resolveTaskRecord(task) || task;
-      const assigneeSummary = summarizeUser(resolved.assigneeId || resolved.ownerId);
+      const assigneeSummary = summarizeUser(
+        resolved.assigneeId || resolved.ownerId
+      );
 
-      const sourceCollaborators = Array.isArray(resolved.collaboratorSummaries) && resolved.collaboratorSummaries.length > 0
-        ? resolved.collaboratorSummaries
-        : (Array.isArray(resolved.collaboratorIds) ? resolved.collaboratorIds : ensureArray(resolved.collaboratorsIds)).map(
-            (id, index) => summarizeUser(id) || {
-              id: String(id ?? ""),
-              name: fallbackUserLabel(id, index),
-              email: "",
-              role: "",
-              avatar: "",
-            }
-          );
+      const sourceCollaborators =
+        Array.isArray(resolved.collaboratorSummaries) &&
+        resolved.collaboratorSummaries.length > 0
+          ? resolved.collaboratorSummaries
+          : (Array.isArray(resolved.collaboratorIds)
+              ? resolved.collaboratorIds
+              : ensureArray(resolved.collaboratorsIds)
+            ).map(
+              (id, index) =>
+                summarizeUser(id) || {
+                  id: String(id ?? ""),
+                  name: fallbackUserLabel(id, index),
+                  email: "",
+                  role: "",
+                  avatar: "",
+                }
+            );
 
       const collaborators = [];
       const seen = new Set();
@@ -428,9 +487,12 @@ export default function TasksPage() {
         });
       });
 
+      const creatorSummary = summarizeUser(resolved.createdBy);
+
       setSelectedTask({
         ...resolved,
-        assignee: assigneeSummary || undefined,
+        assigneeSummary: assigneeSummary || undefined,
+        creatorSummary: creatorSummary || undefined,
         collaborators,
       });
     },
@@ -446,7 +508,11 @@ export default function TasksPage() {
         title: base.title || "",
         description: base.description || "",
         status: (base.status || "to-do").toLowerCase(),
-        priority: base.priority || (Number.isFinite(base.priorityNumber) ? String(base.priorityNumber) : "5"),
+        priority:
+          base.priority ||
+          (Number.isFinite(base.priorityNumber)
+            ? String(base.priorityNumber)
+            : "5"),
         dueDate: toDateInputValue(base.dueDate),
       });
       setEditError("");
@@ -485,7 +551,10 @@ export default function TasksPage() {
         setEditError("Priority must be a number between 1 and 10.");
         return;
       }
-      const clampedPriority = Math.min(10, Math.max(1, Math.round(priorityNumber)));
+      const clampedPriority = Math.min(
+        10,
+        Math.max(1, Math.round(priorityNumber))
+      );
 
       setSavingEdit(true);
       setEditError("");
@@ -540,27 +609,35 @@ export default function TasksPage() {
     setDeletingTaskId("");
   }, []);
 
-  const confirmDeleteTask = useCallback(
-    async () => {
-      if (!deleteCandidate || !deleteCandidate.projectId || !deleteCandidate.id || !currentUser?.uid) {
-        return;
+  const confirmDeleteTask = useCallback(async () => {
+    if (
+      !deleteCandidate ||
+      !deleteCandidate.projectId ||
+      !deleteCandidate.id ||
+      !currentUser?.uid
+    ) {
+      return;
+    }
+    setDeletingTaskId(deleteCandidate.id);
+    setDeleteError("");
+    try {
+      await deleteTask(deleteCandidate.projectId, deleteCandidate.id);
+      await loadTasks(currentUser.uid);
+      if (selectedTask?.id === deleteCandidate.id) {
+        setSelectedTask(null);
       }
-      setDeletingTaskId(deleteCandidate.id);
-      setDeleteError("");
-      try {
-        await deleteTask(deleteCandidate.projectId, deleteCandidate.id);
-        await loadTasks(currentUser.uid);
-        if (selectedTask?.id === deleteCandidate.id) {
-          setSelectedTask(null);
-        }
-        closeDeleteDialog();
-      } catch (err) {
-        setDeleteError(err?.message || "Failed to delete task.");
-        setDeletingTaskId("");
-      }
-    },
-    [closeDeleteDialog, currentUser?.uid, deleteCandidate, loadTasks, selectedTask?.id]
-  );
+      closeDeleteDialog();
+    } catch (err) {
+      setDeleteError(err?.message || "Failed to delete task.");
+      setDeletingTaskId("");
+    }
+  }, [
+    closeDeleteDialog,
+    currentUser?.uid,
+    deleteCandidate,
+    loadTasks,
+    selectedTask?.id,
+  ]);
 
   const handleRefresh = () => {
     if (currentUser?.uid) {
@@ -571,7 +648,9 @@ export default function TasksPage() {
   if (userLoading) {
     return (
       <div className="flex-1 overflow-auto p-6">
-        <div className="h-64 grid place-items-center text-muted-foreground">Validating session…</div>
+        <div className="h-64 grid place-items-center text-muted-foreground">
+          Validating session…
+        </div>
       </div>
     );
   }
@@ -579,7 +658,9 @@ export default function TasksPage() {
   if (loading) {
     return (
       <div className="flex-1 overflow-auto p-6">
-        <div className="h-64 grid place-items-center text-muted-foreground">Loading your tasks…</div>
+        <div className="h-64 grid place-items-center text-muted-foreground">
+          Loading your tasks…
+        </div>
       </div>
     );
   }
@@ -601,14 +682,14 @@ export default function TasksPage() {
               Delete Task
             </DialogTitle>
             <DialogDescription>
-              This action permanently removes the task and any associated metadata.
+              This action permanently removes the task and any associated
+              metadata.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-3">
             <p className="text-sm text-muted-foreground">
-              Are you sure you want to delete
-              {" "}
+              Are you sure you want to delete{" "}
               <span className="font-semibold text-foreground">
                 {deleteCandidate?.title || "this task"}
               </span>
@@ -623,7 +704,12 @@ export default function TasksPage() {
           </div>
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={closeDeleteDialog} disabled={Boolean(deletingTaskId)}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={closeDeleteDialog}
+              disabled={Boolean(deletingTaskId)}
+            >
               Cancel
             </Button>
             <Button
@@ -650,48 +736,70 @@ export default function TasksPage() {
           <form onSubmit={handleEditSubmit} className="space-y-6">
             <DialogHeader>
               <DialogTitle>Edit Task</DialogTitle>
-              <DialogDescription>Update task details and save to keep everyone aligned.</DialogDescription>
+              <DialogDescription>
+                Update task details and save to keep everyone aligned.
+              </DialogDescription>
             </DialogHeader>
 
             <div className="space-y-4">
               <div className="space-y-2">
-                <label htmlFor="edit-title" className="text-sm font-medium text-foreground">
+                <label
+                  htmlFor="edit-title"
+                  className="text-sm font-medium text-foreground"
+                >
                   Title
                 </label>
                 <Input
                   id="edit-title"
                   value={editForm.title}
-                  onChange={(e) => handleEditFieldChange("title", e.target.value)}
+                  onChange={(e) =>
+                    handleEditFieldChange("title", e.target.value)
+                  }
                   placeholder="Task title"
                 />
               </div>
 
               <div className="space-y-2">
-                <label htmlFor="edit-description" className="text-sm font-medium text-foreground">
+                <label
+                  htmlFor="edit-description"
+                  className="text-sm font-medium text-foreground"
+                >
                   Description
                 </label>
                 <textarea
                   id="edit-description"
                   className="min-h-[96px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   value={editForm.description}
-                  onChange={(e) => handleEditFieldChange("description", e.target.value)}
+                  onChange={(e) =>
+                    handleEditFieldChange("description", e.target.value)
+                  }
                   placeholder="Add helpful context for this task"
                 />
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
-                  <label htmlFor="edit-status" className="text-sm font-medium text-foreground">
+                  <label
+                    htmlFor="edit-status"
+                    className="text-sm font-medium text-foreground"
+                  >
                     Status
                   </label>
-                  <Select value={editForm.status} onValueChange={(value) => handleEditFieldChange("status", value)}>
+                  <Select
+                    value={editForm.status}
+                    onValueChange={(value) =>
+                      handleEditFieldChange("status", value)
+                    }
+                  >
                     <SelectTrigger id="edit-status">
                       <SelectValue placeholder="Select status" />
                     </SelectTrigger>
                     <SelectContent>
                       {STATUS.map((status) => (
                         <SelectItem key={status} value={status}>
-                          {STATUS_COLUMNS.find((column) => column.status === status)?.title || status}
+                          {STATUS_COLUMNS.find(
+                            (column) => column.status === status
+                          )?.title || status}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -699,10 +807,18 @@ export default function TasksPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <label htmlFor="edit-priority" className="text-sm font-medium text-foreground">
+                  <label
+                    htmlFor="edit-priority"
+                    className="text-sm font-medium text-foreground"
+                  >
                     Priority (1 = least urgent, 10 = most urgent)
                   </label>
-                  <Select value={editForm.priority} onValueChange={(value) => handleEditFieldChange("priority", value)}>
+                  <Select
+                    value={editForm.priority}
+                    onValueChange={(value) =>
+                      handleEditFieldChange("priority", value)
+                    }
+                  >
                     <SelectTrigger id="edit-priority">
                       <SelectValue placeholder="Select priority" />
                     </SelectTrigger>
@@ -718,14 +834,19 @@ export default function TasksPage() {
               </div>
 
               <div className="space-y-2">
-                <label htmlFor="edit-due-date" className="text-sm font-medium text-foreground">
+                <label
+                  htmlFor="edit-due-date"
+                  className="text-sm font-medium text-foreground"
+                >
                   Due date
                 </label>
                 <Input
                   id="edit-due-date"
                   type="date"
                   value={editForm.dueDate}
-                  onChange={(e) => handleEditFieldChange("dueDate", e.target.value)}
+                  onChange={(e) =>
+                    handleEditFieldChange("dueDate", e.target.value)
+                  }
                 />
               </div>
 
@@ -738,7 +859,12 @@ export default function TasksPage() {
             </div>
 
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={closeEditDialog} disabled={savingEdit}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={closeEditDialog}
+                disabled={savingEdit}
+              >
                 Cancel
               </Button>
               <Button type="submit" disabled={savingEdit}>
@@ -753,9 +879,15 @@ export default function TasksPage() {
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <h2 className="text-2xl font-bold text-foreground">My Tasks</h2>
-            <p className="text-sm text-muted-foreground">Tasks assigned to {currentUser?.displayName || currentUser?.email}</p>
+            <p className="text-sm text-muted-foreground">
+              Tasks assigned to {currentUser?.displayName || currentUser?.email}
+            </p>
           </div>
-          <Button variant="outline" onClick={handleRefresh} className="self-start lg:self-auto">
+          <Button
+            variant="outline"
+            onClick={handleRefresh}
+            className="self-start lg:self-auto"
+          >
             <RefreshCw className="h-4 w-4 mr-2" />
             Refresh
           </Button>
@@ -764,17 +896,25 @@ export default function TasksPage() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <Card className="p-4">
             <p className="text-sm text-muted-foreground">Total tasks</p>
-            <p className="text-2xl font-semibold text-foreground">{totalTasks}</p>
+            <p className="text-2xl font-semibold text-foreground">
+              {totalTasks}
+            </p>
           </Card>
           <Card className="p-4">
             <p className="text-sm text-muted-foreground">Overdue</p>
-            <p className={`text-2xl font-semibold ${overdueTasks.length ? "text-destructive" : "text-foreground"}`}>
+            <p
+              className={`text-2xl font-semibold ${
+                overdueTasks.length ? "text-destructive" : "text-foreground"
+              }`}
+            >
               {overdueTasks.length}
             </p>
           </Card>
           <Card className="p-4">
             <p className="text-sm text-muted-foreground">Active projects</p>
-            <p className="text-2xl font-semibold text-foreground">{projectsList.length}</p>
+            <p className="text-2xl font-semibold text-foreground">
+              {projectsList.length}
+            </p>
           </Card>
         </div>
 
@@ -865,7 +1005,8 @@ export default function TasksPage() {
                       </p>
                     </div>
                     <Badge variant="secondary">
-                      {project.tasks.length} task{project.tasks.length === 1 ? "" : "s"}
+                      {project.tasks.length} task
+                      {project.tasks.length === 1 ? "" : "s"}
                     </Badge>
                   </div>
                 </CardHeader>
@@ -874,7 +1015,8 @@ export default function TasksPage() {
                     {project.tasks.map((task) => {
                       const due = toDate(task.dueDate);
                       const updated = toDate(task.updatedAt);
-                      const overdue = due && due < new Date() && task.status !== "completed";
+                      const overdue =
+                        due && due < new Date() && task.status !== "completed";
                       return (
                         <button
                           key={task.id}
@@ -898,30 +1040,46 @@ export default function TasksPage() {
                             </Badge>
                           </div>
                           <div className="mt-3 flex flex-wrap items-center gap-2">
-                            <Badge className={getPriorityBadgeClass(task.priority)}>
+                            <Badge
+                              className={getPriorityBadgeClass(task.priority)}
+                            >
                               {priorityLabel(task.priority)}
                             </Badge>
-                            <span className={`text-xs text-muted-foreground ${overdue ? "text-destructive font-medium" : ""}`}>
+                            <span
+                              className={`text-xs text-muted-foreground ${
+                                overdue ? "text-destructive font-medium" : ""
+                              }`}
+                            >
                               Due: {due ? due.toLocaleDateString() : "—"}
                             </span>
-                            <span className="text-xs text-muted-foreground">Updated: {updated ? updated.toLocaleDateString() : "—"}</span>
+                            <span className="text-xs text-muted-foreground">
+                              Updated:{" "}
+                              {updated ? updated.toLocaleDateString() : "—"}
+                            </span>
                             {(() => {
                               const allAssigneeNames = [
                                 task.assigneeSummary?.name,
-                                ...(task.collaboratorNames || [])
+                                ...(task.collaboratorNames || []),
                               ].filter(Boolean);
-                              return allAssigneeNames.length > 0 && (
-                                <div className="flex flex-wrap gap-1">
-                                  {allAssigneeNames.map((name, idx) => (
-                                    <span key={idx} className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-xs font-medium">
-                                      {name}
-                                    </span>
-                                  ))}
-                                </div>
+                              return (
+                                allAssigneeNames.length > 0 && (
+                                  <div className="flex flex-wrap gap-1">
+                                    {allAssigneeNames.map((name, idx) => (
+                                      <span
+                                        key={idx}
+                                        className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-xs font-medium"
+                                      >
+                                        {name}
+                                      </span>
+                                    ))}
+                                  </div>
+                                )
                               );
                             })()}
                             {task.tags?.length > 0 && (
-                              <span className="text-xs text-muted-foreground">Tags: {task.tags.join(", ")}</span>
+                              <span className="text-xs text-muted-foreground">
+                                Tags: {task.tags.join(", ")}
+                              </span>
                             )}
                           </div>
                         </button>
@@ -943,6 +1101,45 @@ export default function TasksPage() {
           onEdit={openEditDialog}
           onDelete={requestDeleteTask}
           disableActions={Boolean(deletingTaskId) || savingEdit}
+          onSubtaskChange={async () => {
+            try {
+              // Small delay to let backend update
+              await new Promise((resolve) => setTimeout(resolve, 300));
+
+              // Refetch the specific task with updated progress
+              const updatedTask = await getTask(
+                selectedTask.projectId,
+                selectedTask.id
+              );
+
+              // Resolve assignee/creator like we do in handleTaskClick
+              const assigneeSummary = summarizeUser(
+                updatedTask.assigneeId || updatedTask.ownerId
+              );
+              const creatorSummary = summarizeUser(updatedTask.createdBy);
+
+              const refreshedTask = {
+                ...updatedTask,
+                assigneeSummary,
+                creatorSummary,
+              };
+
+              // Update the modal
+              setSelectedTask(refreshedTask);
+
+              // Update in the tasks list
+              setTasks((prevTasks) =>
+                prevTasks.map((t) =>
+                  t.id === refreshedTask.id ? refreshedTask : t
+                )
+              );
+            } catch (err) {
+              console.error(
+                "Failed to refresh task after subtask change:",
+                err
+              );
+            }
+          }}
         />
       )}
     </div>

@@ -252,6 +252,8 @@ export default function ProjectDetailPage() {
           const priority = Number.isFinite(priorityNumber)
             ? String(priorityNumber)
             : "";
+
+          //creator resolution
           const creatorId = task.createdBy;
           const creatorInfo = creatorId
             ? u.find((user) => user?.id === creatorId)
@@ -266,6 +268,21 @@ export default function ProjectDetailPage() {
             ? `User ${String(creatorId).slice(0, 4)}`
             : null;
 
+          //assignee resolution
+          const assigneeId = task.assigneeId || task.ownerId;
+          const assigneeInfo = assigneeId
+            ? u.find((user) => user?.id === assigneeId)
+            : null;
+          const assigneeName = assigneeInfo
+            ? assigneeInfo.fullName ||
+              assigneeInfo.displayName ||
+              assigneeInfo.name ||
+              assigneeInfo.email ||
+              assigneeId
+            : assigneeId
+            ? `User ${String(assigneeId).slice(0, 4)}`
+            : "Unassigned";
+
           return {
             ...task,
             projectId: id,
@@ -275,6 +292,8 @@ export default function ProjectDetailPage() {
               ? priorityNumber
               : null,
             collaboratorsIds: ensureArray(task.collaboratorsIds),
+
+            //creator
             creatorName,
             creatorSummary: creatorInfo
               ? {
@@ -285,6 +304,43 @@ export default function ProjectDetailPage() {
                   avatar: creatorInfo.avatar || creatorInfo.photoURL || "",
                 }
               : null,
+
+            assigneeSummary: assigneeInfo
+              ? {
+                  id: assigneeId,
+                  name: assigneeName,
+                  email: assigneeInfo.email || "",
+                  role: assigneeInfo.role || "",
+                  avatar: assigneeInfo.avatar || assigneeInfo.photoURL || "",
+                }
+              : { name: assigneeName, id: assigneeId },
+            collaboratorSummaries: ensureArray(task.collaboratorsIds).map(
+              (collabId) => {
+                const collabInfo = u.find((user) => user?.id === collabId);
+                if (collabInfo) {
+                  const collabName =
+                    collabInfo.fullName ||
+                    collabInfo.displayName ||
+                    collabInfo.name ||
+                    collabInfo.email ||
+                    collabId;
+                  return {
+                    id: collabId,
+                    name: collabName,
+                    email: collabInfo.email || "",
+                    role: collabInfo.role || "",
+                    avatar: collabInfo.avatar || collabInfo.photoURL || "",
+                  };
+                }
+                return {
+                  id: collabId,
+                  name: `User ${String(collabId).slice(0, 4)}`,
+                  email: "",
+                  role: "",
+                  avatar: "",
+                };
+              }
+            ),
           };
         });
         setProject(normalizedProject);
@@ -567,7 +623,7 @@ export default function ProjectDetailPage() {
       if (isActive) {
         if (current.includes(id)) return prev;
         if (current.length >= 10) {
-          toast.error("Maximum 10 assignees allowed per task");
+          toast.error("Maximum 5 assignees allowed per task");
           return prev;
         }
         return { ...prev, collaboratorsIds: [...current, id] };
@@ -671,8 +727,8 @@ export default function ProjectDetailPage() {
       setTaskError("At least one assignee is required.");
       return;
     }
-    if (selectedCollaborators.length > 10) {
-      setTaskError("Maximum 10 assignees allowed per task.");
+    if (selectedCollaborators.length > 5) {
+      setTaskError("Maximum 5 assignees allowed per task.");
       return;
     }
     if (!currentUser?.uid) {
@@ -741,6 +797,18 @@ export default function ProjectDetailPage() {
       await syncProjectStatusWithTasks(updatedTasksLocal);
 
       await load(currentUser.uid);
+      if (selectedTask && editingTaskId && selectedTask.id === editingTaskId) {
+        setTimeout(() => {
+          setTasks((currentTasks) => {
+            const freshTask = currentTasks.find((t) => t.id === editingTaskId);
+            if (freshTask) {
+              setSelectedTask(freshTask);
+            }
+            return currentTasks;
+          });
+        }, 100);
+      }
+
       handleTaskDialogChange(false);
     } catch (error) {
       setTaskError(
@@ -755,7 +823,11 @@ export default function ProjectDetailPage() {
     await updateTask(id, taskId, { status });
     const updated = tasks.map((t) => (t.id === taskId ? { ...t, status } : t));
     setTasks(updated);
-    await syncProjectStatusWithTasks(updated);
+
+    // TODO: Auto-sync disabled - causes filter confusion
+    // When re-enabling, separate project status from task filter state
+    // to avoid unexpected filter changes when updating task status
+    // await syncProjectStatusWithTasks(updated);
   }
 
   const requestDeleteTask = (task) => {
@@ -813,15 +885,22 @@ export default function ProjectDetailPage() {
     setEditingTaskId(task.id);
     setTaskError("");
     setSavingTask(false);
+    const primaryAssignee =
+      task.assigneeId || task.ownerId || currentUser?.uid || "";
+    const existingCollaborators = ensureArray(task.collaboratorsIds);
+    const allAssignees = primaryAssignee
+      ? [primaryAssignee, ...existingCollaborators]
+      : existingCollaborators;
+
     setTaskForm({
       title: task.title || "",
       description: task.description || "",
-      assigneeId: task.assigneeId || task.ownerId || currentUser?.uid || "",
+      assigneeId: primaryAssignee,
       dueDate: toDateInputValue(task.dueDate),
       priority: priorityValue,
       status: (task.status || "to-do").toLowerCase(),
       tags: Array.isArray(task.tags) ? task.tags.join(", ") : "",
-      collaboratorsIds: ensureArray(task.collaboratorsIds),
+      collaboratorsIds: allAssignees, // Include primary assignee in the list
     });
     setIsTaskDialogOpen(true);
   };
@@ -1034,7 +1113,7 @@ export default function ProjectDetailPage() {
                       type="button"
                       variant="outline"
                       className={`w-full justify-between ${
-                        selectedCollaborators.length > 10
+                        selectedCollaborators.length > 5
                           ? "border-destructive"
                           : ""
                       }`}
@@ -1044,12 +1123,12 @@ export default function ProjectDetailPage() {
                       </span>
                       <span
                         className={`text-xs ${
-                          selectedCollaborators.length > 10
+                          selectedCollaborators.length > 5
                             ? "text-destructive font-semibold"
                             : "text-muted-foreground"
                         }`}
                       >
-                        {selectedCollaborators.length}/10 selected
+                        {selectedCollaborators.length}/5 selected
                       </span>
                     </Button>
                   </DropdownMenuTrigger>
@@ -1085,7 +1164,7 @@ export default function ProjectDetailPage() {
                   </DropdownMenuContent>
                 </DropdownMenu>
                 <p className="text-xs text-muted-foreground">
-                  Required: Select 1-10 team members to assign this task to.
+                  Required: Select 1-5 team members to assign this task to.
                 </p>
               </div>
 
@@ -1230,7 +1309,9 @@ export default function ProjectDetailPage() {
                     className="h-8 rounded-full border border-border bg-muted/70 px-3 text-xs font-medium capitalize"
                     disabled={metaSaving}
                   >
-                    <span>Status: {STATUS_LABELS[pStatus] || "Select"}</span>
+                    <span>
+                      Project Status: {STATUS_LABELS[pStatus] || "Select"}
+                    </span>
                     <ChevronDown className="ml-1 h-3 w-3" />
                   </Button>
                 </DropdownMenuTrigger>
@@ -1261,7 +1342,8 @@ export default function ProjectDetailPage() {
                     disabled={metaSaving}
                   >
                     <span>
-                      Priority: {PROJECT_PRIORITY_LABELS[pPriority] || "Select"}
+                      Project Priority:{" "}
+                      {PROJECT_PRIORITY_LABELS[pPriority] || "Select"}
                     </span>
                     <ChevronDown className="ml-1 h-3 w-3" />
                   </Button>
@@ -1293,7 +1375,8 @@ export default function ProjectDetailPage() {
                 </Badge>
               )}
               <Badge variant="outline">
-                Team: {(project.teamIds || []).length}
+                Team: {(project.teamIds || []).length}{" "}
+                {(project.teamIds || []).length === 1 ? "member" : "members"}
               </Badge>
               <Badge variant="outline">
                 Tags: {(project.tags || []).join(", ") || "-"}
@@ -1368,7 +1451,7 @@ export default function ProjectDetailPage() {
                               <span className="font-medium truncate">
                                 {t.title}
                               </span>
-                              <StatusBadge status={project.status} />
+                              <StatusBadge status={t.status} />
                               <Badge
                                 className={priorityBadgeClass}
                                 variant="outline"
@@ -1622,15 +1705,50 @@ export default function ProjectDetailPage() {
           currentUserId={currentUser?.uid}
           onSubtaskChange={async () => {
             try {
+              await new Promise((resolve) => setTimeout(resolve, 300));
+
               const updatedTask = await getTask(project.id, selectedTask.id);
+              updatedTask.projectId = project.id;
+
+              const assigneeId = updatedTask.assigneeId || updatedTask.ownerId;
+              const assigneeInfo = users.find((u) => u?.id === assigneeId);
+              if (assigneeInfo) {
+                const assigneeName =
+                  assigneeInfo.fullName ||
+                  assigneeInfo.displayName ||
+                  assigneeInfo.name ||
+                  assigneeInfo.email ||
+                  assigneeId;
+                updatedTask.assigneeSummary = {
+                  id: assigneeId,
+                  name: assigneeName,
+                  email: assigneeInfo.email || "",
+                  role: assigneeInfo.role || "",
+                  avatar: assigneeInfo.avatar || assigneeInfo.photoURL || "",
+                };
+              } else if (assigneeId) {
+                updatedTask.assigneeSummary = {
+                  id: assigneeId,
+                  name: `User ${String(assigneeId).slice(0, 4)}`,
+                  email: "",
+                  role: "",
+                  avatar: "",
+                };
+              }
+
               setSelectedTask(updatedTask);
+              setTasks((prevTasks) =>
+                prevTasks.map((t) =>
+                  t.id === updatedTask.id ? updatedTask : t
+                )
+              );
               return updatedTask;
             } catch (err) {
               console.error(
                 "Failed to refresh selected task after subtask change:",
                 err
               );
-              throw err
+              throw err;
             }
           }}
         />

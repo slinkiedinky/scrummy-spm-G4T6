@@ -71,10 +71,10 @@ export function TaskDetailModal({
   });
 
   const assignee =
-    typeof task.assignee === "object" && task.assignee
-      ? task.assignee
+    typeof task.assigneeSummary === "object" && task.assigneeSummary
+      ? task.assigneeSummary
       : (() => {
-          const id = String(task.assignee || task.assigneeId || "");
+          const id = String(task.assigneeId || task.ownerId || "");
           return id
             ? { id, name: `User ${id.slice(0, 4)}`, role: "Member", avatar: "" }
             : { name: "Unassigned", role: "" };

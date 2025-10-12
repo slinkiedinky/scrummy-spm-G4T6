@@ -303,10 +303,12 @@ def create_task(project_id):
     title = (data.get("title") or "Untitled task").strip() or "Untitled task"
     description = (data.get("description") or "").strip()
     due_date = data.get("dueDate") or None
+    created_by = data.get("createdBy") or data.get("currentUserId") or assignee_id
 
     doc = {
         "assigneeId": assignee_id,
         "ownerId": assignee_id,
+        "createdBy": created_by,
         "collaboratorsIds": ensure_list(data.get("collaboratorsIds")),
         "createdAt": now,
         "description": description,

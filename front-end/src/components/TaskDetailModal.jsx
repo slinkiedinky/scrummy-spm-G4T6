@@ -236,7 +236,26 @@ const getPriorityColor = (priorityRaw) => {
                   </div>
                 </div>
               </div>
-
+              <div className="flex items-center gap-3">
+                <User className="h-4 w-4 text-muted-foreground" />
+                <div>
+                  <p className="text-sm font-medium text-foreground">Created by</p>
+                  <div className="flex items-center gap-2 mt-1">
+                    <Avatar className="h-6 w-6">
+                      <AvatarFallback className="text-xs">
+                        {toInitials(task.creatorName || (task.createdBy ? String(task.createdBy).slice(0, 4) : "?"))}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div>
+                      <p className="text-sm text-foreground">
+                        {task.creatorName || 
+                        (task.creatorSummary && task.creatorSummary.name) || 
+                        (task.createdBy ? `User ${String(task.createdBy).slice(0, 4)}` : "Unknown")}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
               <div className="flex items-start gap-3">
                 <Users className="h-4 w-4 text-muted-foreground mt-1" />
                 <div>

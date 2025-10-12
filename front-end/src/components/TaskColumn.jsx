@@ -53,6 +53,7 @@ const getPriorityColor = (nRaw) => {
 // }
 
 export function TaskColumn({ title, color, tasks, onTaskClick }) {
+    console.log('Tasks in column:', tasks.map(t => ({ title: t.title, createdBy: t.createdBy, creatorName: t.creatorName })));
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between mb-3">
@@ -129,7 +130,18 @@ export function TaskColumn({ title, color, tasks, onTaskClick }) {
                     </div>
                   ) : null
                 })()}
-
+                {(() => {
+                  const creatorId = task.createdBy;
+                  const creatorName = task.creatorName || 
+                    (task.creatorSummary && task.creatorSummary.name) || 
+                    (creatorId ? `User ${String(creatorId).slice(0, 4)}` : null);
+                  
+                  return creatorName ? (
+                    <div className="text-xs text-muted-foreground">
+                      Created by: {creatorName}
+                    </div>
+                  ) : null;
+                })()}
                 <div className="text-xs text-muted-foreground flex items-center gap-2">
                   <Calendar className="h-3 w-3" />
                   <span>

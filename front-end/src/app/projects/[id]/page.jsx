@@ -42,13 +42,17 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/components/ui/tabs";
-import { Plus, Trash2, AlertCircle, Loader2, Pencil, ChevronDown, Calendar as CalendarIcon, FileText } from "lucide-react";
+  Plus,
+  Trash2,
+  AlertCircle,
+  Loader2,
+  Pencil,
+  ChevronDown,
+  Calendar as CalendarIcon,
+  FileText,
+} from "lucide-react";
 import { format, startOfDay } from "date-fns";
 import { auth } from "@/lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
@@ -56,10 +60,13 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import * as XLSX from "xlsx";
 import { TeamTimeline } from "@/components/TeamTimeline";
-const TAG_BASE = "rounded-full px-2.5 py-1 text-xs font-medium inline-flex items-center gap-1";
+const TAG_BASE =
+  "rounded-full px-2.5 py-1 text-xs font-medium inline-flex items-center gap-1";
 
 const STATUS = ["to-do", "in progress", "completed", "blocked"];
-const TASK_PRIORITY_VALUES = Array.from({ length: 10 }, (_, i) => String(i + 1));
+const TASK_PRIORITY_VALUES = Array.from({ length: 10 }, (_, i) =>
+  String(i + 1)
+);
 const PROJECT_PRIORITIES = [
   { value: "low", label: "Low" },
   { value: "medium", label: "Medium" },
@@ -68,8 +75,8 @@ const PROJECT_PRIORITIES = [
 const STATUS_LABELS = {
   "to-do": "To-Do",
   "in progress": "In Progress",
-  "completed": "Completed",
-  "blocked": "Blocked",
+  completed: "Completed",
+  blocked: "Blocked",
 };
 const TASK_PRIORITY_LABELS = TASK_PRIORITY_VALUES.reduce((acc, value) => {
   acc[value] = `Priority ${value}`;
@@ -120,11 +127,14 @@ const getPriorityBadgeClass = (value) => {
 const ensureArray = (value) => {
   if (Array.isArray(value)) {
     return value
-      .map((item) => (typeof item === "string" ? item.trim() : String(item ?? "").trim()))
+      .map((item) =>
+        typeof item === "string" ? item.trim() : String(item ?? "").trim()
+      )
       .filter(Boolean);
   }
   if (value === undefined || value === null) return [];
-  const str = typeof value === "string" ? value.trim() : String(value ?? "").trim();
+  const str =
+    typeof value === "string" ? value.trim() : String(value ?? "").trim();
   return str ? [str] : [];
 };
 
@@ -181,14 +191,13 @@ export default function ProjectDetailPage() {
   const [deletingTaskId, setDeletingTaskId] = useState("");
   const isEditingTask = Boolean(editingTaskId);
 
-
-
   // ⭐ ADDED: infer next project status from a list of tasks
   const inferProjectStatusFromTasks = useCallback((arr) => {
     const list = Array.isArray(arr) ? arr : [];
     if (list.length === 0) return "to-do"; // default when no tasks
     const statuses = list.map((t) => (t?.status || "").toLowerCase());
-    const allCompleted = statuses.length > 0 && statuses.every((s) => s === "completed");
+    const allCompleted =
+      statuses.length > 0 && statuses.every((s) => s === "completed");
     if (allCompleted) return "completed";
     const anyInProgress = statuses.some((s) => s === "in progress");
     if (anyInProgress) return "in progress";
@@ -205,7 +214,9 @@ export default function ProjectDetailPage() {
       setPStatus(next);
       try {
         await updateProject(id, { status: next }); // persist
-        setProject((prevProject) => (prevProject ? { ...prevProject, status: next } : prevProject));
+        setProject((prevProject) =>
+          prevProject ? { ...prevProject, status: next } : prevProject
+        );
       } catch {
         // on failure, revert local state
         setPStatus(prev);
@@ -214,56 +225,93 @@ export default function ProjectDetailPage() {
     [id, inferProjectStatusFromTasks, pStatus]
   );
 
-  const load = useCallback(async (userId) => {
-    if (!userId) return;
+  const load = useCallback(
+    async (userId) => {
+      if (!userId) return;
 
-    try {
-      setLoading(true);
-      setErr("");
-      const [p, t, u] = await Promise.all([
-        getProject(id, { assignedTo: userId }),
-        listTasks(id, { assigneeId: userId }),
-        listUsers(),
-      ]);
-      const normalizedProject = { ...p, priority: ensureProjectPriority(p.priority) };
-
-      // normalize tasks once here so we can reuse the array
-      const normalizedTasks = (t || []).map((task) => {
-        const priorityNumber = Number(task.priority);
-        const priority = Number.isFinite(priorityNumber) ? String(priorityNumber) : "";
-        return {
-          ...task,
-          status: (task.status || "").toLowerCase(),
-          priority,
-          priorityNumber: Number.isFinite(priorityNumber) ? priorityNumber : null,
-          collaboratorsIds: ensureArray(task.collaboratorsIds),
+      try {
+        setLoading(true);
+        setErr("");
+        const [p, t, u] = await Promise.all([
+          getProject(id, { assignedTo: userId }),
+          listTasks(id, { assigneeId: userId }),
+          listUsers(),
+        ]);
+        const normalizedProject = {
+          ...p,
+          priority: ensureProjectPriority(p.priority),
         };
-      });
 
-      setProject(normalizedProject);
-      setTasks(normalizedTasks);
-      setUsers(Array.isArray(u) ? u : []);
-      setPStatus((p.status || "to-do").toLowerCase());
-      setPPriority(ensureProjectPriority(p.priority));
-      setSelectedMember("");
-      setMemberError("");
-      setDescriptionDraft(p.description || "");
-      setEditingDescription(false);
-      setMetaError("");
+        const normalizedTasks = (t || []).map((task) => {
+          const priorityNumber = Number(task.priority);
+          const priority = Number.isFinite(priorityNumber)
+            ? String(priorityNumber)
+            : "";
+          const creatorId = task.createdBy;
+          const creatorInfo = creatorId ? userLookup.get(creatorId) : null;
+          const creatorName = creatorInfo
+            ? creatorInfo.fullName ||
+              creatorInfo.displayName ||
+              creatorInfo.name ||
+              creatorInfo.email ||
+              creatorId
+            : creatorId
+            ? `User ${String(creatorId).slice(0, 4)}`
+            : null;
 
-      // (Optional) You can uncomment this if you want auto-sync also on initial load
-      // await syncProjectStatusWithTasks(normalizedTasks);
+          return {
+            ...task,
+            status: (task.status || "").toLowerCase(),
+            priority,
+            priorityNumber: Number.isFinite(priorityNumber)
+              ? priorityNumber
+              : null,
+            collaboratorsIds: ensureArray(task.collaboratorsIds),
+            creatorName,
+            creatorSummary: creatorInfo
+              ? {
+                  id: creatorId,
+                  name: creatorName,
+                  email: creatorInfo.email || "",
+                  role: creatorInfo.role || "",
+                  avatar: creatorInfo.avatar || creatorInfo.photoURL || "",
+                }
+              : null,
+          };
+        });
+        console.log(
+          "Normalized tasks with creators:",
+          normalizedTasks.map((t) => ({
+            title: t.title,
+            createdBy: t.createdBy,
+            creatorName: t.creatorName,
+          }))
+        );
+        setProject(normalizedProject);
+        setTasks(normalizedTasks);
+        setUsers(Array.isArray(u) ? u : []);
+        setPStatus((p.status || "to-do").toLowerCase());
+        setPPriority(ensureProjectPriority(p.priority));
+        setSelectedMember("");
+        setMemberError("");
+        setDescriptionDraft(p.description || "");
+        setEditingDescription(false);
+        setMetaError("");
 
-    } catch (e) {
-      setErr(e?.message || "Failed to load project");
-      setProject(null);
-      setTasks([]);
-      setUsers([]);
-      setMemberError("");
-    } finally {
-      setLoading(false);
-    }
-  }, [id /*, syncProjectStatusWithTasks*/]);
+        // (Optional) You can uncomment this if you want auto-sync also on initial load
+        // await syncProjectStatusWithTasks(normalizedTasks);
+      } catch (e) {
+        setErr(e?.message || "Failed to load project");
+        setProject(null);
+        setTasks([]);
+        setUsers([]);
+        setMemberError("");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [id /*, syncProjectStatusWithTasks*/]
+  );
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -291,30 +339,36 @@ export default function ProjectDetailPage() {
     resetTaskForm();
   }, [resetTaskForm]);
 
-  const handleTaskDialogChange = useCallback((open) => {
-    setIsTaskDialogOpen(open);
-    if (!open) {
-      setTaskError("");
-      setSavingTask(false);
-      setEditingTaskId(null);
-      resetTaskForm();
-    }
-  }, [resetTaskForm]);
+  const handleTaskDialogChange = useCallback(
+    (open) => {
+      setIsTaskDialogOpen(open);
+      if (!open) {
+        setTaskError("");
+        setSavingTask(false);
+        setEditingTaskId(null);
+        resetTaskForm();
+      }
+    },
+    [resetTaskForm]
+  );
 
-  const applyProjectUpdates = useCallback(async (updates) => {
-    if (!updates || Object.keys(updates).length === 0) return;
-    try {
-      setMetaError("");
-      setMetaSaving(true);
-      await updateProject(id, updates);
-      setProject((prev) => (prev ? { ...prev, ...updates } : prev));
-    } catch (error) {
-      setMetaError(error?.message || "Failed to update project.");
-      throw error;
-    } finally {
-      setMetaSaving(false);
-    }
-  }, [id]);
+  const applyProjectUpdates = useCallback(
+    async (updates) => {
+      if (!updates || Object.keys(updates).length === 0) return;
+      try {
+        setMetaError("");
+        setMetaSaving(true);
+        await updateProject(id, updates);
+        setProject((prev) => (prev ? { ...prev, ...updates } : prev));
+      } catch (error) {
+        setMetaError(error?.message || "Failed to update project.");
+        throw error;
+      } finally {
+        setMetaSaving(false);
+      }
+    },
+    [id]
+  );
 
   const handleStatusChange = async (value) => {
     const prevValue = pStatus;
@@ -351,9 +405,16 @@ export default function ProjectDetailPage() {
   const updateTaskForm = (field, value) => {
     setTaskForm((prev) => {
       if (field === "assigneeId") {
-        const trimmedValue = typeof value === "string" ? value.trim() : String(value ?? "");
-        const filteredCollaborators = ensureArray(prev.collaboratorsIds).filter((id) => id !== trimmedValue);
-        return { ...prev, assigneeId: trimmedValue, collaboratorsIds: filteredCollaborators };
+        const trimmedValue =
+          typeof value === "string" ? value.trim() : String(value ?? "");
+        const filteredCollaborators = ensureArray(prev.collaboratorsIds).filter(
+          (id) => id !== trimmedValue
+        );
+        return {
+          ...prev,
+          assigneeId: trimmedValue,
+          collaboratorsIds: filteredCollaborators,
+        };
       }
       return { ...prev, [field]: value };
     });
@@ -380,13 +441,22 @@ export default function ProjectDetailPage() {
     return map;
   }, [users]);
 
-  const resolveUserLabel = useCallback((id) => {
-    if (!id) return "";
-    const info = userLookup.get(id);
-    if (!info) return id;
-    const label = (info.fullName || info.displayName || info.name || info.email || "").trim();
-    return label || id;
-  }, [userLookup]);
+  const resolveUserLabel = useCallback(
+    (id) => {
+      if (!id) return "";
+      const info = userLookup.get(id);
+      if (!info) return id;
+      const label = (
+        info.fullName ||
+        info.displayName ||
+        info.name ||
+        info.email ||
+        ""
+      ).trim();
+      return label || id;
+    },
+    [userLookup]
+  );
 
   const teamMembers = useMemo(() => {
     const ids = Array.isArray(project?.teamIds) ? [...project.teamIds] : [];
@@ -395,7 +465,9 @@ export default function ProjectDetailPage() {
     }
     const seen = new Set();
     return ids
-      .map((raw) => (typeof raw === "string" ? raw.trim() : String(raw ?? "")).trim())
+      .map((raw) =>
+        (typeof raw === "string" ? raw.trim() : String(raw ?? "")).trim()
+      )
       .filter((id) => {
         if (!id) return false;
         if (seen.has(id)) return false;
@@ -404,7 +476,12 @@ export default function ProjectDetailPage() {
       })
       .map((id) => {
         const info = userLookup.get(id);
-        const fullName = (info?.fullName || info?.displayName || info?.name || "").trim();
+        const fullName = (
+          info?.fullName ||
+          info?.displayName ||
+          info?.name ||
+          ""
+        ).trim();
         const email = (info?.email || "").trim();
         const role = typeof info?.role === "string" ? info.role.trim() : "";
         const displayName = fullName || email || id;
@@ -433,7 +510,10 @@ export default function ProjectDetailPage() {
   }, [users, teamMembers, resolveUserLabel]);
 
   useEffect(() => {
-    if (selectedMember && !availableUsers.some((user) => user.id === selectedMember)) {
+    if (
+      selectedMember &&
+      !availableUsers.some((user) => user.id === selectedMember)
+    ) {
       setSelectedMember("");
     }
   }, [availableUsers, selectedMember]);
@@ -446,25 +526,30 @@ export default function ProjectDetailPage() {
 
   const isSubmitDisabled = savingTask || !taskForm.title.trim();
 
-  const collaboratorOptions = useMemo(() =>
-    teamMembers.map((member) => ({
-      id: member.id,
-      label: member.displayName || resolveUserLabel(member.id),
-      email: member.email,
-      isOwner: member.isOwner,
-      isCurrentUser: member.isCurrentUser,
-    })),
-  [teamMembers, resolveUserLabel]);
+  const collaboratorOptions = useMemo(
+    () =>
+      teamMembers.map((member) => ({
+        id: member.id,
+        label: member.displayName || resolveUserLabel(member.id),
+        email: member.email,
+        isOwner: member.isOwner,
+        isCurrentUser: member.isCurrentUser,
+      })),
+    [teamMembers, resolveUserLabel]
+  );
 
   const selectedCollaborators = ensureArray(taskForm.collaboratorsIds);
   const selectedCollaboratorNames = selectedCollaborators
     .map((id) => resolveUserLabel(id))
     .filter(Boolean);
-  const collaboratorButtonLabel = selectedCollaboratorNames.length === 0
-    ? "Select assignees"
-    : selectedCollaboratorNames.length <= 2
+  const collaboratorButtonLabel =
+    selectedCollaboratorNames.length === 0
+      ? "Select assignees"
+      : selectedCollaboratorNames.length <= 2
       ? selectedCollaboratorNames.join(", ")
-      : `${selectedCollaboratorNames.slice(0, 2).join(", ")} +${selectedCollaboratorNames.length - 2} more`;
+      : `${selectedCollaboratorNames.slice(0, 2).join(", ")} +${
+          selectedCollaboratorNames.length - 2
+        } more`;
 
   useEffect(() => {
     const allowedIds = new Set(collaboratorOptions.map((option) => option.id));
@@ -486,7 +571,10 @@ export default function ProjectDetailPage() {
         if (current.includes(id)) return prev;
         return { ...prev, collaboratorsIds: [...current, id] };
       }
-      return { ...prev, collaboratorsIds: current.filter((value) => value !== id) };
+      return {
+        ...prev,
+        collaboratorsIds: current.filter((value) => value !== id),
+      };
     });
   };
 
@@ -502,7 +590,10 @@ export default function ProjectDetailPage() {
       return;
     }
 
-    if (Array.isArray(project.teamIds) && project.teamIds.includes(selectedMember)) {
+    if (
+      Array.isArray(project.teamIds) &&
+      project.teamIds.includes(selectedMember)
+    ) {
       setSelectedMember("");
       return;
     }
@@ -511,7 +602,10 @@ export default function ProjectDetailPage() {
     setMemberError("");
     try {
       const nextTeamIds = Array.from(
-        new Set([...(Array.isArray(project.teamIds) ? project.teamIds : []), selectedMember])
+        new Set([
+          ...(Array.isArray(project.teamIds) ? project.teamIds : []),
+          selectedMember,
+        ])
       );
       await updateProject(id, { teamIds: nextTeamIds });
       setProject((prev) => (prev ? { ...prev, teamIds: nextTeamIds } : prev));
@@ -539,8 +633,12 @@ export default function ProjectDetailPage() {
       setMemberError("");
       setRemovingMemberId(memberId);
       try {
-        const currentTeam = Array.isArray(project?.teamIds) ? project.teamIds : [];
-        const nextTeamIds = currentTeam.filter((idValue) => idValue !== memberId);
+        const currentTeam = Array.isArray(project?.teamIds)
+          ? project.teamIds
+          : [];
+        const nextTeamIds = currentTeam.filter(
+          (idValue) => idValue !== memberId
+        );
         await updateProject(id, { teamIds: nextTeamIds });
         setProject((prev) => (prev ? { ...prev, teamIds: nextTeamIds } : prev));
       } catch (error) {
@@ -584,7 +682,9 @@ export default function ProjectDetailPage() {
 
     try {
       const numericPriority = Number(taskForm.priority);
-      const priorityValue = Number.isFinite(numericPriority) ? numericPriority : 5;
+      const priorityValue = Number.isFinite(numericPriority)
+        ? numericPriority
+        : 5;
       const tags = taskForm.tags
         .split(",")
         .map((tag) => tag.trim())
@@ -601,6 +701,7 @@ export default function ProjectDetailPage() {
         assigneeId: primaryAssignee,
         collaboratorsIds: otherAssignees.length > 0 ? otherAssignees : [],
         tags,
+        createdBy: currentUser?.uid,
       };
 
       // Due date is required now
@@ -620,12 +721,21 @@ export default function ProjectDetailPage() {
       if (isEditingTask && editingTaskId) {
         await updateTask(id, editingTaskId, payload);
         updatedTasksLocal = tasks.map((t) =>
-          t.id === editingTaskId ? { ...t, ...payload, status: String(payload.status).toLowerCase() } : t
+          t.id === editingTaskId
+            ? { ...t, ...payload, status: String(payload.status).toLowerCase() }
+            : t
         );
       } else {
         await createTask(id, payload);
         // include the new task (id unknown yet; temp id is fine for inference)
-        updatedTasksLocal = [...tasks, { id: "temp", ...payload, status: String(payload.status).toLowerCase() }];
+        updatedTasksLocal = [
+          ...tasks,
+          {
+            id: "temp",
+            ...payload,
+            status: String(payload.status).toLowerCase(),
+          },
+        ];
       }
 
       // ⭐ ADDED: auto-sync project status after create/edit
@@ -634,7 +744,10 @@ export default function ProjectDetailPage() {
       await load(currentUser.uid);
       handleTaskDialogChange(false);
     } catch (error) {
-      setTaskError(error?.message ?? (isEditingTask ? "Failed to update task." : "Failed to create task."));
+      setTaskError(
+        error?.message ??
+          (isEditingTask ? "Failed to update task." : "Failed to create task.")
+      );
       setSavingTask(false);
     }
   }
@@ -699,7 +812,9 @@ export default function ProjectDetailPage() {
   const handleEditTask = (task) => {
     if (!task) return;
     const priorityNumber = Number(task.priorityNumber ?? task.priority);
-    const priorityValue = Number.isFinite(priorityNumber) ? String(priorityNumber) : "5";
+    const priorityValue = Number.isFinite(priorityNumber)
+      ? String(priorityNumber)
+      : "5";
     setEditingTaskId(task.id);
     setTaskError("");
     setSavingTask(false);
@@ -763,8 +878,7 @@ export default function ProjectDetailPage() {
 
           <div className="space-y-3">
             <p className="text-sm text-muted-foreground">
-              Are you sure you want to delete
-              {" "}
+              Are you sure you want to delete{" "}
               <span className="font-semibold text-foreground">
                 {deleteCandidate?.title || "this task"}
               </span>
@@ -779,7 +893,12 @@ export default function ProjectDetailPage() {
           </div>
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={closeDeleteDialog} disabled={Boolean(deletingTaskId)}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={closeDeleteDialog}
+              disabled={Boolean(deletingTaskId)}
+            >
               Cancel
             </Button>
             <Button
@@ -798,7 +917,9 @@ export default function ProjectDetailPage() {
         <DialogContent className="max-h-[90vh] overflow-y-auto">
           <form onSubmit={handleSubmitTask} className="space-y-6">
             <DialogHeader>
-              <DialogTitle>{isEditingTask ? "Edit Task" : "Add Task"}</DialogTitle>
+              <DialogTitle>
+                {isEditingTask ? "Edit Task" : "Add Task"}
+              </DialogTitle>
               <DialogDescription>
                 {isEditingTask
                   ? "Update the task details and save your changes."
@@ -808,7 +929,12 @@ export default function ProjectDetailPage() {
 
             <div className="space-y-4">
               <div className="space-y-2">
-                <label htmlFor="task-title" className="text-sm font-medium text-foreground">Title</label>
+                <label
+                  htmlFor="task-title"
+                  className="text-sm font-medium text-foreground"
+                >
+                  Title
+                </label>
                 <Input
                   id="task-title"
                   value={taskForm.title}
@@ -819,20 +945,35 @@ export default function ProjectDetailPage() {
               </div>
 
               <div className="space-y-2">
-                <label htmlFor="task-description" className="text-sm font-medium text-foreground">Description</label>
+                <label
+                  htmlFor="task-description"
+                  className="text-sm font-medium text-foreground"
+                >
+                  Description
+                </label>
                 <textarea
                   id="task-description"
                   className="min-h-[96px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   value={taskForm.description}
-                  onChange={(e) => updateTaskForm("description", e.target.value)}
+                  onChange={(e) =>
+                    updateTaskForm("description", e.target.value)
+                  }
                   placeholder="Wireframes + final design in Figma"
                 />
               </div>
 
               <div className="grid gap-4 grid-cols-2">
                 <div className="space-y-2">
-                  <label htmlFor="task-status" className="text-sm font-medium text-foreground">Status</label>
-                  <Select value={taskForm.status} onValueChange={(value) => updateTaskForm("status", value)}>
+                  <label
+                    htmlFor="task-status"
+                    className="text-sm font-medium text-foreground"
+                  >
+                    Status
+                  </label>
+                  <Select
+                    value={taskForm.status}
+                    onValueChange={(value) => updateTaskForm("status", value)}
+                  >
                     <SelectTrigger id="task-status" className="w-full">
                       <SelectValue placeholder="Select status" />
                     </SelectTrigger>
@@ -847,14 +988,24 @@ export default function ProjectDetailPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <label htmlFor="task-priority" className="text-sm font-medium text-foreground">Priority</label>
-                  <Select value={taskForm.priority} onValueChange={(value) => updateTaskForm("priority", value)}>
+                  <label
+                    htmlFor="task-priority"
+                    className="text-sm font-medium text-foreground"
+                  >
+                    Priority
+                  </label>
+                  <Select
+                    value={taskForm.priority}
+                    onValueChange={(value) => updateTaskForm("priority", value)}
+                  >
                     <SelectTrigger id="task-priority" className="w-full">
                       <SelectValue placeholder="Select priority" />
                     </SelectTrigger>
                     <SelectContent>
                       {TASK_PRIORITY_VALUES.map((p) => (
-                        <SelectItem key={p} value={p}>{p}</SelectItem>
+                        <SelectItem key={p} value={p}>
+                          {p}
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -862,7 +1013,10 @@ export default function ProjectDetailPage() {
               </div>
 
               <div className="space-y-2">
-                <label htmlFor="task-due" className="text-sm font-medium text-foreground">
+                <label
+                  htmlFor="task-due"
+                  className="text-sm font-medium text-foreground"
+                >
                   Due date <span className="text-destructive">*</span>
                 </label>
                 <Input
@@ -881,7 +1035,11 @@ export default function ProjectDetailPage() {
                 </label>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button type="button" variant="outline" className="w-full justify-between">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full justify-between"
+                    >
                       <span className="truncate text-left">
                         {collaboratorButtonLabel}
                       </span>
@@ -894,18 +1052,26 @@ export default function ProjectDetailPage() {
                     <DropdownMenuLabel>Select assignees</DropdownMenuLabel>
                     <DropdownMenuSeparator />
                     {collaboratorOptions.length === 0 ? (
-                      <div className="px-2 py-1.5 text-sm text-muted-foreground">Add team members to this project first.</div>
+                      <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                        Add team members to this project first.
+                      </div>
                     ) : (
                       collaboratorOptions.map((option) => (
                         <DropdownMenuCheckboxItem
                           key={option.id}
                           checked={selectedCollaborators.includes(option.id)}
-                          onCheckedChange={(checked) => handleCollaboratorToggle(option.id, checked)}
+                          onCheckedChange={(checked) =>
+                            handleCollaboratorToggle(option.id, checked)
+                          }
                         >
                           <div className="flex flex-col">
-                            <span className="leading-tight">{option.label}</span>
+                            <span className="leading-tight">
+                              {option.label}
+                            </span>
                             {option.email && option.email !== option.label && (
-                              <span className="text-xs text-muted-foreground leading-tight">{option.email}</span>
+                              <span className="text-xs text-muted-foreground leading-tight">
+                                {option.email}
+                              </span>
                             )}
                           </div>
                         </DropdownMenuCheckboxItem>
@@ -914,19 +1080,27 @@ export default function ProjectDetailPage() {
                   </DropdownMenuContent>
                 </DropdownMenu>
                 <p className="text-xs text-muted-foreground">
-                  Required: Select at least one team member to assign this task to.
+                  Required: Select at least one team member to assign this task
+                  to.
                 </p>
               </div>
 
               <div className="space-y-2">
-                <label htmlFor="task-tags" className="text-sm font-medium text-foreground">Tags</label>
+                <label
+                  htmlFor="task-tags"
+                  className="text-sm font-medium text-foreground"
+                >
+                  Tags
+                </label>
                 <Input
                   id="task-tags"
                   value={taskForm.tags}
                   onChange={(e) => updateTaskForm("tags", e.target.value)}
                   placeholder="design, UI"
                 />
-                <p className="text-xs text-muted-foreground">Separate tags with commas.</p>
+                <p className="text-xs text-muted-foreground">
+                  Separate tags with commas.
+                </p>
               </div>
 
               {taskError && (
@@ -938,7 +1112,12 @@ export default function ProjectDetailPage() {
             </div>
 
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => handleTaskDialogChange(false)} disabled={savingTask}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => handleTaskDialogChange(false)}
+                disabled={savingTask}
+              >
                 Cancel
               </Button>
               <Button type="submit" disabled={isSubmitDisabled}>
@@ -947,8 +1126,8 @@ export default function ProjectDetailPage() {
                     ? "Saving..."
                     : "Creating..."
                   : isEditingTask
-                    ? "Save Changes"
-                    : "Create Task"}
+                  ? "Save Changes"
+                  : "Create Task"}
               </Button>
             </DialogFooter>
           </form>
@@ -960,7 +1139,9 @@ export default function ProjectDetailPage() {
           <div className="space-y-4">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div className="min-w-0 flex-1 space-y-3">
-                <h1 className="text-3xl font-bold break-words">{project.name || "(untitled project)"}</h1>
+                <h1 className="text-3xl font-bold break-words">
+                  {project.name || "(untitled project)"}
+                </h1>
                 {editingDescription ? (
                   <div className="space-y-2">
                     <textarea
@@ -970,7 +1151,11 @@ export default function ProjectDetailPage() {
                       placeholder="Describe the goals, scope, or key milestones for this project."
                     />
                     <div className="flex flex-wrap gap-2">
-                      <Button size="sm" onClick={handleDescriptionSave} disabled={metaSaving}>
+                      <Button
+                        size="sm"
+                        onClick={handleDescriptionSave}
+                        disabled={metaSaving}
+                      >
                         {metaSaving ? (
                           <span className="flex items-center gap-2">
                             <Loader2 className="h-4 w-4 animate-spin" />
@@ -996,8 +1181,13 @@ export default function ProjectDetailPage() {
                   </div>
                 ) : (
                   <div className="flex flex-wrap items-start gap-2 text-sm text-muted-foreground">
-                    <p className={`max-w-3xl leading-relaxed ${project.description ? "" : "italic"}`}>
-                      {project.description || "Add a description so the team knows the project goals."}
+                    <p
+                      className={`max-w-3xl leading-relaxed ${
+                        project.description ? "" : "italic"
+                      }`}
+                    >
+                      {project.description ||
+                        "Add a description so the team knows the project goals."}
                     </p>
                     <Button
                       type="button"
@@ -1066,7 +1256,9 @@ export default function ProjectDetailPage() {
                     className="h-8 rounded-full border border-border bg-muted/70 px-3 text-xs font-medium capitalize"
                     disabled={metaSaving}
                   >
-                    <span>Priority: {PROJECT_PRIORITY_LABELS[pPriority] || "Select"}</span>
+                    <span>
+                      Priority: {PROJECT_PRIORITY_LABELS[pPriority] || "Select"}
+                    </span>
                     <ChevronDown className="ml-1 h-3 w-3" />
                   </Button>
                 </DropdownMenuTrigger>
@@ -1080,7 +1272,10 @@ export default function ProjectDetailPage() {
                     }}
                   >
                     {PROJECT_PRIORITIES.map((option) => (
-                      <DropdownMenuRadioItem key={option.value} value={option.value}>
+                      <DropdownMenuRadioItem
+                        key={option.value}
+                        value={option.value}
+                      >
                         {option.label}
                       </DropdownMenuRadioItem>
                     ))}
@@ -1089,10 +1284,16 @@ export default function ProjectDetailPage() {
               </DropdownMenu>
 
               {project.dueDate && (
-                <Badge variant="secondary">Due: {format(toDate(project.dueDate), "dd MMM yyyy")}</Badge>
+                <Badge variant="secondary">
+                  Due: {format(toDate(project.dueDate), "dd MMM yyyy")}
+                </Badge>
               )}
-              <Badge variant="outline">Team: {(project.teamIds || []).length}</Badge>
-              <Badge variant="outline">Tags: {(project.tags || []).join(", ") || "-"}</Badge>
+              <Badge variant="outline">
+                Team: {(project.teamIds || []).length}
+              </Badge>
+              <Badge variant="outline">
+                Tags: {(project.tags || []).join(", ") || "-"}
+              </Badge>
               <Badge variant="outline">Overdue tasks: {overdueCount}</Badge>
               <Button
                 type="button"
@@ -1117,37 +1318,56 @@ export default function ProjectDetailPage() {
 
             <TabsContent value="tasks" className="mt-0">
               <Card className="p-4 not-print">
-                  <div className="mb-4 flex items-center justify-between">
-                    <h2 className="text-xl font-semibold">Tasks</h2>
-                    <Button onClick={openCreateTaskDialog} className="bg-primary text-primary-foreground hover:bg-primary/90">
-                      <Plus className="mr-2 h-4 w-4" />
-                      Add Task
-                    </Button>
-                  </div>
+                <div className="mb-4 flex items-center justify-between">
+                  <h2 className="text-xl font-semibold">Tasks</h2>
+                  <Button
+                    onClick={openCreateTaskDialog}
+                    className="bg-primary text-primary-foreground hover:bg-primary/90"
+                  >
+                    <Plus className="mr-2 h-4 w-4" />
+                    Add Task
+                  </Button>
+                </div>
 
-                  {tasks.length === 0 ? (
-                    <div className="text-sm text-muted-foreground">No tasks yet.</div>
-                  ) : (
-                    <div className="divide-y divide-border">
+                {tasks.length === 0 ? (
+                  <div className="text-sm text-muted-foreground">
+                    No tasks yet.
+                  </div>
+                ) : (
+                  <div className="divide-y divide-border">
                     {tasks.map((t) => {
                       const allAssigneeIds = [
                         t.assigneeId,
-                        ...(t.collaboratorsIds || [])
+                        ...(t.collaboratorsIds || []),
                       ].filter(Boolean);
-                      const allAssigneeNames = allAssigneeIds.map(id => resolveUserLabel(id));
-                      const priorityValue = t.priority ? String(t.priority) : "";
+                      const allAssigneeNames = allAssigneeIds.map((id) =>
+                        resolveUserLabel(id)
+                      );
+                      const priorityValue = t.priority
+                        ? String(t.priority)
+                        : "";
                       const priorityLabel = priorityValue
-                        ? TASK_PRIORITY_LABELS[priorityValue] || `Priority ${priorityValue}`
+                        ? TASK_PRIORITY_LABELS[priorityValue] ||
+                          `Priority ${priorityValue}`
                         : "Priority —";
-                      const priorityBadgeClass = getPriorityBadgeClass(priorityValue);
+                      const priorityBadgeClass =
+                        getPriorityBadgeClass(priorityValue);
 
                       return (
-                        <div key={t.id} className="flex items-center justify-between gap-3 py-3">
+                        <div
+                          key={t.id}
+                          className="flex items-center justify-between gap-3 py-3"
+                        >
                           <div className="min-w-0">
                             <div className="flex items-center gap-2">
-                              <span className="font-medium truncate">{t.title}</span>
+                              <span className="font-medium truncate">
+                                {t.title}
+                              </span>
                               <StatusBadge status={project.status} />
-                              <Badge className={priorityBadgeClass} variant="outline">
+                              <Badge
+                                className={priorityBadgeClass}
+                                variant="outline"
+                              >
                                 {priorityLabel}
                               </Badge>
                             </div>
@@ -1157,17 +1377,26 @@ export default function ProjectDetailPage() {
                             <div className="mt-1.5 flex flex-wrap items-center gap-2">
                               {t.dueDate && (
                                 <span className="text-xs text-muted-foreground">
-                                  Due: {format(toDate(t.dueDate), "dd MMM yyyy")}
+                                  Due:{" "}
+                                  {format(toDate(t.dueDate), "dd MMM yyyy")}
                                 </span>
                               )}
                               {allAssigneeNames.length > 0 && (
                                 <div className="flex flex-wrap gap-1">
                                   {allAssigneeNames.map((name, idx) => (
-                                    <span key={idx} className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-xs font-medium">
+                                    <span
+                                      key={idx}
+                                      className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-xs font-medium"
+                                    >
                                       {name}
                                     </span>
                                   ))}
                                 </div>
+                              )}
+                              {t.creatorName && (
+                                <span className="text-xs text-muted-foreground">
+                                  Created by: {t.creatorName}
+                                </span>
                               )}
                               {(t.tags || []).length > 0 && (
                                 <span className="text-xs text-muted-foreground">
@@ -1178,8 +1407,15 @@ export default function ProjectDetailPage() {
                           </div>
 
                           <div className="flex items-center gap-2">
-                            <Select value={(t.status || "to-do").toLowerCase()} onValueChange={(value) => handleTaskStatus(t.id, value)}>
-                              <SelectTrigger className="w-[160px]"><SelectValue placeholder="Status" /></SelectTrigger>
+                            <Select
+                              value={(t.status || "to-do").toLowerCase()}
+                              onValueChange={(value) =>
+                                handleTaskStatus(t.id, value)
+                              }
+                            >
+                              <SelectTrigger className="w-[160px]">
+                                <SelectValue placeholder="Status" />
+                              </SelectTrigger>
                               <SelectContent>
                                 {STATUS.map((s) => (
                                   <SelectItem key={s} value={s}>
@@ -1226,7 +1462,9 @@ export default function ProjectDetailPage() {
               <Card className="p-4 space-y-4 not-print">
                 <div className="space-y-2">
                   <h2 className="text-xl font-semibold">Team members</h2>
-                  <p className="text-xs text-muted-foreground">Manage collaborators assigned to this project.</p>
+                  <p className="text-xs text-muted-foreground">
+                    Manage collaborators assigned to this project.
+                  </p>
                 </div>
 
                 <div className="space-y-2">
@@ -1237,7 +1475,11 @@ export default function ProjectDetailPage() {
                   >
                     <SelectTrigger className="h-9 w-full text-sm">
                       <SelectValue
-                        placeholder={availableUsers.length === 0 ? "No available users" : "Select a user"}
+                        placeholder={
+                          availableUsers.length === 0
+                            ? "No available users"
+                            : "Select a user"
+                        }
                       />
                     </SelectTrigger>
                     <SelectContent>
@@ -1248,13 +1490,22 @@ export default function ProjectDetailPage() {
                       ) : (
                         availableUsers.map((user) => (
                           <SelectItem key={user.id} value={user.id}>
-                            {`${user.label}${user.email && user.email !== user.label ? ` (${user.email})` : ""}`}
+                            {`${user.label}${
+                              user.email && user.email !== user.label
+                                ? ` (${user.email})`
+                                : ""
+                            }`}
                           </SelectItem>
                         ))
                       )}
                     </SelectContent>
                   </Select>
-                  <Button size="sm" onClick={handleAddMember} disabled={addingMember || !selectedMember} className="w-full">
+                  <Button
+                    size="sm"
+                    onClick={handleAddMember}
+                    disabled={addingMember || !selectedMember}
+                    className="w-full"
+                  >
                     {addingMember ? "Adding..." : "Add"}
                   </Button>
                 </div>
@@ -1267,37 +1518,50 @@ export default function ProjectDetailPage() {
                 )}
 
                 {teamMembers.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No team members yet.</p>
+                  <p className="text-sm text-muted-foreground">
+                    No team members yet.
+                  </p>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {teamMembers.map((member) => {
-                      const displayName = member.displayName || member.fullName || member.email || member.id;
+                      const displayName =
+                        member.displayName ||
+                        member.fullName ||
+                        member.email ||
+                        member.id;
                       const secondary =
                         member.email && member.email !== displayName
                           ? member.email
                           : member.id !== displayName
-                            ? member.id
-                            : "";
+                          ? member.id
+                          : "";
                       const isRemoving = removingMemberId === member.id;
                       return (
-                        <Card
-                          key={member.id}
-                          className="p-4 space-y-3"
-                        >
+                        <Card key={member.id} className="p-4 space-y-3">
                           <div className="space-y-1">
-                            <p className="truncate text-sm font-medium text-foreground">{displayName}</p>
+                            <p className="truncate text-sm font-medium text-foreground">
+                              {displayName}
+                            </p>
                             {secondary && (
-                              <p className="truncate text-xs text-muted-foreground">{secondary}</p>
+                              <p className="truncate text-xs text-muted-foreground">
+                                {secondary}
+                              </p>
                             )}
                             <div className="flex flex-wrap items-center gap-2 text-[10px] text-muted-foreground uppercase">
                               {member.role && (
-                                <span className="rounded-full border border-border px-2 py-0.5 tracking-wide">{member.role}</span>
+                                <span className="rounded-full border border-border px-2 py-0.5 tracking-wide">
+                                  {member.role}
+                                </span>
                               )}
                               {member.isCurrentUser && (
-                                <span className="rounded-full bg-secondary/80 px-2 py-0.5 text-secondary-foreground">You</span>
+                                <span className="rounded-full bg-secondary/80 px-2 py-0.5 text-secondary-foreground">
+                                  You
+                                </span>
                               )}
                               {member.isOwner && (
-                                <span className="rounded-full border border-border px-2 py-0.5 text-muted-foreground">Owner</span>
+                                <span className="rounded-full border border-border px-2 py-0.5 text-muted-foreground">
+                                  Owner
+                                </span>
                               )}
                             </div>
                           </div>
@@ -1350,7 +1614,11 @@ function ReportPanel({ project, tasks, onClose, resolveUserLabel }) {
   const generatedAt = new Date().toLocaleString();
 
   const today = new Date();
-  const startToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const startToday = new Date(
+    today.getFullYear(),
+    today.getMonth(),
+    today.getDate()
+  );
   const endOfToday = new Date(startToday.getTime() + 86399999);
   const endNext7 = new Date(startToday.getTime() + 7 * 86400000 + 86399999);
 
@@ -1360,21 +1628,35 @@ function ReportPanel({ project, tasks, onClose, resolveUserLabel }) {
     const status = (task.status || "").toLowerCase();
     return due && status !== "completed" && due < startToday;
   });
-  const overduePct = total === 0 ? 0 : Math.round((overdueTasks.length / total) * 100);
+  const overduePct =
+    total === 0 ? 0 : Math.round((overdueTasks.length / total) * 100);
 
   const overdueAges = overdueTasks
-    .map((task) => Math.ceil((startToday.getTime() - toDate(task.dueDate).getTime()) / 86400000))
+    .map((task) =>
+      Math.ceil(
+        (startToday.getTime() - toDate(task.dueDate).getTime()) / 86400000
+      )
+    )
     .sort((a, b) => a - b);
-  const medianDaysOverdue = overdueAges.length === 0
-    ? 0
-    : (overdueAges.length % 2
-        ? overdueAges[(overdueAges.length - 1) / 2]
-        : Math.round((overdueAges[overdueAges.length / 2 - 1] + overdueAges[overdueAges.length / 2]) / 2));
+  const medianDaysOverdue =
+    overdueAges.length === 0
+      ? 0
+      : overdueAges.length % 2
+      ? overdueAges[(overdueAges.length - 1) / 2]
+      : Math.round(
+          (overdueAges[overdueAges.length / 2 - 1] +
+            overdueAges[overdueAges.length / 2]) /
+            2
+        );
 
   const dueToday = tasks.filter((task) => {
     const due = toDate(task.dueDate);
     if (!due) return false;
-    const normalized = new Date(due.getFullYear(), due.getMonth(), due.getDate());
+    const normalized = new Date(
+      due.getFullYear(),
+      due.getMonth(),
+      due.getDate()
+    );
     return normalized.getTime() === startToday.getTime();
   });
   const next7Days = tasks.filter((task) => {
@@ -1385,9 +1667,12 @@ function ReportPanel({ project, tasks, onClose, resolveUserLabel }) {
   const team = Array.isArray(project.teamIds) ? project.teamIds : [];
   const owners = tasks.map((task) => task.ownerId).filter(Boolean);
   const assignees = tasks.map((task) => task.assigneeId).filter(Boolean);
-  const collaborators = tasks.flatMap((task) => ensureArray(task.collaboratorsIds));
+  const collaborators = tasks.flatMap((task) =>
+    ensureArray(task.collaboratorsIds)
+  );
 
-  const normalizeId = (value) => (typeof value === "string" ? value.trim() : String(value ?? "").trim());
+  const normalizeId = (value) =>
+    typeof value === "string" ? value.trim() : String(value ?? "").trim();
   const counts = {};
   [...team, ...owners, ...assignees, ...collaborators].forEach((raw) => {
     const id = normalizeId(raw);
@@ -1459,7 +1744,12 @@ function ReportPanel({ project, tasks, onClose, resolveUserLabel }) {
       body: [
         ["Status", (project.status || "").toLowerCase()],
         ["Priority", (project.priority || "").toLowerCase()],
-        ["Due date", project.dueDate ? new Date(toDate(project.dueDate)).toLocaleDateString() : "-"],
+        [
+          "Due date",
+          project.dueDate
+            ? new Date(toDate(project.dueDate)).toLocaleDateString()
+            : "-",
+        ],
         ["Team Members", String((project.teamIds || []).length)],
         ["Tags", (project.tags || []).join(", ") || "-"],
       ],
@@ -1486,7 +1776,10 @@ function ReportPanel({ project, tasks, onClose, resolveUserLabel }) {
     });
     y = (doc.lastAutoTable?.finalY || y) + 16;
 
-    const workloadRows = workloadEntries.map((entry) => [entry.label, String(entry.count)]);
+    const workloadRows = workloadEntries.map((entry) => [
+      entry.label,
+      String(entry.count),
+    ]);
 
     autoTable(doc, {
       startY: y,
@@ -1499,9 +1792,27 @@ function ReportPanel({ project, tasks, onClose, resolveUserLabel }) {
     y = (doc.lastAutoTable?.finalY || y) + 16;
 
     const deadlineRows = [
-      ...dueToday.map((task) => ["Due Today", task.title, task.dueDate ? new Date(toDate(task.dueDate)).toLocaleDateString() : "-"]),
-      ...overdueTasks.map((task) => ["Overdue", task.title, task.dueDate ? new Date(toDate(task.dueDate)).toLocaleDateString() : "-"]),
-      ...next7Days.map((task) => ["Due Next 7 Days", task.title, task.dueDate ? new Date(toDate(task.dueDate)).toLocaleDateString() : "-"]),
+      ...dueToday.map((task) => [
+        "Due Today",
+        task.title,
+        task.dueDate
+          ? new Date(toDate(task.dueDate)).toLocaleDateString()
+          : "-",
+      ]),
+      ...overdueTasks.map((task) => [
+        "Overdue",
+        task.title,
+        task.dueDate
+          ? new Date(toDate(task.dueDate)).toLocaleDateString()
+          : "-",
+      ]),
+      ...next7Days.map((task) => [
+        "Due Next 7 Days",
+        task.title,
+        task.dueDate
+          ? new Date(toDate(task.dueDate)).toLocaleDateString()
+          : "-",
+      ]),
     ];
 
     autoTable(doc, {
@@ -1517,8 +1828,16 @@ function ReportPanel({ project, tasks, onClose, resolveUserLabel }) {
         const pageHeight = pageSize.height || pageSize.getHeight();
         doc.setFontSize(9);
         doc.setTextColor("#6b7280");
-        doc.text(`Generated: ${generatedAt} • ${title}`, margin, pageHeight - 14);
-        doc.text(`Page ${doc.getNumberOfPages()}`, pageSize.width - margin - 60, pageHeight - 14);
+        doc.text(
+          `Generated: ${generatedAt} • ${title}`,
+          margin,
+          pageHeight - 14
+        );
+        doc.text(
+          `Page ${doc.getNumberOfPages()}`,
+          pageSize.width - margin - 60,
+          pageHeight - 14
+        );
         doc.setTextColor("#111827");
       },
     });
@@ -1536,7 +1855,10 @@ function ReportPanel({ project, tasks, onClose, resolveUserLabel }) {
       ["Project name", project.name || ""],
       ["Project status", (project.status || "").toLowerCase()],
       ["Priority", (project.priority || "").toLowerCase()],
-      ["Due date", project.dueDate ? new Date(toDate(project.dueDate)).toISOString() : ""],
+      [
+        "Due date",
+        project.dueDate ? new Date(toDate(project.dueDate)).toISOString() : "",
+      ],
       [],
       ["Total tasks", total],
       ["Overdue tasks", overdueTasks.length],
@@ -1556,14 +1878,34 @@ function ReportPanel({ project, tasks, onClose, resolveUserLabel }) {
 
     const deadlinesSheet = XLSX.utils.aoa_to_sheet([
       ["Bucket", "Task", "DueDate"],
-      ...dueToday.map((task) => ["Due Today", task.title, task.dueDate ? new Date(toDate(task.dueDate)).toISOString() : ""]),
-      ...overdueTasks.map((task) => ["Overdue", task.title, task.dueDate ? new Date(toDate(task.dueDate)).toISOString() : ""]),
-      ...next7Days.map((task) => ["Next 7 Days", task.title, task.dueDate ? new Date(toDate(task.dueDate)).toISOString() : ""]),
+      ...dueToday.map((task) => [
+        "Due Today",
+        task.title,
+        task.dueDate ? new Date(toDate(task.dueDate)).toISOString() : "",
+      ]),
+      ...overdueTasks.map((task) => [
+        "Overdue",
+        task.title,
+        task.dueDate ? new Date(toDate(task.dueDate)).toISOString() : "",
+      ]),
+      ...next7Days.map((task) => [
+        "Next 7 Days",
+        task.title,
+        task.dueDate ? new Date(toDate(task.dueDate)).toISOString() : "",
+      ]),
     ]);
     XLSX.utils.book_append_sheet(workbook, deadlinesSheet, "Deadlines");
 
     const tasksSheet = XLSX.utils.aoa_to_sheet([
-      ["Title", "Status", "Priority", "Assignee", "DueDate", "Tags", "Description"],
+      [
+        "Title",
+        "Status",
+        "Priority",
+        "Assignee",
+        "DueDate",
+        "Tags",
+        "Description",
+      ],
       ...tasks.map((task) => [
         task.title || "",
         (task.status || "").toLowerCase(),
@@ -1586,15 +1928,23 @@ function ReportPanel({ project, tasks, onClose, resolveUserLabel }) {
         <div className="mb-4 flex items-center justify-between not-print">
           <h2 className="text-2xl font-semibold">Project report</h2>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={exportPDFProgrammatic}>Export PDF</Button>
-            <Button variant="outline" onClick={exportExcel}>Export Excel</Button>
-            <Button variant="ghost" onClick={onClose}>Close</Button>
+            <Button variant="outline" onClick={exportPDFProgrammatic}>
+              Export PDF
+            </Button>
+            <Button variant="outline" onClick={exportExcel}>
+              Export Excel
+            </Button>
+            <Button variant="ghost" onClick={onClose}>
+              Close
+            </Button>
           </div>
         </div>
 
         <div className="space-y-6">
           <header className="border-b pb-3">
-            <div className="text-xs text-muted-foreground">Generated: {generatedAt}</div>
+            <div className="text-xs text-muted-foreground">
+              Generated: {generatedAt}
+            </div>
             <h3 className="text-xl font-semibold">{title}</h3>
           </header>
 
@@ -1603,10 +1953,20 @@ function ReportPanel({ project, tasks, onClose, resolveUserLabel }) {
             <p className="text-muted-foreground">{project.description}</p>
             <div className="mt-2 flex flex-wrap gap-2">
               <StatusBadge status={project.status} />
-              <Badge variant="secondary">Priority: {(project.priority || "medium").toLowerCase()}</Badge>
-              {project.dueDate && <Badge variant="secondary">Due: {format(toDate(project.dueDate), "dd MMM yyyy")}</Badge>}
-              <Badge variant="outline">Team: {(project.teamIds || []).length}</Badge>
-              <Badge variant="outline">Tags: {(project.tags || []).join(", ") || "-"}</Badge>
+              <Badge variant="secondary">
+                Priority: {(project.priority || "medium").toLowerCase()}
+              </Badge>
+              {project.dueDate && (
+                <Badge variant="secondary">
+                  Due: {format(toDate(project.dueDate), "dd MMM yyyy")}
+                </Badge>
+              )}
+              <Badge variant="outline">
+                Team: {(project.teamIds || []).length}
+              </Badge>
+              <Badge variant="outline">
+                Tags: {(project.tags || []).join(", ") || "-"}
+              </Badge>
             </div>
           </section>
 
@@ -1619,14 +1979,24 @@ function ReportPanel({ project, tasks, onClose, resolveUserLabel }) {
               </Card>
               <Card className="p-4">
                 <div className="text-sm text-muted-foreground">% Overdue</div>
-                <div className={`text-2xl font-bold ${overduePct >= 20 ? "text-red-600" : ""}`}>{overduePct}%</div>
+                <div
+                  className={`text-2xl font-bold ${
+                    overduePct >= 20 ? "text-red-600" : ""
+                  }`}
+                >
+                  {overduePct}%
+                </div>
               </Card>
               <Card className="p-4">
-                <div className="text-sm text-muted-foreground">Median days overdue</div>
+                <div className="text-sm text-muted-foreground">
+                  Median days overdue
+                </div>
                 <div className="text-2xl font-bold">{medianDaysOverdue}</div>
               </Card>
               <Card className="p-4">
-                <div className="text-sm text-muted-foreground">Due soon (7 days)</div>
+                <div className="text-sm text-muted-foreground">
+                  Due soon (7 days)
+                </div>
                 <div className="text-2xl font-bold">{next7Days.length}</div>
               </Card>
             </div>
@@ -1635,11 +2005,16 @@ function ReportPanel({ project, tasks, onClose, resolveUserLabel }) {
           <section>
             <h4 className="mb-2 font-semibold">Workload (tasks per member)</h4>
             {workloadEntries.length === 0 ? (
-              <div className="text-sm text-muted-foreground">No assigned work yet.</div>
+              <div className="text-sm text-muted-foreground">
+                No assigned work yet.
+              </div>
             ) : (
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {workloadEntries.map((entry) => (
-                  <Card key={entry.id} className="flex items-center justify-between p-4">
+                  <Card
+                    key={entry.id}
+                    className="flex items-center justify-between p-4"
+                  >
                     <div className="text-sm">{entry.label}</div>
                     <div className="text-xl font-bold">{entry.count}</div>
                   </Card>
@@ -1682,7 +2057,10 @@ function ReportPanel({ project, tasks, onClose, resolveUserLabel }) {
                 ) : (
                   <ul className="space-y-1 text-sm">
                     {next7Days.map((task) => (
-                      <li key={task.id}>• {task.title} — {format(toDate(task.dueDate), "dd MMM")}</li>
+                      <li key={task.id}>
+                        • {task.title} —{" "}
+                        {format(toDate(task.dueDate), "dd MMM")}
+                      </li>
                     ))}
                   </ul>
                 )}
@@ -1695,15 +2073,22 @@ function ReportPanel({ project, tasks, onClose, resolveUserLabel }) {
             <Card className={`p-4 ${AT_RISK ? "border-red-500" : ""}`}>
               {AT_RISK ? (
                 <div>
-                  <div className="font-medium text-red-600">⚠ Project is AT RISK</div>
+                  <div className="font-medium text-red-600">
+                    ⚠ Project is AT RISK
+                  </div>
                   <div className="text-sm text-muted-foreground">
-                    Triggered because {overduePct}% overdue and/or {overdueTasks.length} tasks overdue.
+                    Triggered because {overduePct}% overdue and/or{" "}
+                    {overdueTasks.length} tasks overdue.
                   </div>
                 </div>
               ) : (
                 <div>
-                  <div className="font-medium text-emerald-600">Project is healthy</div>
-                  <div className="text-sm text-muted-foreground">Overdue backlog is within thresholds.</div>
+                  <div className="font-medium text-emerald-600">
+                    Project is healthy
+                  </div>
+                  <div className="text-sm text-muted-foreground">
+                    Overdue backlog is within thresholds.
+                  </div>
                 </div>
               )}
             </Card>
@@ -1716,13 +2101,17 @@ function ReportPanel({ project, tasks, onClose, resolveUserLabel }) {
 
 function StatusBadge({ status }) {
   const s = (status || "").toLowerCase();
-  
+
   const getStatusStyle = (status) => {
     const s = (status || "").toLowerCase();
-    if (s === "to-do" || s === "todo") return `${TAG_BASE} bg-gray-100 text-gray-700 border border-gray-200`;
-    if (s === "in progress" || s === "in-progress") return `${TAG_BASE} bg-blue-100 text-blue-700 border border-blue-200`;
-    if (s === "completed" || s === "done") return `${TAG_BASE} bg-emerald-100 text-emerald-700 border border-emerald-200`;
-    if (s === "blocked") return `${TAG_BASE} bg-red-100 text-red-700 border border-red-200`;
+    if (s === "to-do" || s === "todo")
+      return `${TAG_BASE} bg-gray-100 text-gray-700 border border-gray-200`;
+    if (s === "in progress" || s === "in-progress")
+      return `${TAG_BASE} bg-blue-100 text-blue-700 border border-blue-200`;
+    if (s === "completed" || s === "done")
+      return `${TAG_BASE} bg-emerald-100 text-emerald-700 border border-emerald-200`;
+    if (s === "blocked")
+      return `${TAG_BASE} bg-red-100 text-red-700 border border-red-200`;
     return `${TAG_BASE} bg-gray-100 text-gray-700 border border-gray-200`; // fallback
   };
 
@@ -1734,6 +2123,7 @@ function toDate(v) {
   if (!v) return null;
   if (v instanceof Date) return v;
   if (typeof v === "string" || typeof v === "number") return new Date(v);
-  if (typeof v === "object" && "seconds" in v) return new Date(v.seconds * 1000);
+  if (typeof v === "object" && "seconds" in v)
+    return new Date(v.seconds * 1000);
   return null;
 }

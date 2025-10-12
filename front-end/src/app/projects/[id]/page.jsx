@@ -60,6 +60,8 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import * as XLSX from "xlsx";
 import { TeamTimeline } from "@/components/TeamTimeline";
+import { toast } from "sonner";
+
 const TAG_BASE =
   "rounded-full px-2.5 py-1 text-xs font-medium inline-flex items-center gap-1";
 
@@ -711,6 +713,8 @@ export default function ProjectDetailPage() {
 
       if (isEditingTask && editingTaskId) {
         await updateTask(id, editingTaskId, payload);
+        toast.success("Task updated successfully!");
+
         updatedTasksLocal = tasks.map((t) =>
           t.id === editingTaskId
             ? { ...t, ...payload, status: String(payload.status).toLowerCase() }
@@ -718,7 +722,7 @@ export default function ProjectDetailPage() {
         );
       } else {
         await createTask(id, payload);
-        // include the new task (id unknown yet; temp id is fine for inference)
+        toast.success("Task created successfully!");
         updatedTasksLocal = [
           ...tasks,
           {
@@ -728,8 +732,6 @@ export default function ProjectDetailPage() {
           },
         ];
       }
-
-      // ⭐ ADDED: auto-sync project status after create/edit
       await syncProjectStatusWithTasks(updatedTasksLocal);
 
       await load(currentUser.uid);
@@ -747,8 +749,6 @@ export default function ProjectDetailPage() {
     await updateTask(id, taskId, { status });
     const updated = tasks.map((t) => (t.id === taskId ? { ...t, status } : t));
     setTasks(updated);
-
-    // ⭐ ADDED: auto-sync project status after inline status change
     await syncProjectStatusWithTasks(updated);
   }
 
@@ -777,8 +777,6 @@ export default function ProjectDetailPage() {
       await deleteTask(id, taskId);
       const remaining = tasks.filter((t) => t.id !== taskId);
       setTasks(remaining);
-
-      // ⭐ ADDED: auto-sync project status after delete
       await syncProjectStatusWithTasks(remaining);
 
       if (editingTaskId === taskId) {

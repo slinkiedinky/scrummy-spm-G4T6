@@ -34,6 +34,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 const ensureArray = (value) => {
   if (Array.isArray(value)) {
@@ -151,6 +161,8 @@ export default function TasksPage() {
     status: "to-do",
     priority: "5",
     dueDate: "",
+    tags: "",
+    collaboratorsIds: [],
   });
   const [editError, setEditError] = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
@@ -504,6 +516,12 @@ export default function TasksPage() {
       const base = resolveTaskRecord(task);
       if (!base) return;
       setEditingTask(base);
+      const primaryAssignee = base.assigneeId || base.ownerId || "";
+      const existingCollaborators = ensureArray(base.collaboratorsIds);
+      const allAssignees = primaryAssignee
+        ? [primaryAssignee, ...existingCollaborators]
+        : existingCollaborators;
+
       setEditForm({
         title: base.title || "",
         description: base.description || "",
@@ -514,6 +532,8 @@ export default function TasksPage() {
             ? String(base.priorityNumber)
             : "5"),
         dueDate: toDateInputValue(base.dueDate),
+        tags: Array.isArray(base.tags) ? base.tags.join(", ") : "",
+        collaboratorsIds: allAssignees,
       });
       setEditError("");
       setSavingEdit(false);
@@ -560,11 +580,38 @@ export default function TasksPage() {
       setEditError("");
 
       try {
+        // Validation for assignees
+        if (
+          !editForm.collaboratorsIds ||
+          editForm.collaboratorsIds.length === 0
+        ) {
+          setEditError("At least one assignee is required.");
+          setSavingEdit(false);
+          return;
+        }
+        if (editForm.collaboratorsIds.length > 5) {
+          setEditError("Maximum 5 assignees allowed per task.");
+          setSavingEdit(false);
+          return;
+        }
+
+        // Parse tags
+        const tags = editForm.tags
+          .split(",")
+          .map((tag) => tag.trim())
+          .filter(Boolean);
+
+        // Split assignees: first is primary, rest are collaborators
+        const [primaryAssignee, ...otherAssignees] = editForm.collaboratorsIds;
+
         const payload = {
           title,
           description: editForm.description.trim(),
           status: editForm.status || "to-do",
           priority: clampedPriority,
+          assigneeId: primaryAssignee,
+          collaboratorsIds: otherAssignees.length > 0 ? otherAssignees : [],
+          tags,
         };
 
         if (editForm.dueDate) {
@@ -849,7 +896,104 @@ export default function TasksPage() {
                   }
                 />
               </div>
+              {/* NEW: Assignees field */}
+              <div className="space-y-2">
+                <label
+                  htmlFor="edit-assignees"
+                  className="text-sm font-medium text-foreground"
+                >
+                  Assignees
+                </label>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className={`w-full justify-between ${
+                        editForm.collaboratorsIds.length > 5
+                          ? "border-destructive"
+                          : ""
+                      }`}
+                    >
+                      <span className="truncate text-left">
+                        {editForm.collaboratorsIds.length === 0
+                          ? "Select assignees"
+                          : `${editForm.collaboratorsIds.length} selected`}
+                      </span>
+                      <span
+                        className={`text-xs ${
+                          editForm.collaboratorsIds.length > 5
+                            ? "text-destructive font-semibold"
+                            : "text-muted-foreground"
+                        }`}
+                      >
+                        {editForm.collaboratorsIds.length}/5 selected
+                      </span>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent className="w-64">
+                    <DropdownMenuLabel>Select assignees</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    {users.length === 0 ? (
+                      <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                        No users available
+                      </div>
+                    ) : (
+                      users.map((user) => (
+                        <DropdownMenuCheckboxItem
+                          key={user.id}
+                          checked={editForm.collaboratorsIds.includes(user.id)}
+                          onCheckedChange={(checked) => {
+                            const current = editForm.collaboratorsIds;
+                            const updated = checked
+                              ? [...current, user.id]
+                              : current.filter((id) => id !== user.id);
+                            handleEditFieldChange("collaboratorsIds", updated);
+                          }}
+                        >
+                          <div className="flex flex-col">
+                            <span className="leading-tight">
+                              {user.fullName ||
+                                user.displayName ||
+                                user.name ||
+                                user.email}
+                            </span>
+                            {user.email && (
+                              <span className="text-xs text-muted-foreground leading-tight">
+                                {user.email}
+                              </span>
+                            )}
+                          </div>
+                        </DropdownMenuCheckboxItem>
+                      ))
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                <p className="text-xs text-muted-foreground">
+                  Required: Select 1-5 team members to assign this task to.
+                </p>
+              </div>
 
+              {/* NEW: Tags field */}
+              <div className="space-y-2">
+                <label
+                  htmlFor="edit-tags"
+                  className="text-sm font-medium text-foreground"
+                >
+                  Tags
+                </label>
+                <Input
+                  id="edit-tags"
+                  value={editForm.tags}
+                  onChange={(e) =>
+                    handleEditFieldChange("tags", e.target.value)
+                  }
+                  placeholder="e.g., frontend, urgent, bug-fix"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Separate multiple tags with commas
+                </p>
+              </div>
               {editError && (
                 <div className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
                   <AlertCircle className="h-4 w-4" />

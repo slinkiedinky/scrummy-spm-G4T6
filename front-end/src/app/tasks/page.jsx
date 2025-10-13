@@ -16,8 +16,17 @@ import {
 } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Search, Filter, RefreshCw, AlertCircle, Trash2 } from "lucide-react";
-
+import {
+  Search,
+  Filter,
+  RefreshCw,
+  AlertCircle,
+  Trash2,
+  ChevronDown,
+  ChevronRight,
+  CheckCircle2,
+  Circle,
+} from "lucide-react";
 import { auth } from "@/lib/firebase";
 import {
   listAssignedTasks,
@@ -25,6 +34,10 @@ import {
   updateTask,
   deleteTask,
   getTask,
+  listSubtasks,
+  getSubtask,
+  updateSubtask,
+  deleteSubtask,
 } from "@/lib/api";
 import {
   Dialog,
@@ -134,7 +147,189 @@ const toDateInputValue = (value) => {
   if (!date) return "";
   return date.toISOString().slice(0, 10);
 };
+function TaskCardWithSubtasks({
+  task,
+  onClick,
+  onSubtaskClick,
+  getStatusBadgeClass,
+  statusLabel,
+  getPriorityBadgeClass,
+  priorityLabel,
+  toDate,
+}) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [subtasks, setSubtasks] = useState([]);
+  const [loadingSubtasks, setLoadingSubtasks] = useState(false);
 
+  const hasSubtasks = (task.subtaskCount || 0) > 0;
+
+  const handleToggleExpand = async (e) => {
+    e.stopPropagation();
+
+    if (!isExpanded && subtasks.length === 0 && hasSubtasks) {
+      setLoadingSubtasks(true);
+      try {
+        const data = await listSubtasks(task.projectId, task.id);
+        setSubtasks(data || []);
+      } catch (error) {
+        console.error("Failed to load subtasks:", error);
+        setSubtasks([]);
+      } finally {
+        setLoadingSubtasks(false);
+      }
+    }
+
+    setIsExpanded(!isExpanded);
+  };
+
+  const handleSubtaskClick = (e, subtask) => {
+    e.stopPropagation();
+    onSubtaskClick(subtask, task);
+  };
+
+  const due = toDate(task.dueDate);
+  const updated = toDate(task.updatedAt);
+  const overdue = due && due < new Date() && task.status !== "completed";
+
+  return (
+    <div className="rounded-lg border border-border bg-background/50 transition hover:border-primary/40">
+      <button
+        type="button"
+        onClick={() => onClick(task)}
+        className="w-full text-left p-4 focus:outline-none focus:ring-2 focus:ring-primary/40"
+      >
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="flex-1 min-w-0 flex items-start gap-2">
+            {hasSubtasks && (
+              <div
+                onClick={handleToggleExpand}
+                className="flex-shrink-0 p-1 hover:bg-muted rounded transition mt-0.5 cursor-pointer"
+                aria-label={
+                  isExpanded ? "Collapse subtasks" : "Expand subtasks"
+                }
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    handleToggleExpand(e);
+                  }
+                }}
+              >
+                {isExpanded ? (
+                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                ) : (
+                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                )}
+              </div>
+            )}
+
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-foreground truncate">
+                {task.title || "Untitled task"}
+              </p>
+              {task.description && (
+                <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                  {task.description}
+                </p>
+              )}
+            </div>
+          </div>
+          <Badge className={getStatusBadgeClass(task.status)}>
+            {statusLabel(task.status)}
+          </Badge>
+        </div>
+
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <Badge className={getPriorityBadgeClass(task.priority)}>
+            {priorityLabel(task.priority)}
+          </Badge>
+
+          {hasSubtasks && (
+            <Badge variant="outline" className="text-xs">
+              {task.subtaskCompletedCount || 0}/{task.subtaskCount || 0}{" "}
+              subtasks
+            </Badge>
+          )}
+
+          <span
+            className={`text-xs text-muted-foreground ${
+              overdue ? "text-destructive font-medium" : ""
+            }`}
+          >
+            Due: {due ? due.toLocaleDateString() : "—"}
+          </span>
+          <span className="text-xs text-muted-foreground">
+            Updated: {updated ? updated.toLocaleDateString() : "—"}
+          </span>
+
+          {(() => {
+            const allAssigneeNames = [
+              task.assigneeSummary?.name,
+              ...(task.collaboratorNames || []),
+            ].filter(Boolean);
+            return (
+              allAssigneeNames.length > 0 && (
+                <div className="flex flex-wrap gap-1">
+                  {allAssigneeNames.map((name, idx) => (
+                    <span
+                      key={idx}
+                      className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-xs font-medium"
+                    >
+                      {name}
+                    </span>
+                  ))}
+                </div>
+              )
+            );
+          })()}
+
+          {task.tags?.length > 0 && (
+            <span className="text-xs text-muted-foreground">
+              Tags: {task.tags.join(", ")}
+            </span>
+          )}
+        </div>
+      </button>
+
+      {isExpanded && hasSubtasks && (
+        <div className="px-4 pb-3 border-t border-border/50 pt-3">
+          {loadingSubtasks ? (
+            <p className="text-xs text-muted-foreground py-2">
+              Loading subtasks...
+            </p>
+          ) : subtasks.length === 0 ? (
+            <p className="text-xs text-muted-foreground py-2">No subtasks</p>
+          ) : (
+            <div className="space-y-1">
+              {subtasks.map((subtask) => (
+                <div
+                  key={subtask.id}
+                  onClick={(e) => handleSubtaskClick(e, subtask)}
+                  className="flex items-center gap-2 p-2 rounded hover:bg-muted/50 cursor-pointer transition text-xs"
+                >
+                  {subtask.status === "completed" ? (
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600 flex-shrink-0" />
+                  ) : (
+                    <Circle className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                  )}
+                  <span
+                    className={`flex-1 truncate ${
+                      subtask.status === "completed"
+                        ? "line-through text-muted-foreground"
+                        : "text-foreground"
+                    }`}
+                  >
+                    {subtask.title}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 export default function TasksPage() {
   const [currentUser, setCurrentUser] = useState(null);
   const [userLoading, setUserLoading] = useState(true);
@@ -510,7 +705,66 @@ export default function TasksPage() {
     },
     [resolveTaskRecord, summarizeUser]
   );
+  const handleSubtaskClick = useCallback(
+    async (subtask, parentTask) => {
+      try {
+        // Load full subtask details
+        const fullSubtask = await getSubtask(
+          parentTask.projectId,
+          parentTask.id,
+          subtask.id
+        );
 
+        fullSubtask.projectId = parentTask.projectId;
+        fullSubtask.parentTaskId = parentTask.id;
+        fullSubtask.isSubtask = true;
+
+        // Resolve assignee
+        const assigneeSummary = summarizeUser(
+          fullSubtask.assigneeId || fullSubtask.ownerId
+        );
+
+        // Resolve creator
+        const creatorSummary = summarizeUser(fullSubtask.createdBy);
+
+        // Resolve collaborators
+        const collaboratorIds = Array.isArray(fullSubtask.collaboratorsIds)
+          ? fullSubtask.collaboratorsIds
+          : [];
+
+        const collaboratorNames = collaboratorIds
+          .map((collabId) => {
+            const summary = summarizeUser(collabId);
+            return summary ? summary.name : null;
+          })
+          .filter(Boolean);
+
+        const collaborators = collaboratorIds.map((collabId, index) => {
+          const summary = summarizeUser(collabId);
+          return (
+            summary || {
+              id: String(collabId),
+              name: fallbackUserLabel(collabId, index),
+              email: "",
+              role: "",
+              avatar: "",
+            }
+          );
+        });
+
+        setSelectedTask({
+          ...fullSubtask,
+          assigneeSummary,
+          creatorSummary,
+          collaboratorNames,
+          collaborators,
+        });
+      } catch (error) {
+        console.error("Failed to load subtask:", error);
+      }
+    },
+    [summarizeUser]
+  );
   const openEditDialog = useCallback(
     (task) => {
       const base = resolveTaskRecord(task);
@@ -626,7 +880,22 @@ export default function TasksPage() {
           payload.dueDate = null;
         }
 
-        await updateTask(editingTask.projectId, editingTask.id, payload);
+        // Check if this is a subtask
+        const isSubtask = editingTask.isSubtask || editingTask.parentTaskId;
+
+        if (isSubtask && editingTask.parentTaskId) {
+          // Update as subtask
+          await updateSubtask(
+            editingTask.projectId,
+            editingTask.parentTaskId,
+            editingTask.id,
+            payload
+          );
+        } else {
+          // Update as regular task
+          await updateTask(editingTask.projectId, editingTask.id, payload);
+        }
+
         await loadTasks(currentUser.uid);
         closeEditDialog();
         setSelectedTask(null);
@@ -668,7 +937,22 @@ export default function TasksPage() {
     setDeletingTaskId(deleteCandidate.id);
     setDeleteError("");
     try {
-      await deleteTask(deleteCandidate.projectId, deleteCandidate.id);
+      // Check if this is a subtask
+      const isSubtask =
+        deleteCandidate.isSubtask || deleteCandidate.parentTaskId;
+
+      if (isSubtask && deleteCandidate.parentTaskId) {
+        // Delete as subtask
+        await deleteSubtask(
+          deleteCandidate.projectId,
+          deleteCandidate.parentTaskId,
+          deleteCandidate.id
+        );
+      } else {
+        // Delete as regular task
+        await deleteTask(deleteCandidate.projectId, deleteCandidate.id);
+      }
+
       await loadTasks(currentUser.uid);
       if (selectedTask?.id === deleteCandidate.id) {
         setSelectedTask(null);
@@ -1156,79 +1440,19 @@ export default function TasksPage() {
                 </CardHeader>
                 <CardContent className="py-6">
                   <div className="space-y-3">
-                    {project.tasks.map((task) => {
-                      const due = toDate(task.dueDate);
-                      const updated = toDate(task.updatedAt);
-                      const overdue =
-                        due && due < new Date() && task.status !== "completed";
-                      return (
-                        <button
-                          key={task.id}
-                          type="button"
-                          onClick={() => handleTaskClick(task)}
-                          className="w-full text-left rounded-lg border border-border bg-background/50 p-4 transition hover:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/40"
-                        >
-                          <div className="flex flex-wrap items-start justify-between gap-3">
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-semibold text-foreground truncate">
-                                {task.title || "Untitled task"}
-                              </p>
-                              {task.description && (
-                                <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
-                                  {task.description}
-                                </p>
-                              )}
-                            </div>
-                            <Badge className={getStatusBadgeClass(task.status)}>
-                              {statusLabel(task.status)}
-                            </Badge>
-                          </div>
-                          <div className="mt-3 flex flex-wrap items-center gap-2">
-                            <Badge
-                              className={getPriorityBadgeClass(task.priority)}
-                            >
-                              {priorityLabel(task.priority)}
-                            </Badge>
-                            <span
-                              className={`text-xs text-muted-foreground ${
-                                overdue ? "text-destructive font-medium" : ""
-                              }`}
-                            >
-                              Due: {due ? due.toLocaleDateString() : "—"}
-                            </span>
-                            <span className="text-xs text-muted-foreground">
-                              Updated:{" "}
-                              {updated ? updated.toLocaleDateString() : "—"}
-                            </span>
-                            {(() => {
-                              const allAssigneeNames = [
-                                task.assigneeSummary?.name,
-                                ...(task.collaboratorNames || []),
-                              ].filter(Boolean);
-                              return (
-                                allAssigneeNames.length > 0 && (
-                                  <div className="flex flex-wrap gap-1">
-                                    {allAssigneeNames.map((name, idx) => (
-                                      <span
-                                        key={idx}
-                                        className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-xs font-medium"
-                                      >
-                                        {name}
-                                      </span>
-                                    ))}
-                                  </div>
-                                )
-                              );
-                            })()}
-                            {task.tags?.length > 0 && (
-                              <span className="text-xs text-muted-foreground">
-                                Tags: {task.tags.join(", ")}
-                              </span>
-                            )}
-                          </div>
-                        </button>
-                      );
-                    })}
+                    {project.tasks.map((task) => (
+                      <TaskCardWithSubtasks
+                        key={task.id}
+                        task={task}
+                        onClick={handleTaskClick}
+                        onSubtaskClick={handleSubtaskClick}
+                        getStatusBadgeClass={getStatusBadgeClass}
+                        statusLabel={statusLabel}
+                        getPriorityBadgeClass={getPriorityBadgeClass}
+                        priorityLabel={priorityLabel}
+                        toDate={toDate}
+                      />
+                    ))}
                   </div>
                 </CardContent>
               </Card>
@@ -1271,7 +1495,6 @@ export default function TasksPage() {
               // Update the modal
               setSelectedTask(refreshedTask);
 
-              // Update in the tasks list
               setTasks((prevTasks) =>
                 prevTasks.map((t) =>
                   t.id === refreshedTask.id ? refreshedTask : t

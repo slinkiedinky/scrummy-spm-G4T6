@@ -192,6 +192,14 @@ export const listSubtasks = async (projectId, taskId) => {
   return data || [];
 };
 
+export const getSubtask = async (projectId, taskId, subtaskId) => {
+  const r = await fetch(
+    `${API}/projects/${projectId}/tasks/${taskId}/subtasks/${subtaskId}`
+  );
+  if (!r.ok) throw new Error("Failed to load subtask");
+  return await r.json();
+};
+
 export const createSubtask = async (projectId, taskId, payload) => {
   const r = await fetch(
     `${API}/projects/${projectId}/tasks/${taskId}/subtasks`,

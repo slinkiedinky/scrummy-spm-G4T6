@@ -11,6 +11,7 @@ import {
   updateTask,
   deleteTask,
   listUsers,
+  getSubtask,
 } from "@/lib/api";
 
 import { Button } from "@/components/ui/button";
@@ -53,6 +54,7 @@ import {
   Calendar as CalendarIcon,
   FileText,
 } from "lucide-react";
+import { TaskColumn } from "@/components/TaskColumn";
 import { format, startOfDay } from "date-fns";
 import { auth } from "@/lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
@@ -904,7 +906,39 @@ export default function ProjectDetailPage() {
     });
     setIsTaskDialogOpen(true);
   };
+  const handleSubtaskClick = async (subtask, parentTask) => {
+    try {
+      const fullSubtask = await getSubtask(
+        project.id,
+        parentTask.id,
+        subtask.id
+      );
+      fullSubtask.projectId = project.id;
+      fullSubtask.parentTaskId = parentTask.id;
+      fullSubtask.isSubtask = true;
 
+      const assigneeId = fullSubtask.assigneeId || fullSubtask.ownerId;
+      const assigneeInfo = users.find((u) => u?.id === assigneeId);
+      if (assigneeInfo) {
+        const assigneeName =
+          assigneeInfo.fullName ||
+          assigneeInfo.displayName ||
+          assigneeInfo.email ||
+          `User ${assigneeId.slice(0, 4)}`;
+        fullSubtask.assigneeSummary = {
+          id: assigneeId,
+          name: assigneeName,
+          email: assigneeInfo.email || "",
+          role: assigneeInfo.role || "Member",
+          avatar: assigneeInfo.photoURL || "",
+        };
+      }
+
+      setSelectedTask(fullSubtask);
+    } catch (error) {
+      console.error("Failed to load subtask:", error);
+    }
+  };
   if (userLoading) {
     return (
       <div className="flex h-full items-center justify-center p-6 text-muted-foreground">
@@ -1403,6 +1437,8 @@ export default function ProjectDetailPage() {
               <TabsTrigger value="team">Team</TabsTrigger>
             </TabsList>
 
+            {/* TO DELETE */}
+            {/* 
             <TabsContent value="tasks" className="mt-0">
               <Card className="p-4 not-print">
                 <div className="mb-4 flex items-center justify-between">
@@ -1536,8 +1572,55 @@ export default function ProjectDetailPage() {
                   </div>
                 )}
               </Card>
-            </TabsContent>
+            </TabsContent> */}
+            <TabsContent value="tasks" className="mt-0">
+              <div className="mb-4 flex items-center justify-between not-print">
+                <h2 className="text-xl font-semibold">Tasks</h2>
+                <Button
+                  onClick={openCreateTaskDialog}
+                  className="bg-primary text-primary-foreground hover:bg-primary/90"
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add Task
+                </Button>
+              </div>
 
+              {tasks.length === 0 ? (
+                <Card className="p-8 text-center">
+                  <p className="text-sm text-muted-foreground">
+                    No tasks yet. Click "Add Task" to create one.
+                  </p>
+                </Card>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {STATUS.map((status) => {
+                    const statusTasks = tasks.filter(
+                      (t) =>
+                        (t.status || "to-do").toLowerCase() ===
+                        status.toLowerCase()
+                    );
+
+                    const colorMap = {
+                      "to-do": "bg-gray-400",
+                      "in progress": "bg-blue-500",
+                      completed: "bg-emerald-500",
+                      blocked: "bg-red-500",
+                    };
+
+                    return (
+                      <TaskColumn
+                        key={status}
+                        title={STATUS_LABELS[status]}
+                        color={colorMap[status]}
+                        tasks={statusTasks}
+                        onTaskClick={(task) => setSelectedTask(task)}
+                        onSubtaskClick={handleSubtaskClick}
+                      />
+                    );
+                  })}
+                </div>
+              )}
+            </TabsContent>
             <TabsContent value="timeline" className="mt-0">
               <TeamTimeline
                 tasks={tasks}

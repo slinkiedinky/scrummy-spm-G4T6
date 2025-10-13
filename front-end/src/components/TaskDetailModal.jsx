@@ -64,10 +64,14 @@ export function TaskDetailModal({
   const [showSubtaskDialog, setShowSubtaskDialog] = useState(false);
   const [subtaskRefreshKey, setSubtaskRefreshKey] = useState(0);
   const [selectedSubtask, setSelectedSubtask] = useState(null);
+
+  const isSubtask = task.isSubtask || task.parentTaskId;
+
   console.log("Task in modal:", {
     projectId: task.projectId,
     taskId: task.id,
     isOpen,
+    isSubtask,
   });
 
   const assignee =
@@ -254,6 +258,13 @@ export function TaskDetailModal({
                       Overdue
                     </Badge>
                   )}
+                  {isSubtask && (
+                    <Badge
+                      className={`${TAG_BASE} bg-purple-100 text-purple-700 border border-purple-200`}
+                    >
+                      Subtask
+                    </Badge>
+                  )}
                 </div>
                 {task.projectName && (
                   <p className="text-xs text-muted-foreground mt-2 truncate">
@@ -300,8 +311,8 @@ export function TaskDetailModal({
                 {task.description || "—"}
               </p>
             </div>
-            {/* Subtasks Section */}
-            {task.projectId && task.id && (
+            {/* Subtasks Section - Only show for parent tasks */}
+            {!isSubtask && task.projectId && task.id && (
               <>
                 <div>
                   <div className="flex items-center justify-between mb-3">

@@ -479,6 +479,29 @@ def list_subtasks(project_id, task_id):
     items = [normalize_task_out({**d.to_dict(), "id": d.id}) for d in docs]
     return jsonify(items), 200
 
+@projects_bp.route("/<project_id>/tasks/<task_id>/subtasks/<subtask_id>", methods=["GET"])
+@cross_origin()
+def get_subtask(project_id, task_id, subtask_id):
+    """Get a single subtask"""
+    subtask_ref = (
+        db.collection("projects")
+        .document(project_id)
+        .collection("tasks")
+        .document(task_id)
+        .collection("subtasks")
+        .document(subtask_id)
+    )
+    subtask_doc = subtask_ref.get()
+    
+    if not subtask_doc.exists:
+        return jsonify({"error": "Subtask not found"}), 404
+    
+    subtask_data = subtask_doc.to_dict()
+    subtask_data["id"] = subtask_id
+    subtask_data["projectId"] = project_id
+    subtask_data["parentTaskId"] = task_id
+    
+    return jsonify(normalize_task_out(subtask_data)), 200
 
 @projects_bp.route("/<project_id>/tasks/<task_id>/subtasks", methods=["POST"])
 @cross_origin()

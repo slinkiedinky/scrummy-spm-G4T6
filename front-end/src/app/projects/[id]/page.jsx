@@ -12,6 +12,8 @@ import {
   deleteTask,
   listUsers,
   getSubtask,
+  updateSubtask,
+  deleteSubtask,
 } from "@/lib/api";
 
 import { Button } from "@/components/ui/button";
@@ -168,6 +170,8 @@ export default function ProjectDetailPage() {
   const [project, setProject] = useState(null);
   const [tasks, setTasks] = useState([]);
   const [selectedTask, setSelectedTask] = useState(null);
+  const [editingSubtaskParentId, setEditingSubtaskParentId] = useState(null);
+  const [isEditingSubtask, setIsEditingSubtask] = useState(false);
   const [showReport, setShowReport] = useState(false);
   const [users, setUsers] = useState([]);
   const [currentUser, setCurrentUser] = useState(null);
@@ -773,44 +777,111 @@ export default function ProjectDetailPage() {
         return;
       }
       payload.dueDate = due.toISOString();
-      let updatedTasksLocal = tasks;
 
       if (isEditingTask && editingTaskId) {
-        await updateTask(id, editingTaskId, payload);
-        toast.success("Task updated successfully!");
+        if (isEditingSubtask && editingSubtaskParentId) {
+          await updateSubtask(
+            id,
+            editingSubtaskParentId,
+            editingTaskId,
+            payload
+          );
+          toast.success("Subtask updated successfully!");
+        } else {
+          await updateTask(id, editingTaskId, payload);
+          toast.success("Task updated successfully!");
+        }
+        await load(currentUser.uid);
+        if (selectedTask && selectedTask.id === editingTaskId) {
+          if (isEditingSubtask && editingSubtaskParentId) {
+            const refreshed = await getSubtask(
+              id,
+              editingSubtaskParentId,
+              editingTaskId
+            );
+            refreshed.projectId = id;
+            refreshed.parentTaskId = editingSubtaskParentId;
+            refreshed.isSubtask = true;
 
-        updatedTasksLocal = tasks.map((t) =>
-          t.id === editingTaskId
-            ? { ...t, ...payload, status: String(payload.status).toLowerCase() }
-            : t
-        );
+            // Resolve assignee
+            const assigneeId = refreshed.assigneeId || refreshed.ownerId;
+            const assigneeInfo = users.find((u) => u?.id === assigneeId);
+            if (assigneeInfo) {
+              refreshed.assigneeSummary = {
+                id: assigneeId,
+                name:
+                  assigneeInfo.fullName ||
+                  assigneeInfo.displayName ||
+                  assigneeInfo.email ||
+                  assigneeId,
+                email: assigneeInfo.email || "",
+                role: assigneeInfo.role || "",
+                avatar: assigneeInfo.photoURL || "",
+              };
+            }
+
+            // Resolve creator
+            const creatorId = refreshed.createdBy || refreshed.ownerId;
+            const creatorInfo = users.find((u) => u?.id === creatorId);
+            if (creatorInfo) {
+              refreshed.creatorName =
+                creatorInfo.fullName ||
+                creatorInfo.displayName ||
+                creatorInfo.email ||
+                `User ${creatorId.slice(0, 4)}`;
+              refreshed.creatorSummary = {
+                id: creatorId,
+                name: refreshed.creatorName,
+                email: creatorInfo.email || "",
+                role: creatorInfo.role || "",
+                avatar: creatorInfo.photoURL || "",
+              };
+            }
+
+            // Resolve collaborators
+            const collaboratorIds = Array.isArray(refreshed.collaboratorsIds)
+              ? refreshed.collaboratorsIds
+              : [];
+
+            refreshed.collaboratorNames = collaboratorIds
+              .map((collabId) => {
+                const collabInfo = users.find((u) => u?.id === collabId);
+                return collabInfo
+                  ? collabInfo.fullName ||
+                      collabInfo.displayName ||
+                      collabInfo.email ||
+                      `User ${collabId.slice(0, 4)}`
+                  : `User ${collabId.slice(0, 4)}`;
+              })
+              .filter(Boolean);
+            setSelectedTask(refreshed);
+          } else {
+            const refreshed = await getTask(id, editingTaskId);
+            refreshed.projectId = id;
+
+            const assigneeId = refreshed.assigneeId || refreshed.ownerId;
+            const assigneeInfo = users.find((u) => u?.id === assigneeId);
+            if (assigneeInfo) {
+              refreshed.assigneeSummary = {
+                id: assigneeId,
+                name:
+                  assigneeInfo.fullName ||
+                  assigneeInfo.displayName ||
+                  assigneeInfo.email ||
+                  assigneeId,
+                email: assigneeInfo.email || "",
+                role: assigneeInfo.role || "",
+                avatar: assigneeInfo.photoURL || "",
+              };
+            }
+
+            setSelectedTask(refreshed);
+          }
+        }
       } else {
         await createTask(id, payload);
         toast.success("Task created successfully!");
-        updatedTasksLocal = [
-          ...tasks,
-          {
-            id: "temp",
-            ...payload,
-            status: String(payload.status).toLowerCase(),
-          },
-        ];
       }
-      await syncProjectStatusWithTasks(updatedTasksLocal);
-
-      await load(currentUser.uid);
-      if (selectedTask && editingTaskId && selectedTask.id === editingTaskId) {
-        setTimeout(() => {
-          setTasks((currentTasks) => {
-            const freshTask = currentTasks.find((t) => t.id === editingTaskId);
-            if (freshTask) {
-              setSelectedTask(freshTask);
-            }
-            return currentTasks;
-          });
-        }, 100);
-      }
-
       handleTaskDialogChange(false);
     } catch (error) {
       setTaskError(
@@ -820,7 +891,6 @@ export default function ProjectDetailPage() {
       setSavingTask(false);
     }
   }
-
   async function handleTaskStatus(taskId, status) {
     await updateTask(id, taskId, { status });
     const updated = tasks.map((t) => (t.id === taskId ? { ...t, status } : t));
@@ -846,26 +916,49 @@ export default function ProjectDetailPage() {
     setDeleteError("");
     setDeletingTaskId("");
   };
-
   const confirmDeleteTask = async () => {
     if (!deleteCandidate) return;
     const taskId = deleteCandidate.id;
     if (!taskId) return;
+
+    // Check if deleting a subtask
+    const isSubtask = deleteCandidate.isSubtask || deleteCandidate.parentTaskId;
+    const parentTaskId = deleteCandidate.parentTaskId;
+
     setDeletingTaskId(taskId);
     setDeleteError("");
+
     try {
-      await deleteTask(id, taskId);
-      const remaining = tasks.filter((t) => t.id !== taskId);
-      setTasks(remaining);
-      await syncProjectStatusWithTasks(remaining);
+      if (isSubtask && parentTaskId) {
+        // Delete subtask
+        await deleteSubtask(id, parentTaskId, taskId);
+        toast.success("Subtask deleted successfully");
+      } else {
+        // Delete regular task
+        await deleteTask(id, taskId);
+        toast.success("Task deleted successfully");
+      }
+
+      // Refresh task list
+      await load(currentUser.uid);
+
+      // Close modal if this task/subtask was open
+      if (selectedTask && selectedTask.id === taskId) {
+        setSelectedTask(null);
+      }
 
       if (editingTaskId === taskId) {
         setEditingTaskId(null);
         setIsTaskDialogOpen(false);
       }
+
       closeDeleteDialog();
-    } catch (error) {
-      setDeleteError(error?.message || "Failed to delete task.");
+    } catch (err) {
+      console.error("Delete failed:", err);
+      const itemType = isSubtask ? "subtask" : "task";
+      setDeleteError(err?.message || `Failed to delete ${itemType}`);
+      toast.error(`Failed to delete ${itemType}`);
+    } finally {
       setDeletingTaskId("");
     }
   };
@@ -880,13 +973,22 @@ export default function ProjectDetailPage() {
 
   const handleEditTask = (task) => {
     if (!task) return;
+
+    // Check if this is a subtask
+    const isSubtask = task.isSubtask || task.parentTaskId;
+    const parentTaskId = task.parentTaskId;
+
     const priorityNumber = Number(task.priorityNumber ?? task.priority);
     const priorityValue = Number.isFinite(priorityNumber)
       ? String(priorityNumber)
       : "5";
+
     setEditingTaskId(task.id);
+    setIsEditingSubtask(isSubtask);
+    setEditingSubtaskParentId(parentTaskId || null);
     setTaskError("");
     setSavingTask(false);
+
     const primaryAssignee =
       task.assigneeId || task.ownerId || currentUser?.uid || "";
     const existingCollaborators = ensureArray(task.collaboratorsIds);
@@ -902,10 +1004,11 @@ export default function ProjectDetailPage() {
       priority: priorityValue,
       status: (task.status || "to-do").toLowerCase(),
       tags: Array.isArray(task.tags) ? task.tags.join(", ") : "",
-      collaboratorsIds: allAssignees, // Include primary assignee in the list
+      collaboratorsIds: allAssignees,
     });
     setIsTaskDialogOpen(true);
   };
+
   const handleSubtaskClick = async (subtask, parentTask) => {
     try {
       const fullSubtask = await getSubtask(
@@ -917,6 +1020,7 @@ export default function ProjectDetailPage() {
       fullSubtask.parentTaskId = parentTask.id;
       fullSubtask.isSubtask = true;
 
+      // Resolve assignee
       const assigneeId = fullSubtask.assigneeId || fullSubtask.ownerId;
       const assigneeInfo = users.find((u) => u?.id === assigneeId);
       if (assigneeInfo) {
@@ -934,11 +1038,71 @@ export default function ProjectDetailPage() {
         };
       }
 
+      // Resolve creator
+      const creatorId = fullSubtask.createdBy || fullSubtask.ownerId;
+      const creatorInfo = users.find((u) => u?.id === creatorId);
+      if (creatorInfo) {
+        fullSubtask.creatorName =
+          creatorInfo.fullName ||
+          creatorInfo.displayName ||
+          creatorInfo.email ||
+          `User ${creatorId.slice(0, 4)}`;
+        fullSubtask.creatorSummary = {
+          id: creatorId,
+          name: fullSubtask.creatorName,
+          email: creatorInfo.email || "",
+          role: creatorInfo.role || "",
+          avatar: creatorInfo.photoURL || "",
+        };
+      }
+
+      // Resolve collaborators
+      const collaboratorIds = Array.isArray(fullSubtask.collaboratorsIds)
+        ? fullSubtask.collaboratorsIds
+        : [];
+
+      fullSubtask.collaboratorNames = collaboratorIds
+        .map((collabId) => {
+          const collabInfo = users.find((u) => u?.id === collabId);
+          return collabInfo
+            ? collabInfo.fullName ||
+                collabInfo.displayName ||
+                collabInfo.email ||
+                `User ${collabId.slice(0, 4)}`
+            : `User ${collabId.slice(0, 4)}`;
+        })
+        .filter(Boolean);
+
+      fullSubtask.collaborators = collaboratorIds.map((collabId) => {
+        const collabInfo = users.find((u) => u?.id === collabId);
+        return collabInfo
+          ? {
+              id: collabId,
+              name:
+                collabInfo.fullName ||
+                collabInfo.displayName ||
+                collabInfo.email ||
+                `User ${collabId.slice(0, 4)}`,
+              email: collabInfo.email || "",
+              role: collabInfo.role || "",
+              avatar: collabInfo.photoURL || "",
+            }
+          : {
+              id: collabId,
+              name: `User ${collabId.slice(0, 4)}`,
+              email: "",
+              role: "",
+              avatar: "",
+            };
+      });
+
       setSelectedTask(fullSubtask);
     } catch (error) {
       console.error("Failed to load subtask:", error);
+      toast.error("Failed to load subtask details");
     }
   };
+
   if (userLoading) {
     return (
       <div className="flex h-full items-center justify-center p-6 text-muted-foreground">
@@ -1437,142 +1601,6 @@ export default function ProjectDetailPage() {
               <TabsTrigger value="team">Team</TabsTrigger>
             </TabsList>
 
-            {/* TO DELETE */}
-            {/* 
-            <TabsContent value="tasks" className="mt-0">
-              <Card className="p-4 not-print">
-                <div className="mb-4 flex items-center justify-between">
-                  <h2 className="text-xl font-semibold">Tasks</h2>
-                  <Button
-                    onClick={openCreateTaskDialog}
-                    className="bg-primary text-primary-foreground hover:bg-primary/90"
-                  >
-                    <Plus className="mr-2 h-4 w-4" />
-                    Add Task
-                  </Button>
-                </div>
-
-                {tasks.length === 0 ? (
-                  <div className="text-sm text-muted-foreground">
-                    No tasks yet.
-                  </div>
-                ) : (
-                  <div className="divide-y divide-border">
-                    {tasks.map((t) => {
-                      const allAssigneeIds = [
-                        t.assigneeId,
-                        ...(t.collaboratorsIds || []),
-                      ].filter(Boolean);
-                      const allAssigneeNames = allAssigneeIds.map((id) =>
-                        resolveUserLabel(id)
-                      );
-                      const priorityValue = t.priority
-                        ? String(t.priority)
-                        : "";
-                      const priorityLabel = priorityValue
-                        ? TASK_PRIORITY_LABELS[priorityValue] ||
-                          `Priority ${priorityValue}`
-                        : "Priority —";
-                      const priorityBadgeClass =
-                        getPriorityBadgeClass(priorityValue);
-
-                      return (
-                        <div
-                          key={t.id}
-                          className="flex items-center justify-between gap-3 py-3 cursor-pointer hover:bg-muted/50 rounded-lg px-2 transition"
-                          onClick={() => setSelectedTask(t)}
-                        >
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-2">
-                              <span className="font-medium truncate">
-                                {t.title}
-                              </span>
-                              <StatusBadge status={t.status} />
-                              <Badge
-                                className={priorityBadgeClass}
-                                variant="outline"
-                              >
-                                {priorityLabel}
-                              </Badge>
-                            </div>
-                            <div className="mt-0.5 text-xs text-muted-foreground">
-                              {t.description || "—"}
-                            </div>
-                            <div className="mt-1.5 flex flex-wrap items-center gap-2">
-                              {t.dueDate && (
-                                <span className="text-xs text-muted-foreground">
-                                  Due:{" "}
-                                  {format(toDate(t.dueDate), "dd MMM yyyy")}
-                                </span>
-                              )}
-                              {allAssigneeNames.length > 0 && (
-                                <div className="flex flex-wrap gap-1">
-                                  {allAssigneeNames.map((name, idx) => (
-                                    <span
-                                      key={idx}
-                                      className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-xs font-medium"
-                                    >
-                                      {name}
-                                    </span>
-                                  ))}
-                                </div>
-                              )}
-                              {t.creatorName && (
-                                <span className="text-xs text-muted-foreground">
-                                  Created by: {t.creatorName}
-                                </span>
-                              )}
-                              {(t.tags || []).length > 0 && (
-                                <span className="text-xs text-muted-foreground">
-                                  Tags: {(t.tags || []).join(", ")}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-2">
-                            <Select
-                              value={(t.status || "to-do").toLowerCase()}
-                              onValueChange={(value) =>
-                                handleTaskStatus(t.id, value)
-                              }
-                            >
-                              <SelectTrigger className="w-[160px]">
-                                <SelectValue placeholder="Status" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {STATUS.map((s) => (
-                                  <SelectItem key={s} value={s}>
-                                    {STATUS_LABELS[s] || s}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            <Button
-                              variant="ghost"
-                              className="text-muted-foreground hover:text-foreground"
-                              onClick={() => handleEditTask(t)}
-                              title="Edit task"
-                            >
-                              <Pencil className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              className="text-destructive hover:text-destructive"
-                              onClick={() => requestDeleteTask(t)}
-                              title="Delete task"
-                              disabled={Boolean(deletingTaskId)}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </Card>
-            </TabsContent> */}
             <TabsContent value="tasks" className="mt-0">
               <div className="mb-4 flex items-center justify-between not-print">
                 <h2 className="text-xl font-semibold">Tasks</h2>
@@ -1789,49 +1817,78 @@ export default function ProjectDetailPage() {
           onSubtaskChange={async () => {
             try {
               await new Promise((resolve) => setTimeout(resolve, 300));
+              const isViewingSubtask =
+                selectedTask.isSubtask || selectedTask.parentTaskId;
 
-              const updatedTask = await getTask(project.id, selectedTask.id);
-              updatedTask.projectId = project.id;
+              if (isViewingSubtask) {
+                const parentTaskId = selectedTask.parentTaskId;
+                const updatedSubtask = await getSubtask(
+                  project.id,
+                  parentTaskId,
+                  selectedTask.id
+                );
+                updatedSubtask.projectId = project.id;
+                updatedSubtask.parentTaskId = parentTaskId;
+                updatedSubtask.isSubtask = true;
 
-              const assigneeId = updatedTask.assigneeId || updatedTask.ownerId;
-              const assigneeInfo = users.find((u) => u?.id === assigneeId);
-              if (assigneeInfo) {
-                const assigneeName =
-                  assigneeInfo.fullName ||
-                  assigneeInfo.displayName ||
-                  assigneeInfo.name ||
-                  assigneeInfo.email ||
-                  assigneeId;
-                updatedTask.assigneeSummary = {
-                  id: assigneeId,
-                  name: assigneeName,
-                  email: assigneeInfo.email || "",
-                  role: assigneeInfo.role || "",
-                  avatar: assigneeInfo.avatar || assigneeInfo.photoURL || "",
-                };
-              } else if (assigneeId) {
-                updatedTask.assigneeSummary = {
-                  id: assigneeId,
-                  name: `User ${String(assigneeId).slice(0, 4)}`,
-                  email: "",
-                  role: "",
-                  avatar: "",
-                };
+                const assigneeId =
+                  updatedSubtask.assigneeId || updatedSubtask.ownerId;
+                const assigneeInfo = users.find((u) => u?.id === assigneeId);
+                if (assigneeInfo) {
+                  const assigneeName =
+                    assigneeInfo.fullName ||
+                    assigneeInfo.displayName ||
+                    assigneeInfo.name ||
+                    assigneeInfo.email ||
+                    assigneeId;
+                  updatedSubtask.assigneeSummary = {
+                    id: assigneeId,
+                    name: assigneeName,
+                    email: assigneeInfo.email || "",
+                    role: assigneeInfo.role || "",
+                    avatar: assigneeInfo.avatar || assigneeInfo.photoURL || "",
+                  };
+                }
+
+                setSelectedTask(updatedSubtask);
+                await load(currentUser.uid);
+              } else {
+                const updatedTask = await getTask(project.id, selectedTask.id);
+                updatedTask.projectId = project.id;
+
+                const assigneeId =
+                  updatedTask.assigneeId || updatedTask.ownerId;
+                const assigneeInfo = users.find((u) => u?.id === assigneeId);
+                if (assigneeInfo) {
+                  const assigneeName =
+                    assigneeInfo.fullName ||
+                    assigneeInfo.displayName ||
+                    assigneeInfo.name ||
+                    assigneeInfo.email ||
+                    assigneeId;
+                  updatedTask.assigneeSummary = {
+                    id: assigneeId,
+                    name: assigneeName,
+                    email: assigneeInfo.email || "",
+                    role: assigneeInfo.role || "",
+                    avatar: assigneeInfo.avatar || assigneeInfo.photoURL || "",
+                  };
+                } else if (assigneeId) {
+                  updatedTask.assigneeSummary = {
+                    id: assigneeId,
+                    name: `User ${String(assigneeId).slice(0, 4)}`,
+                    email: "",
+                    role: "",
+                    avatar: "",
+                  };
+                }
+
+                setSelectedTask(updatedTask);
+                await load(currentUser.uid);
               }
-
-              setSelectedTask(updatedTask);
-              setTasks((prevTasks) =>
-                prevTasks.map((t) =>
-                  t.id === updatedTask.id ? updatedTask : t
-                )
-              );
-              return updatedTask;
             } catch (err) {
-              console.error(
-                "Failed to refresh selected task after subtask change:",
-                err
-              );
-              throw err;
+              console.error("Failed to refresh task:", err);
+              toast.error("Failed to refresh task details");
             }
           }}
         />

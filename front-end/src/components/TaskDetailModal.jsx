@@ -5,6 +5,8 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
+  DialogFooter,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -30,6 +32,25 @@ import {
   updateSubtask,
   deleteSubtask,
 } from "@/lib/api";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { AlertCircle } from "lucide-react";
+
+import { toast } from "sonner";
 function toInitials(name) {
   if (!name) return "?";
   const parts = name.trim().split(/\s+/);
@@ -637,7 +658,6 @@ function SubtasksList({ projectId, taskId, onSubtaskChange }) {
 
   const loadSubtasks = async () => {
     try {
-      // Only show loading spinner on first load
       if (subtasks.length === 0) {
         setLoading(true);
       }
@@ -646,10 +666,12 @@ function SubtasksList({ projectId, taskId, onSubtaskChange }) {
     } catch (err) {
       console.error("Failed to load subtasks:", err);
       setSubtasks([]);
+      toast.error("Failed to load subtasks");
     } finally {
       setLoading(false);
     }
   };
+
   useEffect(() => {
     if (projectId && taskId) {
       loadSubtasks();
@@ -659,6 +681,7 @@ function SubtasksList({ projectId, taskId, onSubtaskChange }) {
   const handleToggleStatus = async (subtask) => {
     const newStatus = subtask.status === "completed" ? "to-do" : "completed";
     try {
+      // Optimistic update
       setSubtasks((prev) => {
         const updated = prev.map((s) =>
           s.id === subtask.id ? { ...s, status: newStatus } : s
@@ -671,27 +694,38 @@ function SubtasksList({ projectId, taskId, onSubtaskChange }) {
       if (onSubtaskChange) {
         await onSubtaskChange();
       }
+
       await loadSubtasks();
+      toast.success(
+        `Subtask marked as ${
+          newStatus === "completed" ? "completed" : "incomplete"
+        }`
+      );
     } catch (err) {
       console.error("Failed to update subtask:", err);
-      await loadSubtasks();
+      await loadSubtasks(); // Revert on error
+      toast.error("Failed to update subtask");
     }
   };
 
   const handleDeleteSubtask = async (subtask) => {
     if (!confirm("Delete this subtask?")) return;
     try {
+      // Optimistic removal
       setSubtasks((prev) => prev.filter((s) => s.id !== subtask.id));
 
       await deleteSubtask(projectId, taskId, subtask.id);
 
       if (onSubtaskChange) await onSubtaskChange();
       await loadSubtasks();
+      toast.success("Subtask deleted successfully");
     } catch (err) {
       console.error("Failed to delete subtask:", err);
-      await loadSubtasks();
+      await loadSubtasks(); // Revert on error
+      toast.error("Failed to delete subtask");
     }
   };
+
   if (loading) {
     return <p className="text-sm text-muted-foreground">Loading subtasks...</p>;
   }
@@ -767,25 +801,36 @@ function SubtaskDialog({
     priority: "5",
     dueDate: "",
     tags: "",
-    collaboratorsIds: [],
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-
-  // Reset form when dialog opens/closes
+  const [selectedCollaborators, setSelectedCollaborators] = useState([]);
   useEffect(() => {
-    if (!isOpen) {
+    if (isOpen) {
       setForm({
         title: "",
         description: "",
         status: "to-do",
         priority: "5",
         dueDate: "",
+        tags: "",
       });
+      // Default to current user as assignee
+      setSelectedCollaborators(currentUserId ? [currentUserId] : []);
       setError("");
       setSaving(false);
     }
-  }, [isOpen]);
+  }, [isOpen, currentUserId]);
+
+  const handleCollaboratorToggle = (userId, checked) => {
+    setSelectedCollaborators((prev) =>
+      checked ? [...prev, userId] : prev.filter((id) => id !== userId)
+    );
+  };
+
+  const updateForm = (field, value) => {
+    setForm((prev) => ({ ...prev, [field]: value }));
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -796,53 +841,117 @@ function SubtaskDialog({
       return;
     }
 
+    if (!form.dueDate) {
+      setError("Due date is required.");
+      return;
+    }
+
+    if (selectedCollaborators.length === 0) {
+      setError("At least one assignee is required.");
+      return;
+    }
+
+    if (selectedCollaborators.length > 5) {
+      setError("Maximum 5 assignees allowed per subtask.");
+      return;
+    }
+
     setSaving(true);
     setError("");
 
     try {
+      const tags = form.tags
+        .split(",")
+        .map((tag) => tag.trim())
+        .filter(Boolean);
+
+      // First assignee is primary, rest are collaborators
+      const [primaryAssignee, ...otherAssignees] = selectedCollaborators;
+
       const payload = {
         title,
         description: form.description.trim(),
         status: form.status,
         priority: Number(form.priority),
-        assigneeId: "temp", // Will be set by parent task owner
+        assigneeId: primaryAssignee,
+        ownerId: primaryAssignee,
+        collaboratorsIds: otherAssignees.length > 0 ? otherAssignees : [],
+        tags,
+        createdBy: currentUserId,
       };
 
-      if (form.dueDate) {
-        const due = new Date(`${form.dueDate}T00:00:00`);
-        if (!Number.isNaN(due.getTime())) {
-          payload.dueDate = due.toISOString();
-        }
+      const due = new Date(`${form.dueDate}T00:00:00`);
+      if (Number.isNaN(due.getTime())) {
+        setError("Please provide a valid due date.");
+        setSaving(false);
+        return;
       }
+      payload.dueDate = due.toISOString();
 
       await createSubtask(projectId, taskId, payload);
+      toast.success("Subtask created successfully!");
       if (onSubtaskCreated) await onSubtaskCreated();
+      onClose();
     } catch (err) {
       setError(err?.message || "Failed to create subtask");
       setSaving(false);
     }
   };
 
+  const STATUS_OPTIONS = [
+    { value: "to-do", label: "To-Do" },
+    { value: "in progress", label: "In Progress" },
+    { value: "completed", label: "Completed" },
+    { value: "blocked", label: "Blocked" },
+  ];
+
+  const PRIORITY_VALUES = Array.from({ length: 10 }, (_, i) => String(i + 1));
+
+  const collaboratorOptions = teamMembers.map((member) => ({
+    id: member.id || member.uid,
+    label:
+      member.fullName ||
+      member.displayName ||
+      member.email ||
+      member.name ||
+      member.id,
+    email: member.email,
+  }));
+
+  const collaboratorButtonLabel =
+    selectedCollaborators.length === 0
+      ? "Select assignees"
+      : selectedCollaborators.length === 1
+      ? collaboratorOptions.find((opt) => opt.id === selectedCollaborators[0])
+          ?.label || "1 assignee"
+      : `${selectedCollaborators.length} assignees`;
+
+  const isSubmitDisabled = saving;
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-h-[90vh] overflow-y-auto">
         <form onSubmit={handleSubmit} className="space-y-6">
           <DialogHeader>
             <DialogTitle>Add Subtask</DialogTitle>
+            <DialogDescription>
+              Provide details for the new subtask. You can adjust them later.
+            </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
             <div className="space-y-2">
-              <label htmlFor="subtask-title" className="text-sm font-medium">
-                Title <span className="text-destructive">*</span>
+              <label
+                htmlFor="subtask-title"
+                className="text-sm font-medium text-foreground"
+              >
+                Title
               </label>
-              <input
+              <Input
                 id="subtask-title"
-                type="text"
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                 value={form.title}
-                onChange={(e) => setForm({ ...form, title: e.target.value })}
-                placeholder="Subtask title"
+                onChange={(e) => updateForm("title", e.target.value)}
+                placeholder="Design login screen"
                 required
               />
             </div>
@@ -850,69 +959,176 @@ function SubtaskDialog({
             <div className="space-y-2">
               <label
                 htmlFor="subtask-description"
-                className="text-sm font-medium"
+                className="text-sm font-medium text-foreground"
               >
                 Description
               </label>
               <textarea
                 id="subtask-description"
-                className="min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                className="min-h-[96px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 value={form.description}
-                onChange={(e) =>
-                  setForm({ ...form, description: e.target.value })
-                }
-                placeholder="Add details about this subtask"
+                onChange={(e) => updateForm("description", e.target.value)}
+                placeholder="Wireframes + final design in Figma"
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-4 grid-cols-2">
+              <div className="space-y-2">
+                <label
+                  htmlFor="subtask-status"
+                  className="text-sm font-medium text-foreground"
+                >
+                  Status
+                </label>
+                <Select
+                  value={form.status}
+                  onValueChange={(value) => updateForm("status", value)}
+                >
+                  <SelectTrigger id="subtask-status" className="w-full">
+                    <SelectValue placeholder="Select status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {STATUS_OPTIONS.map((s) => (
+                      <SelectItem key={s.value} value={s.value}>
+                        {s.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
               <div className="space-y-2">
                 <label
                   htmlFor="subtask-priority"
-                  className="text-sm font-medium"
+                  className="text-sm font-medium text-foreground"
                 >
-                  Priority (1-10)
+                  Priority
                 </label>
-                <select
-                  id="subtask-priority"
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                <Select
                   value={form.priority}
-                  onChange={(e) =>
-                    setForm({ ...form, priority: e.target.value })
-                  }
+                  onValueChange={(value) => updateForm("priority", value)}
                 >
-                  {Array.from({ length: 10 }, (_, i) => i + 1).map((p) => (
-                    <option key={p} value={p}>
-                      Priority {p}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="space-y-2">
-                <label htmlFor="subtask-due" className="text-sm font-medium">
-                  Due date
-                </label>
-                <input
-                  id="subtask-due"
-                  type="date"
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  value={form.dueDate}
-                  onChange={(e) =>
-                    setForm({ ...form, dueDate: e.target.value })
-                  }
-                />
+                  <SelectTrigger id="subtask-priority" className="w-full">
+                    <SelectValue placeholder="Select priority" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PRIORITY_VALUES.map((p) => (
+                      <SelectItem key={p} value={p}>
+                        {p}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 
+            <div className="space-y-2">
+              <label
+                htmlFor="subtask-due"
+                className="text-sm font-medium text-foreground"
+              >
+                Due date <span className="text-destructive">*</span>
+              </label>
+              <Input
+                id="subtask-due"
+                type="date"
+                value={form.dueDate}
+                onChange={(e) => updateForm("dueDate", e.target.value)}
+                required
+              />
+              <p className="text-xs text-muted-foreground">Required field</p>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-foreground">
+                Assignees <span className="text-destructive">*</span>
+              </label>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className={`w-full justify-between ${
+                      selectedCollaborators.length > 5
+                        ? "border-destructive"
+                        : ""
+                    }`}
+                  >
+                    <span className="truncate text-left">
+                      {collaboratorButtonLabel}
+                    </span>
+                    <span
+                      className={`text-xs ${
+                        selectedCollaborators.length > 5
+                          ? "text-destructive font-semibold"
+                          : "text-muted-foreground"
+                      }`}
+                    >
+                      {selectedCollaborators.length}/5 selected
+                    </span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent className="w-64">
+                  <DropdownMenuLabel>Select assignees</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  {collaboratorOptions.length === 0 ? (
+                    <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                      Add team members to this project first.
+                    </div>
+                  ) : (
+                    collaboratorOptions.map((option) => (
+                      <DropdownMenuCheckboxItem
+                        key={option.id}
+                        checked={selectedCollaborators.includes(option.id)}
+                        onCheckedChange={(checked) =>
+                          handleCollaboratorToggle(option.id, checked)
+                        }
+                      >
+                        <div className="flex flex-col">
+                          <span className="leading-tight">{option.label}</span>
+                          {option.email && option.email !== option.label && (
+                            <span className="text-xs text-muted-foreground leading-tight">
+                              {option.email}
+                            </span>
+                          )}
+                        </div>
+                      </DropdownMenuCheckboxItem>
+                    ))
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <p className="text-xs text-muted-foreground">
+                Required: Select 1-5 team members to assign this subtask to.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <label
+                htmlFor="subtask-tags"
+                className="text-sm font-medium text-foreground"
+              >
+                Tags
+              </label>
+              <Input
+                id="subtask-tags"
+                value={form.tags}
+                onChange={(e) => updateForm("tags", e.target.value)}
+                placeholder="design, UI"
+              />
+              <p className="text-xs text-muted-foreground">
+                Separate tags with commas.
+              </p>
+            </div>
+
             {error && (
-              <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                {error}
+              <div className="flex items-center gap-2 rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                <AlertCircle className="h-4 w-4" />
+                <span>{error}</span>
               </div>
             )}
           </div>
 
-          <div className="flex gap-2 justify-end">
+          <DialogFooter>
             <Button
               type="button"
               variant="outline"
@@ -921,10 +1137,10 @@ function SubtaskDialog({
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={saving}>
+            <Button type="submit" disabled={isSubmitDisabled}>
               {saving ? "Creating..." : "Create Subtask"}
             </Button>
-          </div>
+          </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>

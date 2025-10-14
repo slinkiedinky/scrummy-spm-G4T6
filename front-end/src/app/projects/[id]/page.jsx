@@ -26,7 +26,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Card } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -67,6 +67,7 @@ import { TeamTimeline } from "@/components/TeamTimeline";
 import { toast } from "sonner";
 import { TaskDetailModal } from "@/components/TaskDetailModal";
 import { getTask } from "@/lib/api";
+import TeamCalendar from '@/components/TeamCalendar';
 
 const TAG_BASE =
   "rounded-full px-2.5 py-1 text-xs font-medium inline-flex items-center gap-1";
@@ -206,6 +207,7 @@ export default function ProjectDetailPage() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [deleteError, setDeleteError] = useState("");
   const [deletingTaskId, setDeletingTaskId] = useState("");
+  const [showCalendar, setShowCalendar] = useState(false);
   const isEditingTask = Boolean(editingTaskId);
 
   // ⭐ ADDED: infer next project status from a list of tasks
@@ -1042,7 +1044,7 @@ export default function ProjectDetailPage() {
           id: assigneeId,
           name: assigneeName,
           email: assigneeInfo.email || "",
-          role: assigneeInfo.role || "Member",
+          role: assigneeInfo.role || "",
           avatar: assigneeInfo.photoURL || "",
         };
       }
@@ -1671,254 +1673,237 @@ export default function ProjectDetailPage() {
             </TabsContent>
 
             <TabsContent value="team" className="mt-0">
-              <Card className="p-4 space-y-4 not-print">
-                <div className="space-y-2">
-                  <h2 className="text-xl font-semibold">Team members</h2>
-                  <p className="text-xs text-muted-foreground">
-                    Manage collaborators assigned to this project.
-                  </p>
+              <div className="space-y-6">
+                {/* Team Management Header */}
+                <div className="flex items-center justify-between">
+                  <h2 className="text-xl font-semibold">Team Management</h2>
                 </div>
 
-                <div className="space-y-2">
-                  <Select
-                    value={selectedMember}
-                    onValueChange={handleMemberSelect}
-                    disabled={availableUsers.length === 0 || addingMember}
-                  >
-                    <SelectTrigger className="h-9 w-full text-sm">
-                      <SelectValue
-                        placeholder={
-                          availableUsers.length === 0
-                            ? "No available users"
-                            : "Select a user"
-                        }
-                      />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {availableUsers.length === 0 ? (
-                        <SelectItem value="" disabled>
-                          No users to add
-                        </SelectItem>
-                      ) : (
-                        availableUsers.map((user) => (
-                          <SelectItem key={user.id} value={user.id}>
-                            {`${user.label}${
-                              user.email && user.email !== user.label
-                                ? ` (${user.email})`
-                                : ""
-                            }`}
-                          </SelectItem>
-                        ))
-                      )}
-                    </SelectContent>
-                  </Select>
-                  <Button
-                    size="sm"
-                    onClick={handleAddMember}
-                    disabled={addingMember || !selectedMember}
-                    className="w-full"
-                  >
-                    {addingMember ? "Adding..." : "Add"}
-                  </Button>
-                </div>
-
-                {memberError && (
-                  <div className="flex items-center gap-2 rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                    <AlertCircle className="h-4 w-4" />
-                    <span>{memberError}</span>
+                {/* Add Team Member Section */}
+                <Card className="p-4 space-y-4 not-print">
+                  <div className="space-y-2">
+                    <h3 className="font-medium">Add Team Member</h3>
+                    <p className="text-xs text-muted-foreground">
+                      Manage collaborators assigned to this project.
+                    </p>
                   </div>
-                )}
 
-                {teamMembers.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    No team members yet.
-                  </p>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {teamMembers.map((member) => {
-                      const displayName =
-                        member.displayName ||
-                        member.fullName ||
-                        member.email ||
-                        member.id;
-                      const secondary =
-                        member.email && member.email !== displayName
-                          ? member.email
-                          : member.id !== displayName
-                          ? member.id
-                          : "";
-                      const isRemoving = removingMemberId === member.id;
-                      return (
-                        <Card key={member.id} className="p-4 space-y-3">
-                          <div className="space-y-1">
-                            <p className="truncate text-sm font-medium text-foreground">
-                              {displayName}
-                            </p>
-                            {secondary && (
-                              <p className="truncate text-xs text-muted-foreground">
-                                {secondary}
-                              </p>
-                            )}
-                            <div className="flex flex-wrap items-center gap-2 text-[10px] text-muted-foreground uppercase">
-                              {member.role && (
-                                <span className="rounded-full border border-border px-2 py-0.5 tracking-wide">
-                                  {member.role}
-                                </span>
+                  <div className="flex gap-2">
+                    <Select
+                      value={selectedMember}
+                      onValueChange={handleMemberSelect}
+                      disabled={availableUsers.length === 0 || addingMember}
+                    >
+                      <SelectTrigger className="h-9 flex-1 text-sm">
+                        <SelectValue
+                          placeholder={
+                            availableUsers.length === 0
+                              ? "No available users"
+                              : "Select a user"
+                          }
+                        />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {availableUsers.length === 0 ? (
+                          <SelectItem value="" disabled>
+                            No users to add
+                          </SelectItem>
+                        ) : (
+                          availableUsers.map((user) => (
+                            <SelectItem key={user.id} value={user.id}>
+                              {`${user.label}${
+                                user.email && user.email !== user.label
+                                  ? ` (${user.email})`
+                                  : ""
+                              }`}
+                            </SelectItem>
+                          ))
+                        )}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      size="sm"
+                      onClick={handleAddMember}
+                      disabled={addingMember || !selectedMember}
+                    >
+                      {addingMember ? "Adding..." : "Add"}
+                    </Button>
+                  </div>
+
+                  {memberError && (
+                    <div className="flex items-center gap-2 rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                      <AlertCircle className="h-4 w-4" />
+                      <span>{memberError}</span>
+                    </div>
+                  )}
+
+                  {/* Current Team Members */}
+                  {teamMembers.length > 0 && (
+                    <div className="space-y-2">
+                      <h4 className="font-medium text-sm">Current Team Members</h4>
+                      <div className="flex flex-wrap gap-2">
+                        {teamMembers.map((member) => {
+                          const displayName =
+                            member.displayName ||
+                            member.fullName ||
+                            member.email ||
+                            member.id;
+                          const isRemoving = removingMemberId === member.id;
+                          return (
+                            <div
+                              key={member.id}
+                              className="flex items-center gap-2 bg-muted/50 rounded-full px-3 py-1 text-sm"
+                            >
+                              <span>{displayName}</span>
+                              {member.isOwner && (
+                                <span className="text-xs text-muted-foreground">(Owner)</span>
                               )}
                               {member.isCurrentUser && (
-                                <span className="rounded-full bg-secondary/80 px-2 py-0.5 text-secondary-foreground">
-                                  You
-                                </span>
+                                <span className="text-xs text-muted-foreground">(You)</span>
                               )}
-                              {member.isOwner && (
-                                <span className="rounded-full border border-border px-2 py-0.5 text-muted-foreground">
-                                  Owner
-                                </span>
+                              {!member.isOwner && (
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-4 w-4 p-0 text-destructive hover:text-destructive"
+                                  onClick={() => handleRemoveMember(member.id)}
+                                  disabled={isRemoving}
+                                >
+                                  ×
+                                </Button>
                               )}
                             </div>
-                          </div>
-                          <div className="flex flex-col gap-2">
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              className="w-full"
-                              onClick={() => handleViewSchedule(member.id)}
-                            >
-                              <CalendarIcon className="mr-2 h-3.5 w-3.5" />
-                              View Schedule
-                            </Button>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="ghost"
-                              className="w-full text-destructive hover:text-destructive"
-                              onClick={() => handleRemoveMember(member.id)}
-                              disabled={isRemoving || member.isOwner}
-                            >
-                              {isRemoving ? "Removing..." : "Remove"}
-                            </Button>
-                          </div>
-                        </Card>
-                      );
-                    })}
-                  </div>
-                )}
-              </Card>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </Card>
+
+                {/* Team Calendar - Full Height */}
+                <div className="h-[calc(100vh-400px)] min-h-[600px]">
+                  <Card className="h-full">
+                    <CardContent className="p-0 h-full">
+                      <TeamCalendar 
+                        teamMembers={teamMembers?.map(member => member.id) || []} 
+                        currentUser={currentUser}
+                      />
+                    </CardContent>
+                  </Card>
+                </div>
+              </div>
             </TabsContent>
           </Tabs>
         </div>
-      </div>
-      {showReport && (
-        <ReportPanel
-          project={project}
-          tasks={tasks}
-          resolveUserLabel={resolveUserLabel}
-          onClose={() => setShowReport(false)}
-        />
-      )}
 
-      {selectedTask && (
-        <TaskDetailModal
-          task={selectedTask}
-          isOpen={!!selectedTask}
-          onClose={() => setSelectedTask(null)}
-          onEdit={handleEditTask}
-          onDelete={requestDeleteTask}
-          disableActions={Boolean(deletingTaskId) || savingTask}
-          teamMembers={teamMembers}
-          currentUserId={currentUser?.uid}
-          onSubtaskClick={handleSubtaskClick}
-          onSubtaskChange={async () => {
-            try {
-              await new Promise((resolve) => setTimeout(resolve, 300));
-              const isViewingSubtask =
-                selectedTask.isSubtask || selectedTask.parentTaskId;
+        {showReport && (
+          <ReportPanel
+            project={project}
+            tasks={tasks}
+            resolveUserLabel={resolveUserLabel}
+            onClose={() => setShowReport(false)}
+          />
+        )}
 
-              if (isViewingSubtask) {
-                const parentTaskId = selectedTask.parentTaskId;
-                const updatedSubtask = await getSubtask(
-                  project.id,
-                  parentTaskId,
-                  selectedTask.id
-                );
-                updatedSubtask.projectId = project.id;
-                updatedSubtask.parentTaskId = parentTaskId;
-                updatedSubtask.isSubtask = true;
+        {selectedTask && (
+          <TaskDetailModal
+            task={selectedTask}
+            isOpen={!!selectedTask}
+            onClose={() => setSelectedTask(null)}
+            onEdit={handleEditTask}
+            onDelete={requestDeleteTask}
+            disableActions={Boolean(deletingTaskId) || savingTask}
+            teamMembers={teamMembers}
+            currentUserId={currentUser?.uid}
+            onSubtaskClick={handleSubtaskClick}
+            onSubtaskChange={async () => {
+              try {
+                await new Promise((resolve) => setTimeout(resolve, 300));
+                const isViewingSubtask =
+                  selectedTask.isSubtask || selectedTask.parentTaskId;
 
-                const assigneeId =
-                  updatedSubtask.assigneeId || updatedSubtask.ownerId;
-                const assigneeInfo = users.find((u) => u?.id === assigneeId);
-                if (assigneeInfo) {
-                  const assigneeName =
-                    assigneeInfo.fullName ||
-                    assigneeInfo.displayName ||
-                    assigneeInfo.name ||
-                    assigneeInfo.email ||
-                    assigneeId;
-                  updatedSubtask.assigneeSummary = {
-                    id: assigneeId,
-                    name: assigneeName,
-                    email: assigneeInfo.email || "",
-                    role: assigneeInfo.role || "",
-                    avatar: assigneeInfo.avatar || assigneeInfo.photoURL || "",
-                  };
+                if (isViewingSubtask) {
+                  const parentTaskId = selectedTask.parentTaskId;
+                  const updatedSubtask = await getSubtask(
+                    project.id,
+                    parentTaskId,
+                    selectedTask.id
+                  );
+                  updatedSubtask.projectId = project.id;
+                  updatedSubtask.parentTaskId = parentTaskId;
+                  updatedSubtask.isSubtask = true;
+
+                  const assigneeId =
+                    updatedSubtask.assigneeId || updatedSubtask.ownerId;
+                  const assigneeInfo = users.find((u) => u?.id === assigneeId);
+                  if (assigneeInfo) {
+                    updatedSubtask.assigneeSummary = {
+                      id: assigneeId,
+                      name:
+                        assigneeInfo.fullName ||
+                        assigneeInfo.displayName ||
+                        assigneeInfo.name ||
+                        assigneeInfo.email ||
+                        assigneeId,
+                      email: assigneeInfo.email || "",
+                      role: assigneeInfo.role || "",
+                      avatar: assigneeInfo.avatar || assigneeInfo.photoURL || "",
+                    };
+                  }
+                  setSelectedTask(updatedSubtask);
+                  const updatedParentTask = await getTask(
+                    project.id,
+                    parentTaskId
+                  );
+                  setTasks((prevTasks) =>
+                    prevTasks.map((t) =>
+                      t.id === parentTaskId ? { ...t, ...updatedParentTask } : t
+                    )
+                  );
+                } else {
+                  const updatedTask = await getTask(project.id, selectedTask.id);
+                  updatedTask.projectId = project.id;
+
+                  const assigneeId = updatedTask.assigneeId || updatedTask.ownerId;
+                  const assigneeInfo = users.find((u) => u?.id === assigneeId);
+                  if (assigneeInfo) {
+                    updatedTask.assigneeSummary = {
+                      id: assigneeId,
+                      name:
+                        assigneeInfo.fullName ||
+                        assigneeInfo.displayName ||
+                        assigneeInfo.email ||
+                        assigneeId,
+                      email: assigneeInfo.email || "",
+                      role: assigneeInfo.role || "",
+                      avatar: assigneeInfo.avatar || assigneeInfo.photoURL || "",
+                    };
+                  } else if (assigneeId) {
+                    updatedTask.assigneeSummary = {
+                      id: assigneeId,
+                      name: `User ${String(assigneeId).slice(0, 4)}`,
+                      email: "",
+                      role: "",
+                      avatar: "",
+                    };
+                  }
+
+                  setSelectedTask(updatedTask);
+                  setTasks((prevTasks) =>
+                    prevTasks.map((t) =>
+                      t.id === updatedTask.id ? { ...t, ...updatedTask } : t
+                    )
+                  );
                 }
-                setSelectedTask(updatedSubtask);
-                const updatedParentTask = await getTask(
-                  project.id,
-                  parentTaskId
-                );
-                setTasks((prevTasks) =>
-                  prevTasks.map((t) =>
-                    t.id === parentTaskId ? { ...t, ...updatedParentTask } : t
-                  )
-                );
-              } else {
-                const updatedTask = await getTask(project.id, selectedTask.id);
-                updatedTask.projectId = project.id;
-
-                const assigneeId =
-                  updatedTask.assigneeId || updatedTask.ownerId;
-                const assigneeInfo = users.find((u) => u?.id === assigneeId);
-                if (assigneeInfo) {
-                  const assigneeName =
-                    assigneeInfo.fullName ||
-                    assigneeInfo.displayName ||
-                    assigneeInfo.name ||
-                    assigneeInfo.email ||
-                    assigneeId;
-                  updatedTask.assigneeSummary = {
-                    id: assigneeId,
-                    name: assigneeName,
-                    email: assigneeInfo.email || "",
-                    role: assigneeInfo.role || "",
-                    avatar: assigneeInfo.avatar || assigneeInfo.photoURL || "",
-                  };
-                } else if (assigneeId) {
-                  updatedTask.assigneeSummary = {
-                    id: assigneeId,
-                    name: `User ${String(assigneeId).slice(0, 4)}`,
-                    email: "",
-                    role: "",
-                    avatar: "",
-                  };
-                }
-
-                setSelectedTask(updatedTask);
-                setTasks((prevTasks) =>
-                  prevTasks.map((t) =>
-                    t.id === updatedTask.id ? { ...t, ...updatedTask } : t
-                  )
-                );
+              } catch (err) {
+                console.error("Failed to refresh task:", err);
+                toast.error("Failed to refresh task details");
               }
-            } catch (err) {
-              console.error("Failed to refresh task:", err);
-              toast.error("Failed to refresh task details");
-            }
-          }}
-        />
-      )}
+            }}
+          />
+        )}
+      </div>
     </>
   );
 }

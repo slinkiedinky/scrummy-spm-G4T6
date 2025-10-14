@@ -309,17 +309,33 @@ export default function Timeline() {
           )
         );
 
+        console.log("Fetching assigner names for user IDs:", userIds); // Debug log
+
         const userNameById = {};
         await Promise.all(
           userIds.map(async (u) => {
             try {
               const us = await getDoc(doc(db, "users", u));
-              userNameById[u] = us.exists() ? us.data().fullName || u : u;
-            } catch {
+              if (us.exists()) {
+                const userData = us.data();
+                console.log(`User data for ${u}:`, userData); // Debug what we get from Firebase
+                
+                // Check both fullName and name fields
+                const displayName = userData.fullName || userData.name || userData.displayName || u;
+                userNameById[u] = displayName;
+                console.log(`Mapped ${u} -> ${displayName}`); // Debug the mapping
+              } else {
+                console.warn(`User document does not exist for ${u}`);
+                userNameById[u] = u;
+              }
+            } catch (error) {
+              console.error(`Failed to fetch user ${u}:`, error);
               userNameById[u] = u;
             }
           })
         );
+
+        console.log("Final user name mapping:", userNameById); // See the complete mapping
 
         const normalized = tasksData.map((t) => {
           const pr = priorityInfo(t.priority);

@@ -1864,9 +1864,16 @@ export default function ProjectDetailPage() {
                     avatar: assigneeInfo.avatar || assigneeInfo.photoURL || "",
                   };
                 }
-
                 setSelectedTask(updatedSubtask);
-                await load(currentUser.uid);
+                const updatedParentTask = await getTask(
+                  project.id,
+                  parentTaskId
+                );
+                setTasks((prevTasks) =>
+                  prevTasks.map((t) =>
+                    t.id === parentTaskId ? { ...t, ...updatedParentTask } : t
+                  )
+                );
               } else {
                 const updatedTask = await getTask(project.id, selectedTask.id);
                 updatedTask.projectId = project.id;
@@ -1899,7 +1906,11 @@ export default function ProjectDetailPage() {
                 }
 
                 setSelectedTask(updatedTask);
-                await load(currentUser.uid);
+                setTasks((prevTasks) =>
+                  prevTasks.map((t) =>
+                    t.id === updatedTask.id ? { ...t, ...updatedTask } : t
+                  )
+                );
               }
             } catch (err) {
               console.error("Failed to refresh task:", err);

@@ -34,6 +34,7 @@ import {
   updateTask,
   deleteTask,
   getTask,
+  getProject,
   listSubtasks,
   getSubtask,
   updateSubtask,
@@ -186,7 +187,29 @@ function TaskCardWithSubtasks({
     e.stopPropagation();
     onSubtaskClick(subtask, task);
   };
-
+  useEffect(() => {
+    const reloadIfExpanded = async () => {
+      if (isExpanded && hasSubtasks) {
+        setLoadingSubtasks(true);
+        try {
+          const data = await listSubtasks(task.projectId, task.id);
+          setSubtasks(data || []);
+        } catch (error) {
+          console.error("Failed to reload subtasks:", error);
+        } finally {
+          setLoadingSubtasks(false);
+        }
+      }
+    };
+    reloadIfExpanded();
+  }, [
+    task.subtaskCount,
+    task.subtaskCompletedCount,
+    isExpanded,
+    hasSubtasks,
+    task.projectId,
+    task.id,
+  ]);
   const due = toDate(task.dueDate);
   const updated = toDate(task.updatedAt);
   const overdue = due && due < new Date() && task.status !== "completed";
@@ -348,6 +371,7 @@ export default function TasksPage() {
   const [projectFilter, setProjectFilter] = useState("all");
 
   const [selectedTask, setSelectedTask] = useState(null);
+  const [selectedTaskProject, setSelectedTaskProject] = useState(null);
   const [editingTask, setEditingTask] = useState(null);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [editForm, setEditForm] = useState({
@@ -650,9 +674,8 @@ export default function TasksPage() {
     },
     [tasks]
   );
-
   const handleTaskClick = useCallback(
-    (task) => {
+    async (task) => {
       if (!task) return;
 
       const resolved = resolveTaskRecord(task) || task;
@@ -695,7 +718,18 @@ export default function TasksPage() {
       });
 
       const creatorSummary = summarizeUser(resolved.createdBy);
+      let projectData = null;
+      if (resolved.projectId && resolved.projectId !== "unassigned") {
+        try {
+          projectData = await getProject(resolved.projectId, {
+            assignedTo: currentUser?.uid,
+          });
+        } catch (err) {
+          console.error("Failed to load project data:", err);
+        }
+      }
 
+      setSelectedTaskProject(projectData);
       setSelectedTask({
         ...resolved,
         assigneeSummary: assigneeSummary || undefined,
@@ -703,8 +737,9 @@ export default function TasksPage() {
         collaborators,
       });
     },
-    [resolveTaskRecord, summarizeUser]
+    [resolveTaskRecord, summarizeUser, currentUser?.uid]
   );
+
   const handleSubtaskClick = useCallback(
     async (subtask, parentTask) => {
       try {
@@ -1461,54 +1496,108 @@ export default function TasksPage() {
         )}
       </div>
 
-      {selectedTask && (
-        <TaskDetailModal
-          task={selectedTask}
-          isOpen={!!selectedTask}
-          onClose={() => setSelectedTask(null)}
-          onEdit={openEditDialog}
-          onDelete={requestDeleteTask}
-          disableActions={Boolean(deletingTaskId) || savingEdit}
-          onSubtaskChange={async () => {
-            try {
-              // Small delay to let backend update
-              await new Promise((resolve) => setTimeout(resolve, 300));
+      {selectedTask &&
+        (() => {
+          let teamMembers = [];
 
-              // Refetch the specific task with updated progress
-              const updatedTask = await getTask(
-                selectedTask.projectId,
-                selectedTask.id
-              );
-
-              // Resolve assignee/creator like we do in handleTaskClick
-              const assigneeSummary = summarizeUser(
-                updatedTask.assigneeId || updatedTask.ownerId
-              );
-              const creatorSummary = summarizeUser(updatedTask.createdBy);
-
-              const refreshedTask = {
-                ...updatedTask,
-                assigneeSummary,
-                creatorSummary,
-              };
-
-              // Update the modal
-              setSelectedTask(refreshedTask);
-
-              setTasks((prevTasks) =>
-                prevTasks.map((t) =>
-                  t.id === refreshedTask.id ? refreshedTask : t
-                )
-              );
-            } catch (err) {
-              console.error(
-                "Failed to refresh task after subtask change:",
-                err
-              );
+          if (
+            selectedTaskProject &&
+            Array.isArray(selectedTaskProject.teamIds)
+          ) {
+            teamMembers = users.filter((u) =>
+              selectedTaskProject.teamIds.includes(u.id)
+            );
+          } else if (
+            !selectedTask.projectId ||
+            selectedTask.projectId === "unassigned"
+          ) {
+            const creator = users.find((u) => u.id === currentUser?.uid);
+            if (creator) {
+              teamMembers = [creator];
             }
-          }}
-        />
-      )}
+          }
+
+          return (
+            <TaskDetailModal
+              task={selectedTask}
+              isOpen={!!selectedTask}
+              onClose={() => {
+                setSelectedTask(null);
+                setSelectedTaskProject(null);
+              }}
+              onEdit={openEditDialog}
+              onDelete={requestDeleteTask}
+              disableActions={Boolean(deletingTaskId) || savingEdit}
+              teamMembers={teamMembers}
+              currentUserId={currentUser?.uid}
+              onSubtaskClick={handleSubtaskClick}
+              onSubtaskChange={async () => {
+                try {
+                  await new Promise((resolve) => setTimeout(resolve, 300));
+
+                  // Determine if viewing a subtask or parent task
+                  const isViewingSubtask =
+                    selectedTask.isSubtask || selectedTask.parentTaskId;
+
+                  if (isViewingSubtask) {
+                    // Refresh the subtask itself
+                    const parentTaskId = selectedTask.parentTaskId;
+                    const updatedSubtask = await getSubtask(
+                      selectedTask.projectId,
+                      parentTaskId,
+                      selectedTask.id
+                    );
+
+                    updatedSubtask.projectId = selectedTask.projectId;
+                    updatedSubtask.parentTaskId = parentTaskId;
+                    updatedSubtask.isSubtask = true;
+
+                    const assigneeSummary = summarizeUser(
+                      updatedSubtask.assigneeId || updatedSubtask.ownerId
+                    );
+                    const creatorSummary = summarizeUser(
+                      updatedSubtask.createdBy
+                    );
+
+                    setSelectedTask({
+                      ...updatedSubtask,
+                      assigneeSummary,
+                      creatorSummary,
+                    });
+                  } else {
+                    // Refresh the parent task with updated subtask info
+                    const updatedTask = await getTask(
+                      selectedTask.projectId,
+                      selectedTask.id
+                    );
+                    const assigneeSummary = summarizeUser(
+                      updatedTask.assigneeId || updatedTask.ownerId
+                    );
+                    const creatorSummary = summarizeUser(updatedTask.createdBy);
+
+                    const refreshedTask = {
+                      ...updatedTask,
+                      assigneeSummary,
+                      creatorSummary,
+                    };
+                    setSelectedTask(refreshedTask);
+
+                    setTasks((prevTasks) =>
+                      prevTasks.map((t) =>
+                        t.id === refreshedTask.id ? refreshedTask : t
+                      )
+                    );
+                  }
+                } catch (err) {
+                  console.error(
+                    "Failed to refresh task after subtask change:",
+                    err
+                  );
+                }
+              }}
+            />
+          );
+        })()}
     </div>
   );
 }

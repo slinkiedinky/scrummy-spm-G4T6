@@ -379,9 +379,11 @@ export function TaskDetailModal({
                     taskId={task.id}
                     parentTask={task}
                     onSubtaskClick={onSubtaskClick}
+                    refreshKey={subtaskRefreshKey}
                     onSubtaskChange={async () => {
                       if (typeof onSubtaskChange === "function")
                         await onSubtaskChange();
+                      setSubtaskRefreshKey((prev) => prev + 1);
                     }}
                   />
                 </div>
@@ -660,6 +662,7 @@ function SubtasksList({
   parentTask,
   onSubtaskClick,
   onSubtaskChange,
+  refreshKey,
 }) {
   const [subtasks, setSubtasks] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -684,7 +687,7 @@ function SubtasksList({
     if (projectId && taskId) {
       loadSubtasks();
     }
-  }, [projectId, taskId]);
+  }, [projectId, taskId, refreshKey]);
 
   const handleToggleStatus = async (subtask) => {
     const newStatus = subtask.status === "completed" ? "to-do" : "completed";

@@ -167,7 +167,7 @@ export default function NotificationsPage() {
           <span className="text-lg font-medium">No notifications</span>
         </div>
       ) : (
-  <div className="overflow-y-scroll max-h-[85vh] space-y-4 scrollbar-thin scrollbar-thumb-gray-400 scrollbar-track-gray-100">
+  <div className="overflow-y-auto max-h-[85vh] space-y-4 scrollbar-thin scrollbar-thumb-gray-400 scrollbar-track-gray-100">
           {notifications.map((notif) => {
             let content;
             if (notif.type === "add task") {

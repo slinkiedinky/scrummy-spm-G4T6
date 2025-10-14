@@ -1781,17 +1781,15 @@ export default function ProjectDetailPage() {
                   )}
                 </Card>
 
-                {/* Team Calendar - Full Height */}
-                <div className="h-[calc(100vh-400px)] min-h-[600px]">
-                  <Card className="h-full">
-                    <CardContent className="p-0 h-full">
-                      <TeamCalendar 
-                        teamMembers={teamMembers?.map(member => member.id) || []} 
-                        currentUser={currentUser}
-                      />
-                    </CardContent>
-                  </Card>
-                </div>
+                {/* Team Calendar - Remove fixed height constraints */}
+                <Card className="w-full">
+                  <div className="p-0">
+                    <TeamCalendar 
+                      teamMembers={teamMembers?.map(member => member.id) || []} 
+                      currentUser={currentUser}
+                    />
+                  </div>
+                </Card>
               </div>
             </TabsContent>
           </Tabs>

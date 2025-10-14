@@ -229,7 +229,7 @@ export function TeamCalendar({ teamMembers = [], currentUser }) {
   }
 
   return (
-    <div className="flex flex-col h-full bg-background">
+    <div className="flex flex-col w-full bg-background">
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b">
         <div className="flex items-center gap-4">
@@ -285,7 +285,7 @@ export function TeamCalendar({ teamMembers = [], currentUser }) {
       )}
 
       {/* Calendar Content */}
-      <div className="flex-1 overflow-auto">
+      <div className="w-full">
         {viewMode === "day" && (
           <DayView
             date={currentDate}
@@ -334,7 +334,7 @@ export function TeamCalendar({ teamMembers = [], currentUser }) {
 
 function DayView({ date, tasks, onTaskClick, getUserColor, formatTime }) {
   return (
-    <div className="flex h-full">
+    <div className="flex w-full">
       <div className="flex-1 p-4">
         <div className="space-y-px">
           {HOURS.map((hour) => {

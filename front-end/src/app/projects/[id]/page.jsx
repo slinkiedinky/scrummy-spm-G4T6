@@ -2222,7 +2222,7 @@ function ReportPanel({ project, tasks, onClose, resolveUserLabel }) {
           </section>
 
           <section>
-            <h4 className="mb-2 font-semibold">Summary</h4>
+                       <h4 className="mb-2 font-semibold">Summary</h4>
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               <Card className="p-4">
                 <div className="text-sm text-muted-foreground">Total tasks</div>
@@ -2402,20 +2402,30 @@ function TeamManagementModal({
   const handleUserSelect = (userId) => {
     const user = availableUsers.find(u => u.id === userId);
     if (user) {
-      setSearchTerm(user.label);
       onMemberSelect(userId);
+      // Clear search term immediately after selection
+      setSearchTerm("");
     }
   };
 
   const handleAddUser = async () => {
     if (selectedMember) {
       await onAddMember();
+      // Clear search term after adding
       setSearchTerm("");
     }
   };
 
+  // Clear search and selection when modal closes
+  const handleClose = (open) => {
+    if (!open) {
+      setSearchTerm("");
+      onClose();
+    }
+  };
+
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog open={isOpen} onOpenChange={handleClose}>
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -2440,6 +2450,10 @@ function TeamManagementModal({
                 value={searchTerm}
                 onChange={(e) => {
                   setSearchTerm(e.target.value);
+                  // Clear selection when user types
+                  if (selectedMember) {
+                    onMemberSelect("");
+                  }
                 }}
                 className="w-full h-9 px-3 rounded-md border bg-background text-sm"
               />
@@ -2464,6 +2478,25 @@ function TeamManagementModal({
                 </div>
               )}
             </div>
+
+            {/* Show selected user */}
+            {selectedMember && !searchTerm && (
+              <div className="p-2 bg-muted/50 rounded-md border">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">
+                    Selected: {availableUsers.find(u => u.id === selectedMember)?.label || selectedMember}
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => onMemberSelect("")}
+                    className="h-6 w-6 p-0"
+                  >
+                    ×
+                  </Button>
+                </div>
+              </div>
+            )}
 
             <Button
               onClick={handleAddUser}

@@ -68,6 +68,7 @@ import { toast } from "sonner";
 import { TaskDetailModal } from "@/components/TaskDetailModal";
 import { getTask } from "@/lib/api";
 import TeamCalendar from '@/components/TeamCalendar';
+import { Users } from "lucide-react";
 
 const TAG_BASE =
   "rounded-full px-2.5 py-1 text-xs font-medium inline-flex items-center gap-1";
@@ -208,6 +209,7 @@ export default function ProjectDetailPage() {
   const [deleteError, setDeleteError] = useState("");
   const [deletingTaskId, setDeletingTaskId] = useState("");
   const [showCalendar, setShowCalendar] = useState(false);
+  const [showTeamModal, setShowTeamModal] = useState(false);
   const isEditingTask = Boolean(editingTaskId);
 
   // ⭐ ADDED: infer next project status from a list of tasks
@@ -1674,114 +1676,51 @@ export default function ProjectDetailPage() {
 
             <TabsContent value="team" className="mt-0">
               <div className="space-y-6">
-                {/* Team Management Header */}
+                {/* Compact Team Management Header */}
                 <div className="flex items-center justify-between">
-                  <h2 className="text-xl font-semibold">Team Management</h2>
-                </div>
-
-                {/* Add Team Member Section */}
-                <Card className="p-4 space-y-4 not-print">
-                  <div className="space-y-2">
-                    <h3 className="font-medium">Add Team Member</h3>
-                    <p className="text-xs text-muted-foreground">
-                      Manage collaborators assigned to this project.
+                  <div>
+                    <h2 className="text-xl font-semibold">Team Calendar</h2>
+                    <p className="text-sm text-muted-foreground">
+                      View schedules for {teamMembers.length} team member{teamMembers.length !== 1 ? 's' : ''}
                     </p>
                   </div>
+                  <Button
+                    onClick={() => setShowTeamModal(true)}
+                    variant="outline"
+                    size="sm"
+                    className="flex items-center gap-2"
+                  >
+                    <Users className="h-4 w-4" />
+                    Manage Team
+                  </Button>
+                </div>
 
-                  <div className="flex gap-2">
-                    <Select
-                      value={selectedMember}
-                      onValueChange={handleMemberSelect}
-                      disabled={availableUsers.length === 0 || addingMember}
-                    >
-                      <SelectTrigger className="h-9 flex-1 text-sm">
-                        <SelectValue
-                          placeholder={
-                            availableUsers.length === 0
-                              ? "No available users"
-                              : "Select a user"
-                          }
-                        />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {availableUsers.length === 0 ? (
-                          <SelectItem value="" disabled>
-                            No users to add
-                          </SelectItem>
-                        ) : (
-                          availableUsers.map((user) => (
-                            <SelectItem key={user.id} value={user.id}>
-                              {`${user.label}${
-                                user.email && user.email !== user.label
-                                  ? ` (${user.email})`
-                                  : ""
-                              }`}
-                            </SelectItem>
-                          ))
-                        )}
-                      </SelectContent>
-                    </Select>
-                    <Button
-                      size="sm"
-                      onClick={handleAddMember}
-                      disabled={addingMember || !selectedMember}
-                    >
-                      {addingMember ? "Adding..." : "Add"}
-                    </Button>
+                {/* Current Team Members Summary */}
+                {teamMembers.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {teamMembers.map((member) => {
+                      const displayName =
+                        member.displayName ||
+                        member.fullName ||
+                        member.email ||
+                        member.id;
+                      return (
+                        <div
+                          key={member.id}
+                          className="flex items-center gap-2 bg-muted/50 rounded-full px-3 py-1 text-sm"
+                        >
+                          <div className="w-2 h-2 rounded-full bg-primary"></div>
+                          <span>{displayName}</span>
+                          {member.isCurrentUser && (
+                            <span className="text-xs text-muted-foreground">(You)</span>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
+                )}
 
-                  {memberError && (
-                    <div className="flex items-center gap-2 rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                      <AlertCircle className="h-4 w-4" />
-                      <span>{memberError}</span>
-                    </div>
-                  )}
-
-                  {/* Current Team Members */}
-                  {teamMembers.length > 0 && (
-                    <div className="space-y-2">
-                      <h4 className="font-medium text-sm">Current Team Members</h4>
-                      <div className="flex flex-wrap gap-2">
-                        {teamMembers.map((member) => {
-                          const displayName =
-                            member.displayName ||
-                            member.fullName ||
-                            member.email ||
-                            member.id;
-                          const isRemoving = removingMemberId === member.id;
-                          return (
-                            <div
-                              key={member.id}
-                              className="flex items-center gap-2 bg-muted/50 rounded-full px-3 py-1 text-sm"
-                            >
-                              <span>{displayName}</span>
-                              {member.isOwner && (
-                                <span className="text-xs text-muted-foreground">(Owner)</span>
-                              )}
-                              {member.isCurrentUser && (
-                                <span className="text-xs text-muted-foreground">(You)</span>
-                              )}
-                              {!member.isOwner && (
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="ghost"
-                                  className="h-4 w-4 p-0 text-destructive hover:text-destructive"
-                                  onClick={() => handleRemoveMember(member.id)}
-                                  disabled={isRemoving}
-                                >
-                                  ×
-                                </Button>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-                </Card>
-
-                {/* Team Calendar - Remove fixed height constraints */}
+                {/* Team Calendar - Full Height */}
                 <Card className="w-full">
                   <div className="p-0">
                     <TeamCalendar 
@@ -1790,6 +1729,21 @@ export default function ProjectDetailPage() {
                     />
                   </div>
                 </Card>
+
+                {/* Team Management Modal */}
+                <TeamManagementModal
+                  isOpen={showTeamModal}
+                  onClose={() => setShowTeamModal(false)}
+                  teamMembers={teamMembers}
+                  availableUsers={availableUsers}
+                  selectedMember={selectedMember}
+                  onMemberSelect={handleMemberSelect}
+                  onAddMember={handleAddMember}
+                  onRemoveMember={handleRemoveMember}
+                  addingMember={addingMember}
+                  removingMemberId={removingMemberId}
+                  memberError={memberError}
+                />
               </div>
             </TabsContent>
           </Tabs>
@@ -2423,4 +2377,174 @@ function toDate(v) {
   if (typeof v === "object" && "seconds" in v)
     return new Date(v.seconds * 1000);
   return null;
+}
+
+function TeamManagementModal({ 
+  isOpen, 
+  onClose, 
+  teamMembers, 
+  availableUsers, 
+  selectedMember,
+  onMemberSelect,
+  onAddMember, 
+  onRemoveMember, 
+  addingMember, 
+  removingMemberId, 
+  memberError 
+}) {
+  const [searchTerm, setSearchTerm] = useState("");
+
+  const filteredUsers = availableUsers.filter(user =>
+    user.label.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (user.email && user.email.toLowerCase().includes(searchTerm.toLowerCase()))
+  );
+
+  const handleUserSelect = (userId) => {
+    const user = availableUsers.find(u => u.id === userId);
+    if (user) {
+      setSearchTerm(user.label);
+      onMemberSelect(userId);
+    }
+  };
+
+  const handleAddUser = async () => {
+    if (selectedMember) {
+      await onAddMember();
+      setSearchTerm("");
+    }
+  };
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Users className="h-5 w-5" />
+            Manage Team Members
+          </DialogTitle>
+          <p className="text-sm text-muted-foreground">
+            Add or remove collaborators for this project
+          </p>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          {/* Add New Member Section */}
+          <div className="space-y-3">
+            <h4 className="font-medium">Add Team Member</h4>
+            
+            {/* Search Input with Autocomplete */}
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Search for team members..."
+                value={searchTerm}
+                onChange={(e) => {
+                  setSearchTerm(e.target.value);
+                }}
+                className="w-full h-9 px-3 rounded-md border bg-background text-sm"
+              />
+              
+              {/* Autocomplete Dropdown */}
+              {searchTerm && filteredUsers.length > 0 && (
+                <div className="absolute top-full left-0 right-0 mt-1 bg-background border rounded-md shadow-lg max-h-40 overflow-y-auto z-50">
+                  {filteredUsers.map((user) => (
+                    <button
+                      key={user.id}
+                      onClick={() => handleUserSelect(user.id)}
+                      className="w-full px-3 py-2 text-left hover:bg-muted text-sm flex flex-col"
+                    >
+                      <span className="font-medium">{user.label}</span>
+                      {user.email && user.email !== user.label && (
+                        <span className="text-xs text-muted-foreground leading-tight">
+                          {user.email}
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <Button
+              onClick={handleAddUser}
+              disabled={!selectedMember || addingMember}
+              className="w-full"
+              size="sm"
+            >
+              {addingMember ? "Adding..." : "Add Member"}
+            </Button>
+
+            {memberError && (
+              <div className="flex items-center gap-2 rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                <AlertCircle className="h-4 w-4" />
+                <span>{memberError}</span>
+              </div>
+            )}
+          </div>
+
+          {/* Current Team Members */}
+          {teamMembers.length > 0 && (
+            <div className="space-y-3 border-t pt-4">
+              <h4 className="font-medium">Current Team Members</h4>
+              <div className="space-y-2 max-h-40 overflow-y-auto">
+                {teamMembers.map((member) => {
+                  const displayName =
+                    member.displayName ||
+                    member.fullName ||
+                    member.email ||
+                    member.id;
+                  const isRemoving = removingMemberId === member.id;
+                  
+                  return (
+                    <div
+                      key={member.id}
+                      className="flex items-center justify-between p-2 rounded-md border bg-muted/30"
+                    >
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-primary"></div>
+                        <div>
+                          <p className="text-sm font-medium">{displayName}</p>
+                          {member.email && member.email !== displayName && (
+                            <p className="text-xs text-muted-foreground">{member.email}</p>
+                          )}
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-center gap-1">
+                        {member.isOwner && (
+                          <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded-full">
+                            Owner
+                          </span>
+                        )}
+                        {member.isCurrentUser && (
+                          <span className="text-xs bg-muted text-muted-foreground px-2 py-1 rounded-full">
+                            You
+                          </span>
+                        )}
+                        {!member.isOwner && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => onRemoveMember(member.id)}
+                            disabled={isRemoving}
+                            className="h-6 w-6 p-0 text-destructive hover:text-destructive"
+                          >
+                            {isRemoving ? (
+                              <div className="h-3 w-3 animate-spin rounded-full border-2 border-destructive border-r-transparent" />
+                            ) : (
+                              "×"
+                            )}
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
 }

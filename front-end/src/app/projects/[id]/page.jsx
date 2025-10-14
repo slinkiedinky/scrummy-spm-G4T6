@@ -1199,7 +1199,11 @@ export default function ProjectDetailPage() {
           <form onSubmit={handleSubmitTask} className="space-y-6">
             <DialogHeader>
               <DialogTitle>
-                {isEditingTask ? "Edit Task" : "Add Task"}
+                {isEditingTask
+                  ? isEditingSubtask
+                    ? "Edit Subtask"
+                    : "Edit Task"
+                  : "Add Task"}{" "}
               </DialogTitle>
               <DialogDescription>
                 {isEditingTask
@@ -1813,6 +1817,7 @@ export default function ProjectDetailPage() {
           onClose={() => setShowReport(false)}
         />
       )}
+
       {selectedTask && (
         <TaskDetailModal
           task={selectedTask}
@@ -1823,6 +1828,7 @@ export default function ProjectDetailPage() {
           disableActions={Boolean(deletingTaskId) || savingTask}
           teamMembers={teamMembers}
           currentUserId={currentUser?.uid}
+          onSubtaskClick={handleSubtaskClick}
           onSubtaskChange={async () => {
             try {
               await new Promise((resolve) => setTimeout(resolve, 300));

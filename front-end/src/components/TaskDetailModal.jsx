@@ -81,6 +81,7 @@ export function TaskDetailModal({
   teamMembers = [],
   currentUserId,
   onSubtaskChange,
+  onSubtaskClick,
 }) {
   const [showSubtaskDialog, setShowSubtaskDialog] = useState(false);
   const [subtaskRefreshKey, setSubtaskRefreshKey] = useState(0);
@@ -373,10 +374,11 @@ export function TaskDetailModal({
                     </div>
                   )}
 
-                  {/* Subtasks List */}
                   <SubtasksList
                     projectId={task.projectId}
                     taskId={task.id}
+                    parentTask={task}
+                    onSubtaskClick={onSubtaskClick}
                     onSubtaskChange={async () => {
                       if (typeof onSubtaskChange === "function")
                         await onSubtaskChange();
@@ -652,7 +654,13 @@ export function TaskDetailModal({
   );
 }
 
-function SubtasksList({ projectId, taskId, onSubtaskChange }) {
+function SubtasksList({
+  projectId,
+  taskId,
+  parentTask,
+  onSubtaskClick,
+  onSubtaskChange,
+}) {
   const [subtasks, setSubtasks] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -755,7 +763,14 @@ function SubtasksList({ projectId, taskId, onSubtaskChange }) {
               <Circle className="h-5 w-5 text-muted-foreground" />
             )}
           </button>
-          <div className="flex-1 min-w-0">
+          <div
+            className="flex-1 min-w-0 cursor-pointer"
+            onClick={() => {
+              if (onSubtaskClick && parentTask) {
+                onSubtaskClick(subtask, parentTask);
+              }
+            }}
+          >
             <p
               className={`text-sm ${
                 subtask.status === "completed"

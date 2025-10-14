@@ -247,3 +247,105 @@ export const deleteSubtask = async (projectId, taskId, subtaskId) => {
   if (!r.ok) throw new Error("Delete subtask failed");
   return r.json();
 };
+
+// ============================================================================
+// STANDALONE TASKS
+// ============================================================================
+
+export const createStandaloneTask = async (payload) => {
+  const r = await fetch(`${API}/projects/standalone/tasks`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!r.ok) throw new Error("Create standalone task failed");
+  return r.json();
+};
+
+export const listStandaloneTasks = async (ownerId) => {
+  const r = await fetch(`${API}/projects/standalone/tasks?ownerId=${ownerId}`, {
+    cache: "no-store",
+  });
+  if (!r.ok) throw new Error("List standalone tasks failed");
+  return r.json();
+};
+
+export const getStandaloneTask = async (taskId) => {
+  const r = await fetch(`${API}/projects/standalone/tasks/${taskId}`, {
+    cache: "no-store",
+  });
+  if (!r.ok) throw new Error("Get standalone task failed");
+  return r.json();
+};
+
+export const updateStandaloneTask = async (taskId, patch) => {
+  const r = await fetch(`${API}/projects/standalone/tasks/${taskId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(patch),
+  });
+  if (!r.ok) throw new Error("Update standalone task failed");
+  return r.json();
+};
+
+export const deleteStandaloneTask = async (taskId) => {
+  const r = await fetch(`${API}/projects/standalone/tasks/${taskId}`, {
+    method: "DELETE",
+  });
+  if (!r.ok) throw new Error("Delete standalone task failed");
+  return r.json();
+};
+
+// Standalone task subtasks
+export const listStandaloneSubtasks = async (taskId) => {
+  const r = await fetch(`${API}/projects/standalone/tasks/${taskId}/subtasks`, {
+    cache: "no-store",
+  });
+  if (!r.ok) throw new Error("List standalone subtasks failed");
+  return r.json();
+};
+
+export const createStandaloneSubtask = async (taskId, payload) => {
+  const r = await fetch(`${API}/projects/standalone/tasks/${taskId}/subtasks`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!r.ok) throw new Error("Create standalone subtask failed");
+  return r.json();
+};
+
+export const getStandaloneSubtask = async (taskId, subtaskId) => {
+  const r = await fetch(
+    `${API}/projects/standalone/tasks/${taskId}/subtasks/${subtaskId}`,
+    {
+      cache: "no-store",
+    }
+  );
+  if (!r.ok) throw new Error("Get standalone subtask failed");
+  return r.json();
+};
+
+export const updateStandaloneSubtask = async (taskId, subtaskId, patch) => {
+  const r = await fetch(
+    `${API}/projects/standalone/tasks/${taskId}/subtasks/${subtaskId}`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(patch),
+    }
+  );
+  if (!r.ok) throw new Error("Update standalone subtask failed");
+  return r.json();
+};
+
+export const deleteStandaloneSubtask = async (taskId, subtaskId) => {
+  const r = await fetch(
+    `${API}/projects/standalone/tasks/${taskId}/subtasks/${subtaskId}`,
+    {
+      method: "DELETE",
+    }
+  );
+  if (!r.ok) throw new Error("Delete standalone subtask failed");
+  return r.json();
+};

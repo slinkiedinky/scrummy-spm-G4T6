@@ -581,12 +581,317 @@ def create_subtask(project_id, task_id):
     }
     
     ref = parent_task_ref.collection("subtasks").add(doc)
-    
-    # Update parent task's subtask count and completion percentage
     update_parent_task_progress(project_id, task_id)
     
     return jsonify({"id": ref[1].id, "message": "Subtask created"}), 201
+# ============================================================================
+# STANDALONE TASKS (not associated with any project)
+# ============================================================================
 
+@projects_bp.route("/standalone/tasks", methods=["POST"])
+def create_standalone_task():
+    """Create a standalone task not associated with any project"""
+    data = request.json or {}
+    now = now_utc()
+    owner_id = data.get("ownerId") or data.get("createdBy")
+    if not owner_id:
+        return jsonify({"error": "ownerId is required"}), 400
+    assignee_id = owner_id
+    
+    task_data = {
+        "title": data.get("title", "").strip(),
+        "description": data.get("description", "").strip(),
+        "status": canon_status(data.get("status")),
+        "priority": canon_task_priority(data.get("priority")),
+        "dueDate": data.get("dueDate"),
+        "tags": data.get("tags", []),
+        "ownerId": owner_id,
+        "assigneeId": assignee_id,
+        "createdBy": owner_id,
+        "createdAt": now,
+        "updatedAt": now,
+        "projectId": None,  
+        "subtaskCount": 0,
+        "subtaskCompletedCount": 0,
+        "subtaskProgress": 0,
+    }
+
+    if not task_data["title"]:
+        return jsonify({"error": "Title is required"}), 400
+    
+    if not task_data["dueDate"]:
+        return jsonify({"error": "Due date is required"}), 400
+    
+    # Create task in top-level tasks collection
+    task_ref = db.collection("tasks").document()
+    task_ref.set(task_data)
+    
+    result = {**task_data, "id": task_ref.id}
+    return jsonify(normalize_task_out(result)), 201
+
+
+@projects_bp.route("/standalone/tasks", methods=["GET"])
+def list_standalone_tasks():
+    """Get all standalone tasks for a user"""
+    owner_id = request.args.get("ownerId") or request.args.get("assignedTo")
+    if not owner_id:
+        return jsonify({"error": "ownerId is required"}), 400
+    
+    # Query tasks where user is owner
+    tasks_query = db.collection("tasks").where("ownerId", "==", owner_id)
+    tasks_docs = tasks_query.stream()
+    
+    items = []
+    for doc in tasks_docs:
+        task_data = doc.to_dict()
+        task_data["id"] = doc.id
+        items.append(normalize_task_out(task_data))
+    
+    return jsonify(items), 200
+
+
+@projects_bp.route("/standalone/tasks/<task_id>", methods=["GET"])
+def get_standalone_task(task_id):
+    """Get a specific standalone task"""
+    task_ref = db.collection("tasks").document(task_id)
+    task_doc = task_ref.get()
+    
+    if not task_doc.exists:
+        return jsonify({"error": "Task not found"}), 404
+    
+    task_data = task_doc.to_dict()
+    task_data["id"] = task_doc.id
+    
+    return jsonify(normalize_task_out(task_data)), 200
+
+
+@projects_bp.route("/standalone/tasks/<task_id>", methods=["PUT"])
+def update_standalone_task(task_id):
+    """Update a standalone task"""
+    data = request.json or {}
+    
+    task_ref = db.collection("tasks").document(task_id)
+    task_doc = task_ref.get()
+    
+    if not task_doc.exists:
+        return jsonify({"error": "Task not found"}), 404
+    
+    task_data = task_doc.to_dict()
+    owner_id = task_data.get("ownerId")
+    
+    # Only owner can update
+    requester = data.get("updatedBy") or data.get("userId")
+    if requester != owner_id:
+        return jsonify({"error": "Only the task owner can update this task"}), 403
+    
+    updates = {"updatedAt": now_utc()}
+    
+    if "title" in data:
+        updates["title"] = data["title"].strip()
+    if "description" in data:
+        updates["description"] = data["description"].strip()
+    if "status" in data:
+        updates["status"] = canon_status(data["status"])
+    if "priority" in data:
+        updates["priority"] = canon_task_priority(data["priority"])
+    if "dueDate" in data:
+        updates["dueDate"] = data["dueDate"]
+    if "tags" in data:
+        updates["tags"] = data["tags"]
+    
+    task_ref.update(updates)
+    
+    updated_doc = task_ref.get()
+    result = updated_doc.to_dict()
+    result["id"] = task_id
+    
+    return jsonify(normalize_task_out(result)), 200
+
+
+@projects_bp.route("/standalone/tasks/<task_id>", methods=["DELETE"])
+def delete_standalone_task(task_id):
+    """Delete a standalone task"""
+    task_ref = db.collection("tasks").document(task_id)
+    task_doc = task_ref.get()
+    
+    if not task_doc.exists:
+        return jsonify({"error": "Task not found"}), 404
+    
+    # Delete all subtasks first
+    subtasks_ref = task_ref.collection("subtasks")
+    subtasks = subtasks_ref.stream()
+    for subtask in subtasks:
+        subtask.reference.delete()
+    
+    # Delete the task
+    task_ref.delete()
+    
+    return jsonify({"message": "Task deleted successfully"}), 200
+
+
+# ============================================================================
+# STANDALONE TASK SUBTASKS
+# ============================================================================
+
+@projects_bp.route("/standalone/tasks/<task_id>/subtasks", methods=["POST"])
+def create_standalone_subtask(task_id):
+    """Create a subtask for a standalone task"""
+    data = request.json or {}
+    now = now_utc()
+    
+    task_ref = db.collection("tasks").document(task_id)
+    task_doc = task_ref.get()
+    
+    if not task_doc.exists:
+        return jsonify({"error": "Parent task not found"}), 404
+    
+    task_data = task_doc.to_dict()
+    owner_id = task_data.get("ownerId")
+    
+    subtask_data = {
+        "title": data.get("title", "").strip(),
+        "description": data.get("description", "").strip(),
+        "status": canon_status(data.get("status")),
+        "priority": canon_task_priority(data.get("priority")),
+        "dueDate": data.get("dueDate"),
+        "ownerId": owner_id,
+        "assigneeId": owner_id,
+        "createdBy": owner_id,
+        "createdAt": now,
+        "updatedAt": now,
+    }
+    
+    if not subtask_data["title"]:
+        return jsonify({"error": "Title is required"}), 400
+    
+    subtask_ref = task_ref.collection("subtasks").document()
+    subtask_ref.set(subtask_data)
+    
+    # Update parent task progress
+    update_standalone_task_progress(task_id)
+    
+    result = {**subtask_data, "id": subtask_ref.id}
+    return jsonify(normalize_task_out(result)), 201
+
+
+@projects_bp.route("/standalone/tasks/<task_id>/subtasks", methods=["GET"])
+def list_standalone_subtasks(task_id):
+    """Get all subtasks for a standalone task"""
+    task_ref = db.collection("tasks").document(task_id)
+    
+    if not task_ref.get().exists:
+        return jsonify({"error": "Task not found"}), 404
+    
+    subtasks_ref = task_ref.collection("subtasks")
+    subtasks = subtasks_ref.stream()
+    
+    items = []
+    for doc in subtasks:
+        subtask_data = doc.to_dict()
+        subtask_data["id"] = doc.id
+        items.append(normalize_task_out(subtask_data))
+    
+    return jsonify(items), 200
+
+
+@projects_bp.route("/standalone/tasks/<task_id>/subtasks/<subtask_id>", methods=["GET"])
+def get_standalone_subtask(task_id, subtask_id):
+    """Get a specific subtask"""
+    subtask_ref = db.collection("tasks").document(task_id).collection("subtasks").document(subtask_id)
+    subtask_doc = subtask_ref.get()
+    
+    if not subtask_doc.exists:
+        return jsonify({"error": "Subtask not found"}), 404
+    
+    subtask_data = subtask_doc.to_dict()
+    subtask_data["id"] = subtask_id
+    
+    return jsonify(normalize_task_out(subtask_data)), 200
+
+
+@projects_bp.route("/standalone/tasks/<task_id>/subtasks/<subtask_id>", methods=["PUT"])
+def update_standalone_subtask(task_id, subtask_id):
+    """Update a subtask"""
+    data = request.json or {}
+    
+    subtask_ref = db.collection("tasks").document(task_id).collection("subtasks").document(subtask_id)
+    subtask_doc = subtask_ref.get()
+    
+    if not subtask_doc.exists:
+        return jsonify({"error": "Subtask not found"}), 404
+    
+    updates = {"updatedAt": now_utc()}
+    
+    if "title" in data:
+        updates["title"] = data["title"].strip()
+    if "description" in data:
+        updates["description"] = data["description"].strip()
+    if "status" in data:
+        updates["status"] = canon_status(data["status"])
+    if "priority" in data:
+        updates["priority"] = canon_task_priority(data["priority"])
+    if "dueDate" in data:
+        updates["dueDate"] = data["dueDate"]
+    
+    subtask_ref.update(updates)
+    update_standalone_task_progress(task_id)
+    
+    updated_doc = subtask_ref.get()
+    result = updated_doc.to_dict()
+    result["id"] = subtask_id
+    
+    return jsonify(normalize_task_out(result)), 200
+
+
+@projects_bp.route("/standalone/tasks/<task_id>/subtasks/<subtask_id>", methods=["DELETE"])
+def delete_standalone_subtask(task_id, subtask_id):
+    """Delete a subtask"""
+    subtask_ref = db.collection("tasks").document(task_id).collection("subtasks").document(subtask_id)
+    
+    if not subtask_ref.get().exists:
+        return jsonify({"error": "Subtask not found"}), 404
+    
+    subtask_ref.delete()
+    update_standalone_task_progress(task_id)
+    
+    return jsonify({"message": "Subtask deleted successfully"}), 200
+
+
+def update_standalone_task_progress(task_id):
+    """Calculate and update standalone task's subtask completion progress"""
+    task_ref = db.collection("tasks").document(task_id)
+    subtasks_query = task_ref.collection("subtasks").stream()
+    subtasks = list(subtasks_query)
+    
+    total_subtasks = len(subtasks)
+    
+    if total_subtasks == 0:
+        task_ref.update({
+            "subtaskCount": 0,
+            "subtaskCompletedCount": 0,
+            "subtaskProgress": 0,
+            "updatedAt": now_utc(),
+        })
+        return
+    completed_subtasks = sum(
+        1 for subtask in subtasks
+        if canon_status(subtask.to_dict().get("status")) == "completed"
+    )
+    progress = int((completed_subtasks / total_subtasks) * 100)
+    updates = {
+        "subtaskCount": total_subtasks,
+        "subtaskCompletedCount": completed_subtasks,
+        "subtaskProgress": progress,
+        "updatedAt": now_utc(),
+    }
+    if progress == 100:
+        task_doc = task_ref.get()
+        if task_doc.exists:
+            current_status = canon_status(task_doc.to_dict().get("status"))
+            if current_status != "completed":
+                updates["status"] = "completed"
+    
+    task_ref.update(updates)
 
 @projects_bp.route("/<project_id>/tasks/<task_id>/subtasks/<subtask_id>", methods=["PUT"])
 @cross_origin()

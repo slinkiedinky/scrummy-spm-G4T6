@@ -151,7 +151,6 @@ export default function NotificationsPage() {
           </div>
           Notifications
         </h1>
-
         <div className="flex items-center gap-4">
           <button
             onClick={markAllRead}
@@ -161,136 +160,89 @@ export default function NotificationsPage() {
           </button>
         </div>
       </div>
-
       {/* Notifications List */}
-      {notifications.map((notif) => (
-        <div
-          key={notif.id}
-          onClick={() => handleNotificationClick(notif)}
-          className={`flex items-start gap-3 p-4 border rounded-lg shadow-sm cursor-pointer transition
-            ${notif.isRead ? "bg-white border-gray-200" : "bg-blue-50 border-blue-300"}`}
-        >
-          {/* Icon */}
-          <div className="mt-1 text-red-500">
-            {notif.icon === "calendar" && <Calendar className="h-5 w-5" />}
-            {notif.icon === "bell" && <Bell className="h-5 w-5" />}
-            {notif.icon === "clipboardlist" && <ClipboardList className="h-5 w-5" />}
-            {!notif.icon && <Bell className="h-5 w-5" />}
-          </div>
-
-          {/* Content */}
-          <div className="flex-1">
-            {notif.type === "add task" ? (
-              <>
-                <h2 className="font-medium text-gray-900">New Task Assigned</h2>
-                <div className="text-sm text-gray-700">
-                  <span className="font-semibold">Task:</span> {notif.title || "-"}
-                </div>
-                <div className="text-sm text-gray-700">
-                  <span className="font-semibold">Project:</span> {notif.projectName || "-"}
-                </div>
-                <div className="text-sm text-gray-700">
-                  <span className="font-semibold">Assigned by:</span> {notif.assignedByName || "-"}
-                </div>
-                {notif.description && (
-                  <div className="text-sm text-gray-600 mt-1">
-                    <span className="font-semibold">Description:</span> {notif.description}
-                  </div>
-                )}
-                <div className="text-xs text-gray-400 mt-1">
-                  {notif.createdAt ? formatTimeAgo(notif.createdAt) : ""}
-                </div>
-              </>
-            ) : notif.type === "add collaborator" ? (
-              <>
-                <h2 className="font-medium text-gray-900">You've been added as a collaborator</h2>
-                <div className="text-sm text-gray-700">
-                  <span className="font-semibold">Task:</span> {notif.title || "-"}
-                </div>
-                <div className="text-sm text-gray-700">
-                  <span className="font-semibold">Project:</span> {notif.projectName || "-"}
-                </div>
-                <div className="text-sm text-gray-700">
-                  <span className="font-semibold">Added by:</span> {notif.assignedByName || "-"}
-                </div>
-                {notif.description && (
-                  <div className="text-sm text-gray-600 mt-1">
-                    <span className="font-semibold">Description:</span> {notif.description}
-                  </div>
-                )}
-                <div className="text-xs text-gray-400 mt-1">
-                  {notif.createdAt ? formatTimeAgo(notif.createdAt) : ""}
-                </div>
-              </>
-            ) : notif.type === "deadline_reminder" ? (
-              <>
-                <h2 className="font-medium text-gray-900">📅 Upcoming Deadline Tomorrow</h2>
-                <div className="text-sm text-gray-700">
-                  <span className="font-semibold">Task:</span> {notif.title || "-"}
-                </div>
-                <div className="text-sm text-gray-700">
-                  <span className="font-semibold">Project:</span> {notif.projectName || "-"}
-                </div>
-                {notif.message && (
-                  <div className="text-sm text-orange-600 mt-1 font-medium">
-                    {notif.message}
-                  </div>
-                )}
-                {notif.description && (
-                  <div className="text-sm text-gray-600 mt-1">
-                    <span className="font-semibold">Description:</span> {notif.description}
-                  </div>
-                )}
-                <div className="text-xs text-gray-400 mt-1">
-                  {notif.createdAt ? formatTimeAgo(notif.createdAt) : ""}
-                </div>
-              </>
-            ) : notif.type === "deadline_today" ? (
-              <>
-                <h2 className="font-medium text-red-600">⚠️ Deadline Today!</h2>
-                <div className="text-sm text-gray-700">
-                  <span className="font-semibold">Task:</span> {notif.title || "-"}
-                </div>
-                <div className="text-sm text-gray-700">
-                  <span className="font-semibold">Project:</span> {notif.projectName || "-"}
-                </div>
-                {notif.message && (
-                  <div className="text-sm text-red-600 mt-1 font-medium">
-                    {notif.message}
-                  </div>
-                )}
-                {notif.description && (
-                  <div className="text-sm text-gray-600 mt-1">
-                    <span className="font-semibold">Description:</span> {notif.description}
-                  </div>
-                )}
-                <div className="text-xs text-gray-400 mt-1">
-                  {notif.createdAt ? formatTimeAgo(notif.createdAt) : ""}
-                </div>
-              </>
-            ) : (
-              <>
-                <h2 className="font-medium text-gray-900">{notif.title}</h2>
-                {notif.message && <p className="text-sm text-gray-600">{notif.message}</p>}
-                <p className="text-xs text-gray-400">
-                  {notif.createdAt ? formatTimeAgo(notif.createdAt) : ""}
-                </p>
-              </>
-            )}
-          </div>
-
-          {/* Actions */}
-          <button
-            onClick={(e) => {
-              e.stopPropagation(); // prevent navigation when dismiss is clicked
-              dismissNotification(notif.id);
-            }}
-            className="text-gray-400 hover:text-gray-600"
-          >
-            <X className="h-4 w-4" />
-          </button>
+      {notifications.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-12 text-gray-400">
+          <Bell className="h-10 w-10 mb-2" />
+          <span className="text-lg font-medium">No notifications</span>
         </div>
-      ))}
+      ) : (
+  <div className="overflow-y-scroll max-h-[85vh] space-y-4 scrollbar-thin scrollbar-thumb-gray-400 scrollbar-track-gray-100">
+          {notifications.map((notif) => {
+            let content;
+            if (notif.type === "add task") {
+              content = (
+                <div>
+                  <h2 className="font-medium text-gray-900">New Task Assigned</h2>
+                  <div className="text-sm text-gray-700"><span className="font-semibold">Task:</span> {notif.title || "-"}</div>
+                  <div className="text-sm text-gray-700"><span className="font-semibold">Project:</span> {notif.projectName || "-"}</div>
+                  <div className="text-sm text-gray-700"><span className="font-semibold">Assigned by:</span> {notif.assignedByName || "-"}</div>
+                  {notif.description && (<div className="text-sm text-gray-600 mt-1"><span className="font-semibold">Description:</span> {notif.description}</div>)}
+                  <div className="text-xs text-gray-400 mt-1">{notif.createdAt ? formatTimeAgo(notif.createdAt) : ""}</div>
+                </div>
+              );
+            } else if (notif.type === "add collaborator") {
+              content = (
+                <div>
+                  <h2 className="font-medium text-gray-900">You've been added as a collaborator</h2>
+                  <div className="text-sm text-gray-700"><span className="font-semibold">Task:</span> {notif.title || "-"}</div>
+                  <div className="text-sm text-gray-700"><span className="font-semibold">Project:</span> {notif.projectName || "-"}</div>
+                  <div className="text-sm text-gray-700"><span className="font-semibold">Added by:</span> {notif.assignedByName || "-"}</div>
+                  {notif.description && (<div className="text-sm text-gray-600 mt-1"><span className="font-semibold">Description:</span> {notif.description}</div>)}
+                  <div className="text-xs text-gray-400 mt-1">{notif.createdAt ? formatTimeAgo(notif.createdAt) : ""}</div>
+                </div>
+              );
+            } else if (notif.type === "deadline_today") {
+              content = (
+                <div>
+                  <h2 className="font-medium text-red-600">⚠️ Deadline Today!</h2>
+                  <div className="text-sm text-gray-700"><span className="font-semibold">Task:</span> {notif.title || "-"}</div>
+                  <div className="text-sm text-gray-700"><span className="font-semibold">Project:</span> {notif.projectName || "-"}</div>
+                  {notif.message && (<div className="text-sm text-red-600 mt-1 font-medium">{notif.message}</div>)}
+                  {notif.description && (<div className="text-sm text-gray-600 mt-1"><span className="font-semibold">Description:</span> {notif.description}</div>)}
+                  <div className="text-xs text-gray-400 mt-1">{notif.createdAt ? formatTimeAgo(notif.createdAt) : ""}</div>
+                </div>
+              );
+            } else {
+              content = (
+                <div>
+                  <h2 className="font-medium text-gray-900">{notif.title}</h2>
+                  {notif.message && <p className="text-sm text-gray-600">{notif.message}</p>}
+                  <p className="text-xs text-gray-400">{notif.createdAt ? formatTimeAgo(notif.createdAt) : ""}</p>
+                </div>
+              );
+            }
+            return (
+              <div
+                key={notif.id}
+                onClick={() => handleNotificationClick(notif)}
+                className={`flex items-start gap-3 p-4 border rounded-lg shadow-sm cursor-pointer transition ${notif.isRead ? "bg-white border-gray-200" : "bg-blue-50 border-blue-300"}`}
+              >
+                {/* Icon */}
+                <div className="mt-1 text-red-500">
+                  {notif.icon === "calendar" && <Calendar className="h-5 w-5" />}
+                  {notif.icon === "bell" && <Bell className="h-5 w-5" />}
+                  {notif.icon === "clipboardlist" && <ClipboardList className="h-5 w-5" />}
+                  {!notif.icon && <Bell className="h-5 w-5" />}
+                </div>
+                {/* Content */}
+                <div className="flex-1">{content}</div>
+                {/* Actions */}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    dismissNotification(notif.id);
+                  }}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
+

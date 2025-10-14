@@ -247,9 +247,9 @@ def list_tasks(project_id):
             items = [normalize_task_out({**d.to_dict(), "id": d.id}) for d in docs]
             return jsonify(items), 200
     return jsonify([]), 200
-
 @projects_bp.route("/assigned/tasks", methods=["GET"])
 def list_tasks_across_projects():
+    """Get all tasks where user is assignee, owner, or collaborator"""
     assigned_to = request.args.get("assignedTo") or request.args.get("assigneeId")
     if not assigned_to:
         return jsonify({"error": "assignedTo is required"}), 400
@@ -262,53 +262,78 @@ def list_tasks_across_projects():
     if priority_filter and isinstance(priority_filter, str) and priority_filter.lower() == "all":
         priority_filter = None
 
-    query = db.collection_group("tasks").where(filter=firestore.FieldFilter("assigneeId", "==", assigned_to))
-    docs = list(query.stream())
-
-    query = db.collection_group("tasks").where(filter=firestore.FieldFilter("assigneeId", "==", assigned_to))
-    docs = list(query.stream())
-
-    # backfill support: legacy tasks might still use ownerId
-    owner_query = db.collection_group("tasks").where(filter=firestore.FieldFilter("ownerId", "==", assigned_to))
-    owner_docs = owner_query.stream()
-
-    seen = {d.reference.path for d in docs}
-    for d in owner_docs:
-        if d.reference.path not in seen:
-            docs.append(d)
-            seen.add(d.reference.path)
+    # Step 1: Get all projects where user is a team member or owner
+    projects_query = db.collection("projects").where("teamIds", "array_contains", assigned_to)
+    projects_docs = list(projects_query.stream())
     
-    try:
-        collab_query = db.collection_group("tasks").where("collaboratorsIds", "array_contains", assigned_to)
-        collab_docs = collab_query.stream()
-        
-        for d in collab_docs:
-            if d.reference.path not in seen:
-                docs.append(d)
-                seen.add(d.reference.path)
-    except Exception as e:
-        print(f"Warning: Could not query collaborators: {e}")
-    items = []
-    for doc in docs:
-        data = normalize_task_out({**doc.to_dict(), "id": doc.id})
-
-        if status_filter and data.get("status") != canon_status(status_filter):
+    # Also get projects where user is owner
+    owner_projects_query = db.collection("projects").where("ownerId", "==", assigned_to)
+    owner_projects_docs = list(owner_projects_query.stream())
+    
+    # Merge project lists
+    all_project_ids = set()
+    for doc in projects_docs + owner_projects_docs:
+        all_project_ids.add(doc.id)
+    
+    # Step 2: Get all tasks from these projects
+    all_tasks = []
+    seen_paths = set()
+    
+    for project_id in all_project_ids:
+        try:
+            # Get all tasks in this project
+            tasks_ref = db.collection("projects").document(project_id).collection("tasks")
+            tasks_docs = tasks_ref.stream()
+            
+            for task_doc in tasks_docs:
+                task_data = task_doc.to_dict()
+                task_path = task_doc.reference.path
+                
+                # Skip if already seen
+                if task_path in seen_paths:
+                    continue
+                
+                # Check if user is involved in this task
+                task_assignee = task_data.get("assigneeId") or task_data.get("ownerId")
+                task_collabs = ensure_list(task_data.get("collaboratorsIds", []))
+                
+                if (assigned_to == task_assignee or 
+                    assigned_to in task_collabs or
+                    assigned_to == task_data.get("createdBy")):
+                    
+                    # Apply filters
+                    if status_filter and task_data.get("status") != canon_status(status_filter):
+                        continue
+                    if priority_filter:
+                        task_priority = task_data.get("priority")
+                        if isinstance(task_priority, str):
+                            task_priority = int(task_priority) if task_priority.isdigit() else 5
+                        filter_priority = int(priority_filter) if isinstance(priority_filter, str) and priority_filter.isdigit() else priority_filter
+                        if task_priority != filter_priority:
+                            continue
+                    
+                    # Normalize and add project info
+                    normalized = normalize_task_out({**task_data, "id": task_doc.id})
+                    normalized["projectId"] = project_id
+                    
+                    # Get project name
+                    try:
+                        project_doc = db.collection("projects").document(project_id).get()
+                        if project_doc.exists:
+                            normalized["projectName"] = project_doc.to_dict().get("name", project_id)
+                        else:
+                            normalized["projectName"] = project_id
+                    except:
+                        normalized["projectName"] = project_id
+                    
+                    all_tasks.append(normalized)
+                    seen_paths.add(task_path)
+                    
+        except Exception as e:
+            print(f"Error fetching tasks from project {project_id}: {e}")
             continue
-        if priority_filter and data.get("priority") != canon_task_priority(priority_filter):
-            continue
-
-        project_ref = doc.reference.parent.parent
-        if project_ref:
-            data["projectId"] = project_ref.id
-            project_doc = project_ref.get()
-            if project_doc.exists:
-                project_data = normalize_project_out({**project_doc.to_dict(), "id": project_doc.id})
-                data["projectName"] = project_data.get("name")
-                data["projectPriority"] = project_data.get("priority")
-        items.append(data)
-
-    return jsonify(items), 200
-
+    
+    return jsonify(all_tasks), 200
 @projects_bp.route("/<project_id>/tasks", methods=["POST"])
 def create_task(project_id):
     data = request.json or {}

@@ -158,9 +158,15 @@ const createEmptyTaskForm = (uid = "") => ({
 });
 
 const toDateInputValue = (value) => {
+  if (!value) return "";
+
   const date = toDate(value);
   if (!date) return "";
-  return date.toISOString().slice(0, 10);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
 };
 
 export default function ProjectDetailPage() {
@@ -881,6 +887,9 @@ export default function ProjectDetailPage() {
       } else {
         await createTask(id, payload);
         toast.success("Task created successfully!");
+        if (currentUser?.uid) {
+          await load(currentUser.uid);
+        }
       }
       handleTaskDialogChange(false);
     } catch (error) {

@@ -24,7 +24,7 @@ const HOURS = Array.from({ length: 24 }, (_, i) => i);
 
 export function TeamCalendar({ teamMembers = [], currentUser }) {
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [viewMode, setViewMode] = useState("week");
+  const [viewMode, setViewMode] = useState("month");
   const [selectedTask, setSelectedTask] = useState(null);
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [tasks, setTasks] = useState([]);

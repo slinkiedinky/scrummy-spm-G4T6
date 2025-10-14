@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { onAuthStateChanged } from "firebase/auth";
 
 import { TaskDetailModal } from "@/components/TaskDetailModal";
-
+import { StandaloneTaskModal } from "@/components/StandaloneTaskModal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -26,6 +26,7 @@ import {
   ChevronRight,
   CheckCircle2,
   Circle,
+  Plus,
 } from "lucide-react";
 import { auth } from "@/lib/firebase";
 import {
@@ -39,6 +40,15 @@ import {
   getSubtask,
   updateSubtask,
   deleteSubtask,
+  createStandaloneTask,
+  listStandaloneTasks,
+  getStandaloneTask,
+  updateStandaloneTask,
+  deleteStandaloneTask,
+  listStandaloneSubtasks,
+  getStandaloneSubtask,
+  updateStandaloneSubtask,
+  deleteStandaloneSubtask,
 } from "@/lib/api";
 import {
   Dialog,
@@ -58,7 +68,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-
+import { toast } from "sonner";
 const ensureArray = (value) => {
   if (Array.isArray(value)) {
     return value.filter((item) => item !== undefined && item !== null);
@@ -389,20 +399,34 @@ export default function TasksPage() {
   const [deleteCandidate, setDeleteCandidate] = useState(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [deleteError, setDeleteError] = useState("");
+  const [isCreateStandaloneOpen, setIsCreateStandaloneOpen] = useState(false);
+  const [standaloneForm, setStandaloneForm] = useState({
+    title: "",
+    description: "",
+    status: "to-do",
+    priority: "5",
+    dueDate: "",
+    tags: "",
+  });
+  const [savingStandalone, setSavingStandalone] = useState(false);
+  const [standaloneError, setStandaloneError] = useState("");
 
-  const loadTasks = useCallback(async (uid) => {
-    if (!uid) {
-      setTasks([]);
-      setLoading(false);
-      return;
-    }
+  const loadTasks = useCallback(
+    async (uid) => {
+      if (!uid) {
+        setTasks([]);
+        setLoading(false);
+        return;
+      }
 
-    try {
-      setLoading(true);
-      setError("");
-      const data = await listAssignedTasks({ assignedTo: uid });
-      setTasks(
-        (data || []).map((t) => {
+      try {
+        setLoading(true);
+        setError("");
+        const [projectTasksData, standaloneTasksData] = await Promise.all([
+          listAssignedTasks({ assignedTo: uid }),
+          listStandaloneTasks(uid),
+        ]);
+        const projectTasks = (projectTasksData || []).map((t) => {
           const projectId = t.projectId || "unassigned";
           const projectName =
             t.projectName ||
@@ -421,18 +445,50 @@ export default function TasksPage() {
               ? priorityNumber
               : null,
             tags: Array.isArray(t.tags) ? t.tags : [],
-            collaboratorsIds: ensureArray(t.collaboratorsIds),
+            isStandalone: false,
           };
-        })
-      );
-    } catch (err) {
-      setTasks([]);
-      setError(err?.message || "Failed to load tasks");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+        });
+        const standaloneTasks = (standaloneTasksData || []).map((t) => {
+          const priorityNumber = Number(t.priority);
+          const priority = Number.isFinite(priorityNumber)
+            ? String(priorityNumber)
+            : "";
+          return {
+            ...t,
+            projectId: "standalone",
+            projectName: "Standalone",
+            status: (t.status || "").toLowerCase(),
+            priority,
+            priorityNumber: Number.isFinite(priorityNumber)
+              ? priorityNumber
+              : null,
+            tags: Array.isArray(t.tags) ? t.tags : [],
+            isStandalone: true,
+          };
+        });
+        const allTasks = [...projectTasks, ...standaloneTasks];
 
+        setTasks(allTasks);
+      } catch (err) {
+        setError(err?.message || "Failed to load tasks.");
+        setTasks([]);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [currentUser?.uid]
+  );
+  const handleCreateStandalone = async (payload) => {
+    try {
+      await createStandaloneTask(payload);
+      toast.success("Standalone task created!");
+      setIsCreateStandaloneOpen(false);
+      await loadTasks(currentUser.uid);
+    } catch (error) {
+      console.error("Failed to create standalone task:", error);
+      throw error;
+    }
+  };
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setCurrentUser(user);
@@ -719,7 +775,12 @@ export default function TasksPage() {
 
       const creatorSummary = summarizeUser(resolved.createdBy);
       let projectData = null;
-      if (resolved.projectId && resolved.projectId !== "unassigned") {
+      if (
+        resolved.projectId &&
+        resolved.projectId !== "unassigned" &&
+        resolved.projectId !== "standalone" &&
+        !resolved.isStandalone
+      ) {
         try {
           projectData = await getProject(resolved.projectId, {
             assignedTo: currentUser?.uid,
@@ -915,21 +976,42 @@ export default function TasksPage() {
           payload.dueDate = null;
         }
 
-        // Check if this is a subtask
+        const isStandalone =
+          editingTask.isStandalone || editingTask.projectId === "standalone";
+
         const isSubtask = editingTask.isSubtask || editingTask.parentTaskId;
 
-        if (isSubtask && editingTask.parentTaskId) {
-          // Update as subtask
-          await updateSubtask(
-            editingTask.projectId,
-            editingTask.parentTaskId,
-            editingTask.id,
-            payload
-          );
+        if (isStandalone) {
+          if (isSubtask && editingTask.parentTaskId) {
+            await updateStandaloneSubtask(
+              editingTask.parentTaskId,
+              editingTask.id,
+              payload
+            );
+          } else {
+            const standalonePayload = {
+              ...payload,
+              assigneeId: currentUser.uid,
+              collaboratorsIds: [],
+              updatedBy: currentUser.uid,
+            };
+            await updateStandaloneTask(editingTask.id, standalonePayload);
+          }
         } else {
-          // Update as regular task
-          await updateTask(editingTask.projectId, editingTask.id, payload);
+          if (isSubtask && editingTask.parentTaskId) {
+            await updateSubtask(
+              editingTask.projectId,
+              editingTask.parentTaskId,
+              editingTask.id,
+              payload
+            );
+          } else {
+            await updateTask(editingTask.projectId, editingTask.id, payload);
+          }
         }
+        toast.success(
+          isStandalone ? "Standalone task updated!" : "Task updated!"
+        );
 
         await loadTasks(currentUser.uid);
         closeEditDialog();
@@ -971,6 +1053,10 @@ export default function TasksPage() {
     }
     setDeletingTaskId(deleteCandidate.id);
     setDeleteError("");
+    const isStandalone =
+      deleteCandidate.isStandalone ||
+      deleteCandidate.projectId === "standalone";
+
     try {
       // Check if this is a subtask
       const isSubtask =
@@ -986,6 +1072,13 @@ export default function TasksPage() {
       } else {
         // Delete as regular task
         await deleteTask(deleteCandidate.projectId, deleteCandidate.id);
+      }
+      if (isStandalone) {
+        toast.success(
+          isSubtask ? "Standalone subtask updated!" : "Standalone task updated!"
+        );
+      } else {
+        toast.success(isSubtask ? "Subtask updated!" : "Task updated!");
       }
 
       await loadTasks(currentUser.uid);
@@ -1292,8 +1385,6 @@ export default function TasksPage() {
                   Required: Select 1-5 team members to assign this task to.
                 </p>
               </div>
-
-              {/* NEW: Tags field */}
               <div className="space-y-2">
                 <label
                   htmlFor="edit-tags"
@@ -1346,14 +1437,24 @@ export default function TasksPage() {
               Tasks assigned to {currentUser?.displayName || currentUser?.email}
             </p>
           </div>
-          <Button
-            variant="outline"
-            onClick={handleRefresh}
-            className="self-start lg:self-auto"
-          >
-            <RefreshCw className="h-4 w-4 mr-2" />
-            Refresh
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              variant="default"
+              onClick={() => setIsCreateStandaloneOpen(true)}
+              className="self-start lg:self-auto"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Create Standalone Task
+            </Button>
+            <Button
+              variant="outline"
+              onClick={handleRefresh}
+              className="self-start lg:self-auto"
+            >
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Refresh
+            </Button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -1542,15 +1643,26 @@ export default function TasksPage() {
                   if (isViewingSubtask) {
                     // Refresh the subtask itself
                     const parentTaskId = selectedTask.parentTaskId;
-                    const updatedSubtask = await getSubtask(
-                      selectedTask.projectId,
-                      parentTaskId,
-                      selectedTask.id
-                    );
+
+                    // Check if this is a standalone task's subtask
+                    const isStandaloneSubtask =
+                      selectedTask.isStandalone || !selectedTask.projectId;
+
+                    const updatedSubtask = isStandaloneSubtask
+                      ? await getStandaloneSubtask(
+                          parentTaskId,
+                          selectedTask.id
+                        )
+                      : await getSubtask(
+                          selectedTask.projectId,
+                          parentTaskId,
+                          selectedTask.id
+                        );
 
                     updatedSubtask.projectId = selectedTask.projectId;
                     updatedSubtask.parentTaskId = parentTaskId;
                     updatedSubtask.isSubtask = true;
+                    updatedSubtask.isStandalone = isStandaloneSubtask;
 
                     const assigneeSummary = summarizeUser(
                       updatedSubtask.assigneeId || updatedSubtask.ownerId
@@ -1566,10 +1678,14 @@ export default function TasksPage() {
                     });
                   } else {
                     // Refresh the parent task with updated subtask info
-                    const updatedTask = await getTask(
-                      selectedTask.projectId,
-                      selectedTask.id
-                    );
+                    // Check if this is a standalone task
+                    const isStandaloneTask =
+                      selectedTask.isStandalone || !selectedTask.projectId;
+
+                    const updatedTask = isStandaloneTask
+                      ? await getStandaloneTask(selectedTask.id)
+                      : await getTask(selectedTask.projectId, selectedTask.id);
+
                     const assigneeSummary = summarizeUser(
                       updatedTask.assigneeId || updatedTask.ownerId
                     );
@@ -1579,9 +1695,18 @@ export default function TasksPage() {
                       ...updatedTask,
                       assigneeSummary,
                       creatorSummary,
+                      isStandalone: isStandaloneTask,
+                      projectId: isStandaloneTask
+                        ? "standalone"
+                        : updatedTask.projectId,
+                      projectName: isStandaloneTask
+                        ? "Standalone"
+                        : updatedTask.projectName,
                     };
+
                     setSelectedTask(refreshedTask);
 
+                    // Update the task in the tasks list
                     setTasks((prevTasks) =>
                       prevTasks.map((t) =>
                         t.id === refreshedTask.id ? refreshedTask : t
@@ -1598,6 +1723,12 @@ export default function TasksPage() {
             />
           );
         })()}
+      <StandaloneTaskModal
+        isOpen={isCreateStandaloneOpen}
+        onClose={() => setIsCreateStandaloneOpen(false)}
+        onSubmit={handleCreateStandalone}
+        currentUser={currentUser}
+      />
     </div>
   );
 }

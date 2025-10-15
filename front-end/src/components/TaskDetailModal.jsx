@@ -31,6 +31,10 @@ import {
   createSubtask,
   updateSubtask,
   deleteSubtask,
+  listComments,
+  addComment,
+  editComment,
+  deleteComment,
 } from "@/lib/api";
 import { Input } from "@/components/ui/input";
 import {
@@ -88,6 +92,70 @@ export function TaskDetailModal({
   const [selectedSubtask, setSelectedSubtask] = useState(null);
 
   const isSubtask = task.isSubtask || task.parentTaskId;
+
+
+  // Comments state
+  const [comments, setComments] = useState([]);
+  const [loadingComments, setLoadingComments] = useState(false);
+  const [newComment, setNewComment] = useState("");
+  const [editingCommentId, setEditingCommentId] = useState(null);
+  const [editingText, setEditingText] = useState("");
+
+  // Load comments when modal opens or task changes
+  useEffect(() => {
+    if (isOpen && task.id && task.projectId) {
+      setLoadingComments(true);
+      listComments(task.projectId, task.id)
+        .then(setComments)
+        .catch(() => setComments([]))
+        .finally(() => setLoadingComments(false));
+    }
+  }, [isOpen, task.id, task.projectId]);
+
+  const handleAddComment = async () => {
+    if (!newComment.trim()) return;
+    try {
+      const payload = {
+        user_id: currentUserId,
+        text: newComment.trim(),
+      };
+      const comment = await addComment(task.projectId, task.id, payload);
+      setComments((prev) => [...prev, comment]);
+      setNewComment("");
+    } catch (err) {
+      toast.error("Failed to add comment");
+    }
+  };
+
+  const handleEditComment = async (commentId) => {
+    if (!editingText.trim()) return;
+    try {
+      const payload = { text: editingText.trim() };
+      const updated = await editComment(task.projectId, task.id, commentId, payload);
+      setComments((prev) => prev.map((c) => (c.id === commentId ? updated : c)));
+      setEditingCommentId(null);
+      setEditingText("");
+    } catch (err) {
+      toast.error("Failed to edit comment");
+    }
+  };
+
+  const [deleteConfirmId, setDeleteConfirmId] = useState(null);
+  const handleDeleteComment = async (commentId) => {
+    setDeleteConfirmId(commentId);
+  };
+  const confirmDeleteComment = async () => {
+    if (!deleteConfirmId) return;
+    try {
+      await deleteComment(task.projectId, task.id, deleteConfirmId);
+      setComments((prev) => prev.filter((c) => c.id !== deleteConfirmId));
+      setDeleteConfirmId(null);
+    } catch (err) {
+      toast.error("Failed to delete comment");
+      setDeleteConfirmId(null);
+    }
+  };
+  const cancelDeleteComment = () => setDeleteConfirmId(null);
 
   console.log("Task in modal:", {
     projectId: task.projectId,
@@ -566,45 +634,87 @@ export function TaskDetailModal({
               <div className="flex items-center gap-2 mb-3">
                 <MessageSquare className="h-4 w-4 text-muted-foreground" />
                 <h3 className="font-semibold text-foreground">Comments</h3>
-                <Badge variant="secondary">
-                  {(task.comments || []).length}
-                </Badge>
+                <Badge variant="secondary">{comments.length}</Badge>
               </div>
-              {(task.comments || []).length === 0 ? (
+              {loadingComments ? (
+                <p className="text-sm text-muted-foreground">Loading comments...</p>
+              ) : comments.length === 0 ? (
                 <p className="text-sm text-muted-foreground">No comments yet</p>
               ) : (
                 <div className="space-y-3">
-                  {(task.comments || []).map((comment) => (
-                    <div
-                      key={comment.id}
-                      className="flex gap-3 p-3 bg-muted rounded-lg"
-                    >
+                  {comments.map((comment) => (
+                    <div key={comment.id} className="flex gap-3 p-3 bg-muted rounded-lg">
                       <Avatar className="h-8 w-8">
-                        <AvatarImage
-                          src={comment.author?.avatar || "/placeholder.svg"}
-                          alt={comment.author?.name || "User"}
-                        />
-                        <AvatarFallback className="text-xs">
-                          {toInitials(comment.author?.name || "")}
-                        </AvatarFallback>
+                        <AvatarImage src={comment.user_avatar || "/placeholder.svg"} alt={comment.author || "User"} />
+                        <AvatarFallback className="text-xs">{toInitials(comment.author || "")}</AvatarFallback>
                       </Avatar>
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
-                          <p className="text-sm font-medium text-foreground">
-                            {comment.author?.name || "User"}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            {fmt(comment.createdAt)}
-                          </p>
+                          <p className="text-sm font-medium text-foreground">{comment.author || "User"}</p>
+                          <p className="text-xs text-muted-foreground">{fmt(comment.timestamp)}</p>
+                          {comment.edited && (
+                            <span className="text-xs text-muted-foreground">(edited)</span>
+                          )}
                         </div>
-                        <p className="text-sm text-muted-foreground">
-                          {comment.content}
-                        </p>
+                        {editingCommentId === comment.id ? (
+                          <div className="flex gap-2">
+                            <Input
+                              value={editingText}
+                              onChange={(e) => setEditingText(e.target.value)}
+                              className="flex-1"
+                            />
+                            <Button size="sm" onClick={() => handleEditComment(comment.id)}>
+                              Save
+                            </Button>
+                            <Button size="sm" variant="ghost" onClick={() => setEditingCommentId(null)}>
+                              Cancel
+                            </Button>
+                          </div>
+                        ) : (
+                          <p className="text-sm text-muted-foreground">{comment.text}</p>
+                        )}
                       </div>
+                      {comment.user_id === currentUserId && editingCommentId !== comment.id && (
+                        <div className="flex flex-col gap-1">
+                          <Button size="xs" variant="ghost" onClick={() => { setEditingCommentId(comment.id); setEditingText(comment.text); }}>
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button size="xs" variant="ghost" onClick={() => handleDeleteComment(comment.id)}>
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </div>
+                      )}
+      {/* Delete Comment Confirmation Dialog */}
+      <Dialog open={!!deleteConfirmId} onOpenChange={cancelDeleteComment}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Comment</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete this comment? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex gap-2 justify-end">
+            <Button variant="outline" onClick={cancelDeleteComment}>Cancel</Button>
+            <Button variant="destructive" onClick={confirmDeleteComment}>Delete</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
                     </div>
                   ))}
                 </div>
               )}
+              <div className="flex gap-2 mt-4">
+                <Input
+                  value={newComment}
+                  onChange={(e) => setNewComment(e.target.value)}
+                  placeholder="Add a comment..."
+                  className="flex-1"
+                  onKeyDown={(e) => { if (e.key === "Enter") handleAddComment(); }}
+                />
+                <Button size="sm" onClick={handleAddComment} disabled={!newComment.trim()}>
+                  Post
+                </Button>
+              </div>
             </div>
 
             {(task.attachments || []).length > 0 && (

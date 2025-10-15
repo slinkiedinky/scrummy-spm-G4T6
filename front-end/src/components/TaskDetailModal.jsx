@@ -53,8 +53,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { AlertCircle } from "lucide-react";
-
+import { doc, getDoc } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 import { toast } from "sonner";
+
 function toInitials(name) {
   if (!name) return "?";
   const parts = name.trim().split(/\s+/);
@@ -90,8 +92,62 @@ export function TaskDetailModal({
   const [showSubtaskDialog, setShowSubtaskDialog] = useState(false);
   const [subtaskRefreshKey, setSubtaskRefreshKey] = useState(0);
   const [selectedSubtask, setSelectedSubtask] = useState(null);
+  const [userDetails, setUserDetails] = useState({});
+  const [loadingUsers, setLoadingUsers] = useState(true);
 
   const isSubtask = task.isSubtask || task.parentTaskId;
+
+  // Fetch user details for assignee, creator, and collaborators
+  useEffect(() => {
+    const fetchUserDetails = async () => {
+      if (!isOpen || !task) return;
+
+      setLoadingUsers(true);
+      const users = {};
+      const userIds = new Set();
+
+      // Collect all user IDs
+      if (task.assigneeId) userIds.add(task.assigneeId);
+      if (task.createdBy) userIds.add(task.createdBy);
+      if (task.ownerId) userIds.add(task.ownerId);
+      if (Array.isArray(task.collaboratorsIds)) {
+        task.collaboratorsIds.forEach((id) => userIds.add(id));
+      }
+      if (Array.isArray(task.collaboratorIds)) {
+        task.collaboratorIds.forEach((id) => userIds.add(id));
+      }
+
+      // Fetch user details
+      for (const userId of userIds) {
+        try {
+          const userDoc = await getDoc(doc(db, "users", userId));
+          if (userDoc.exists()) {
+            users[userId] = userDoc.data();
+          }
+        } catch (error) {
+          console.error(`Error fetching user ${userId}:`, error);
+        }
+      }
+
+      setUserDetails(users);
+      setLoadingUsers(false);
+    };
+
+    fetchUserDetails();
+  }, [isOpen, task]);
+
+  const getUserInfo = (userId) => {
+    if (!userId) return { name: "Unassigned", email: "", role: "", initials: "?" };
+
+    const user = userDetails[userId];
+    const name =
+      user?.fullName || user?.displayName || user?.name || user?.email || `User ${userId.slice(0, 8)}`;
+    const email = user?.email || "";
+    const role = user?.role || "Member";
+    const initials = toInitials(name);
+
+    return { name, email, role, initials, avatar: user?.photoURL || user?.avatar };
+  };
 
 
   // Comments state
@@ -164,8 +220,13 @@ export function TaskDetailModal({
     isSubtask,
   });
 
-  const assignee =
-    typeof task.assigneeSummary === "object" && task.assigneeSummary
+  // Use Firebase user data if available, otherwise fall back to existing logic
+  const assignee = (() => {
+    if (task.assigneeId && userDetails[task.assigneeId]) {
+      return getUserInfo(task.assigneeId);
+    }
+    // Fallback to existing logic
+    return typeof task.assigneeSummary === "object" && task.assigneeSummary
       ? task.assigneeSummary
       : (() => {
           const id = String(task.assigneeId || task.ownerId || "");
@@ -173,6 +234,24 @@ export function TaskDetailModal({
             ? { id, name: `User ${id.slice(0, 4)}`, role: "Member", avatar: "" }
             : { name: "Unassigned", role: "" };
         })();
+  })();
+
+  const creator = (() => {
+    const creatorId = task.createdBy || task.ownerId;
+    if (creatorId && userDetails[creatorId]) {
+      return getUserInfo(creatorId);
+    }
+    // Fallback to existing logic
+    return {
+      name: task.creatorName ||
+        (task.creatorSummary && task.creatorSummary.name) ||
+        (creatorId ? `User ${String(creatorId).slice(0, 4)}` : "Unknown"),
+      initials: toInitials(
+        task.creatorName ||
+          (creatorId ? String(creatorId).slice(0, 4) : "?")
+      ),
+    };
+  })();
 
   const tags = Array.isArray(task.tags) ? task.tags : [];
 
@@ -181,6 +260,10 @@ export function TaskDetailModal({
     if (typeof value === "string") {
       const id = value.trim();
       if (!id) return null;
+      // Use Firebase data if available
+      if (userDetails[id]) {
+        return getUserInfo(id);
+      }
       return {
         id,
         name: `User ${id.slice(0, 4) || index + 1}`,
@@ -199,6 +282,12 @@ export function TaskDetailModal({
         index;
       const id = String(rawId ?? index).trim();
       if (!id) return null;
+
+      // Use Firebase data if available
+      if (userDetails[id]) {
+        return getUserInfo(id);
+      }
+
       const nameCandidate = [
         value.name,
         value.fullName,
@@ -463,24 +552,24 @@ export function TaskDetailModal({
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-4">
-                <div className="flex items-center gap-3">
-                  <User className="h-4 w-4 text-muted-foreground" />
-                  <div>
-                    <p className="text-sm font-medium text-foreground">
+                <div className="flex items-start gap-3">
+                  <User className="h-4 w-4 text-muted-foreground mt-1" />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-foreground mb-1">
                       Assigned to
                     </p>
-                    <div className="flex items-center gap-2 mt-1">
-                      <Avatar className="h-6 w-6">
+                    <div className="flex items-center gap-2">
+                      <Avatar className="h-8 w-8">
                         <AvatarImage
                           src={assignee.avatar || "/placeholder.svg"}
                           alt={assignee.name}
                         />
-                        <AvatarFallback className="text-xs">
-                          {toInitials(assignee.name || "")}
+                        <AvatarFallback className="text-xs font-semibold bg-primary/10 text-primary">
+                          {assignee.initials || toInitials(assignee.name || "")}
                         </AvatarFallback>
                       </Avatar>
                       <div>
-                        <p className="text-sm text-foreground">
+                        <p className="text-sm font-medium text-foreground">
                           {assignee.name || "Unassigned"}
                         </p>
                         {assignee.role && (
@@ -492,47 +581,44 @@ export function TaskDetailModal({
                     </div>
                   </div>
                 </div>
-                <div className="flex items-center gap-3">
-                  <User className="h-4 w-4 text-muted-foreground" />
-                  <div>
-                    <p className="text-sm font-medium text-foreground">
+
+                <div className="flex items-start gap-3">
+                  <User className="h-4 w-4 text-muted-foreground mt-1" />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-foreground mb-1">
                       Created by
                     </p>
-                    <div className="flex items-center gap-2 mt-1">
-                      <Avatar className="h-6 w-6">
-                        <AvatarFallback className="text-xs">
-                          {toInitials(
-                            task.creatorName ||
-                              (task.createdBy
-                                ? String(task.createdBy).slice(0, 4)
-                                : "?")
-                          )}
+                    <div className="flex items-center gap-2">
+                      <Avatar className="h-8 w-8">
+                        <AvatarImage
+                          src={creator.avatar || "/placeholder.svg"}
+                          alt={creator.name}
+                        />
+                        <AvatarFallback className="text-xs font-semibold bg-muted">
+                          {creator.initials}
                         </AvatarFallback>
                       </Avatar>
                       <div>
-                        <p className="text-sm text-foreground">
-                          {task.creatorName ||
-                            (task.creatorSummary && task.creatorSummary.name) ||
-                            (task.createdBy
-                              ? `User ${String(task.createdBy).slice(0, 4)}`
-                              : "Unknown")}
+                        <p className="text-sm font-medium text-foreground">
+                          {creator.name}
                         </p>
                       </div>
                     </div>
                   </div>
                 </div>
+
                 <div className="flex items-start gap-3">
                   <Users className="h-4 w-4 text-muted-foreground mt-1" />
-                  <div>
-                    <p className="text-sm font-medium text-foreground">
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-foreground mb-1">
                       Collaborators
                     </p>
                     {collaborators.length === 0 ? (
-                      <p className="text-xs text-muted-foreground mt-1">
+                      <p className="text-sm text-muted-foreground">
                         No collaborators added.
                       </p>
                     ) : (
-                      <div className="mt-2 space-y-2">
+                      <div className="space-y-2">
                         {collaborators.map((person) => (
                           <div
                             key={person.id}
@@ -543,16 +629,16 @@ export function TaskDetailModal({
                                 src={person.avatar || "/placeholder.svg"}
                                 alt={person.name}
                               />
-                              <AvatarFallback className="text-xs">
-                                {toInitials(person.name || "")}
+                              <AvatarFallback className="text-xs font-semibold bg-muted">
+                                {person.initials || toInitials(person.name || "")}
                               </AvatarFallback>
                             </Avatar>
-                            <div className="min-w-0">
-                              <p className="text-sm text-foreground truncate">
+                            <div>
+                              <p className="text-sm font-medium text-foreground">
                                 {person.name}
                               </p>
                               {(person.email || person.role) && (
-                                <p className="text-xs text-muted-foreground truncate">
+                                <p className="text-xs text-muted-foreground">
                                   {[person.email, person.role]
                                     .filter(Boolean)
                                     .join(" • ")}
@@ -566,8 +652,8 @@ export function TaskDetailModal({
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3">
-                  <Calendar className="h-4 w-4 text-muted-foreground" />
+                <div className="flex items-start gap-3">
+                  <Calendar className="h-4 w-4 text-muted-foreground mt-1" />
                   <div>
                     <p className="text-sm font-medium text-foreground">
                       Due Date
@@ -584,8 +670,8 @@ export function TaskDetailModal({
               </div>
 
               <div className="space-y-4">
-                <div className="flex items-center gap-3">
-                  <Clock className="h-4 w-4 text-muted-foreground" />
+                <div className="flex items-start gap-3">
+                  <Clock className="h-4 w-4 text-muted-foreground mt-1" />
                   <div>
                     <p className="text-sm font-medium text-foreground">
                       Created
@@ -596,8 +682,8 @@ export function TaskDetailModal({
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3">
-                  <Clock className="h-4 w-4 text-muted-foreground" />
+                <div className="flex items-start gap-3">
+                  <Clock className="h-4 w-4 text-muted-foreground mt-1" />
                   <div>
                     <p className="text-sm font-medium text-foreground">
                       Last Updated
@@ -766,6 +852,7 @@ export function TaskDetailModal({
   );
 }
 
+// Keep all your existing SubtasksList, SubtaskDialog components exactly as they were
 function SubtasksList({
   projectId,
   taskId,

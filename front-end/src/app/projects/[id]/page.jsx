@@ -26,7 +26,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Card } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -67,6 +67,9 @@ import { TeamTimeline } from "@/components/TeamTimeline";
 import { toast } from "sonner";
 import { TaskDetailModal } from "@/components/TaskDetailModal";
 import { getTask } from "@/lib/api";
+import TeamCalendar from '@/components/TeamCalendar';
+import { Users } from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 const TAG_BASE =
   "rounded-full px-2.5 py-1 text-xs font-medium inline-flex items-center gap-1";
@@ -206,6 +209,8 @@ export default function ProjectDetailPage() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [deleteError, setDeleteError] = useState("");
   const [deletingTaskId, setDeletingTaskId] = useState("");
+  const [showCalendar, setShowCalendar] = useState(false);
+  const [showTeamModal, setShowTeamModal] = useState(false);
   const isEditingTask = Boolean(editingTaskId);
 
   // ⭐ ADDED: infer next project status from a list of tasks
@@ -1042,7 +1047,7 @@ export default function ProjectDetailPage() {
           id: assigneeId,
           name: assigneeName,
           email: assigneeInfo.email || "",
-          role: assigneeInfo.role || "Member",
+          role: assigneeInfo.role || "",
           avatar: assigneeInfo.photoURL || "",
         };
       }
@@ -1671,254 +1676,185 @@ export default function ProjectDetailPage() {
             </TabsContent>
 
             <TabsContent value="team" className="mt-0">
-              <Card className="p-4 space-y-4 not-print">
-                <div className="space-y-2">
-                  <h2 className="text-xl font-semibold">Team members</h2>
-                  <p className="text-xs text-muted-foreground">
-                    Manage collaborators assigned to this project.
-                  </p>
-                </div>
-
-                <div className="space-y-2">
-                  <Select
-                    value={selectedMember}
-                    onValueChange={handleMemberSelect}
-                    disabled={availableUsers.length === 0 || addingMember}
-                  >
-                    <SelectTrigger className="h-9 w-full text-sm">
-                      <SelectValue
-                        placeholder={
-                          availableUsers.length === 0
-                            ? "No available users"
-                            : "Select a user"
-                        }
-                      />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {availableUsers.length === 0 ? (
-                        <SelectItem value="" disabled>
-                          No users to add
-                        </SelectItem>
-                      ) : (
-                        availableUsers.map((user) => (
-                          <SelectItem key={user.id} value={user.id}>
-                            {`${user.label}${
-                              user.email && user.email !== user.label
-                                ? ` (${user.email})`
-                                : ""
-                            }`}
-                          </SelectItem>
-                        ))
-                      )}
-                    </SelectContent>
-                  </Select>
+              <div className="space-y-6">
+                {/* Compact Team Management Header */}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="text-xl font-semibold">Team Calendar</h2>
+                    <p className="text-sm text-muted-foreground">
+                      View schedules for {teamMembers.length} team member{teamMembers.length !== 1 ? 's' : ''}
+                    </p>
+                  </div>
                   <Button
+                    onClick={() => setShowTeamModal(true)}
+                    variant="outline"
                     size="sm"
-                    onClick={handleAddMember}
-                    disabled={addingMember || !selectedMember}
-                    className="w-full"
+                    className="flex items-center gap-2"
                   >
-                    {addingMember ? "Adding..." : "Add"}
+                    <Users className="h-4 w-4" />
+                    Manage Team
                   </Button>
                 </div>
 
-                {memberError && (
-                  <div className="flex items-center gap-2 rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                    <AlertCircle className="h-4 w-4" />
-                    <span>{memberError}</span>
-                  </div>
-                )}
-
-                {teamMembers.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    No team members yet.
-                  </p>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {/* Current Team Members Summary */}
+                {teamMembers.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
                     {teamMembers.map((member) => {
                       const displayName =
                         member.displayName ||
                         member.fullName ||
                         member.email ||
                         member.id;
-                      const secondary =
-                        member.email && member.email !== displayName
-                          ? member.email
-                          : member.id !== displayName
-                          ? member.id
-                          : "";
-                      const isRemoving = removingMemberId === member.id;
                       return (
-                        <Card key={member.id} className="p-4 space-y-3">
-                          <div className="space-y-1">
-                            <p className="truncate text-sm font-medium text-foreground">
-                              {displayName}
-                            </p>
-                            {secondary && (
-                              <p className="truncate text-xs text-muted-foreground">
-                                {secondary}
-                              </p>
-                            )}
-                            <div className="flex flex-wrap items-center gap-2 text-[10px] text-muted-foreground uppercase">
-                              {member.role && (
-                                <span className="rounded-full border border-border px-2 py-0.5 tracking-wide">
-                                  {member.role}
-                                </span>
-                              )}
-                              {member.isCurrentUser && (
-                                <span className="rounded-full bg-secondary/80 px-2 py-0.5 text-secondary-foreground">
-                                  You
-                                </span>
-                              )}
-                              {member.isOwner && (
-                                <span className="rounded-full border border-border px-2 py-0.5 text-muted-foreground">
-                                  Owner
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                          <div className="flex flex-col gap-2">
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              className="w-full"
-                              onClick={() => handleViewSchedule(member.id)}
-                            >
-                              <CalendarIcon className="mr-2 h-3.5 w-3.5" />
-                              View Schedule
-                            </Button>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="ghost"
-                              className="w-full text-destructive hover:text-destructive"
-                              onClick={() => handleRemoveMember(member.id)}
-                              disabled={isRemoving || member.isOwner}
-                            >
-                              {isRemoving ? "Removing..." : "Remove"}
-                            </Button>
-                          </div>
-                        </Card>
+                        <div
+                          key={member.id}
+                          className="flex items-center gap-2 bg-muted/50 rounded-full px-3 py-1 text-sm"
+                        >
+                          <div className="w-2 h-2 rounded-full bg-primary"></div>
+                          <span>{displayName}</span>
+                          {member.isCurrentUser && (
+                            <span className="text-xs text-muted-foreground">(You)</span>
+                          )}
+                        </div>
                       );
                     })}
                   </div>
                 )}
-              </Card>
+
+                {/* Team Calendar - Full Height */}
+                    <TeamCalendar 
+                      teamMembers={teamMembers?.map(member => member.id) || []} 
+                      currentUser={currentUser}
+                      projectId={id} // Pass the project ID from the URL params
+                    />
+                  
+
+                {/* Team Management Modal */}
+                <TeamManagementModal
+                  isOpen={showTeamModal}
+                  onClose={() => setShowTeamModal(false)}
+                  teamMembers={teamMembers}
+                  availableUsers={availableUsers}
+                  selectedMember={selectedMember}
+                  onMemberSelect={handleMemberSelect}
+                  onAddMember={handleAddMember}
+                  onRemoveMember={handleRemoveMember}
+                  addingMember={addingMember}
+                  removingMemberId={removingMemberId}
+                  memberError={memberError}
+                />
+              </div>
             </TabsContent>
           </Tabs>
         </div>
-      </div>
-      {showReport && (
-        <ReportPanel
-          project={project}
-          tasks={tasks}
-          resolveUserLabel={resolveUserLabel}
-          onClose={() => setShowReport(false)}
-        />
-      )}
 
-      {selectedTask && (
-        <TaskDetailModal
-          task={selectedTask}
-          isOpen={!!selectedTask}
-          onClose={() => setSelectedTask(null)}
-          onEdit={handleEditTask}
-          onDelete={requestDeleteTask}
-          disableActions={Boolean(deletingTaskId) || savingTask}
-          teamMembers={teamMembers}
-          currentUserId={currentUser?.uid}
-          onSubtaskClick={handleSubtaskClick}
-          onSubtaskChange={async () => {
-            try {
-              await new Promise((resolve) => setTimeout(resolve, 300));
-              const isViewingSubtask =
-                selectedTask.isSubtask || selectedTask.parentTaskId;
+        {showReport && (
+          <ReportPanel
+            project={project}
+            tasks={tasks}
+            resolveUserLabel={resolveUserLabel}
+            onClose={() => setShowReport(false)}
+          />
+        )}
 
-              if (isViewingSubtask) {
-                const parentTaskId = selectedTask.parentTaskId;
-                const updatedSubtask = await getSubtask(
-                  project.id,
-                  parentTaskId,
-                  selectedTask.id
-                );
-                updatedSubtask.projectId = project.id;
-                updatedSubtask.parentTaskId = parentTaskId;
-                updatedSubtask.isSubtask = true;
+        {selectedTask && (
+          <TaskDetailModal
+            task={selectedTask}
+            isOpen={!!selectedTask}
+            onClose={() => setSelectedTask(null)}
+            onEdit={handleEditTask}
+            onDelete={requestDeleteTask}
+            disableActions={Boolean(deletingTaskId) || savingTask}
+            teamMembers={teamMembers}
+            currentUserId={currentUser?.uid}
+            onSubtaskClick={handleSubtaskClick}
+            onSubtaskChange={async () => {
+              try {
+                await new Promise((resolve) => setTimeout(resolve, 300));
+                const isViewingSubtask =
+                  selectedTask.isSubtask || selectedTask.parentTaskId;
 
-                const assigneeId =
-                  updatedSubtask.assigneeId || updatedSubtask.ownerId;
-                const assigneeInfo = users.find((u) => u?.id === assigneeId);
-                if (assigneeInfo) {
-                  const assigneeName =
-                    assigneeInfo.fullName ||
-                    assigneeInfo.displayName ||
-                    assigneeInfo.name ||
-                    assigneeInfo.email ||
-                    assigneeId;
-                  updatedSubtask.assigneeSummary = {
-                    id: assigneeId,
-                    name: assigneeName,
-                    email: assigneeInfo.email || "",
-                    role: assigneeInfo.role || "",
-                    avatar: assigneeInfo.avatar || assigneeInfo.photoURL || "",
-                  };
+                if (isViewingSubtask) {
+                  const parentTaskId = selectedTask.parentTaskId;
+                  const updatedSubtask = await getSubtask(
+                    project.id,
+                    parentTaskId,
+                    selectedTask.id
+                  );
+                  updatedSubtask.projectId = project.id;
+                  updatedSubtask.parentTaskId = parentTaskId;
+                  updatedSubtask.isSubtask = true;
+
+                  const assigneeId =
+                    updatedSubtask.assigneeId || updatedSubtask.ownerId;
+                  const assigneeInfo = users.find((u) => u?.id === assigneeId);
+                  if (assigneeInfo) {
+                    updatedSubtask.assigneeSummary = {
+                      id: assigneeId,
+                      name:
+                        assigneeInfo.fullName ||
+                        assigneeInfo.displayName ||
+                        assigneeInfo.name ||
+                        assigneeInfo.email ||
+                        assigneeId,
+                      email: assigneeInfo.email || "",
+                      role: assigneeInfo.role || "",
+                      avatar: assigneeInfo.avatar || assigneeInfo.photoURL || "",
+                    };
+                  }
+                  setSelectedTask(updatedSubtask);
+                  const updatedParentTask = await getTask(
+                    project.id,
+                    parentTaskId
+                  );
+                  setTasks((prevTasks) =>
+                    prevTasks.map((t) =>
+                      t.id === parentTaskId ? { ...t, ...updatedParentTask } : t
+                    )
+                  );
+                } else {
+                  const updatedTask = await getTask(project.id, selectedTask.id);
+                  updatedTask.projectId = project.id;
+
+                  const assigneeId = updatedTask.assigneeId || updatedTask.ownerId;
+                  const assigneeInfo = users.find((u) => u?.id === assigneeId);
+                  if (assigneeInfo) {
+                    updatedTask.assigneeSummary = {
+                      id: assigneeId,
+                      name:
+                        assigneeInfo.fullName ||
+                        assigneeInfo.displayName ||
+                        assigneeInfo.email ||
+                        assigneeId,
+                      email: assigneeInfo.email || "",
+                      role: assigneeInfo.role || "",
+                      avatar: assigneeInfo.avatar || assigneeInfo.photoURL || "",
+                    };
+                  } else if (assigneeId) {
+                    updatedTask.assigneeSummary = {
+                      id: assigneeId,
+                      name: `User ${String(assigneeId).slice(0, 4)}`,
+                      email: "",
+                      role: "",
+                      avatar: "",
+                    };
+                  }
+
+                  setSelectedTask(updatedTask);
+                  setTasks((prevTasks) =>
+                    prevTasks.map((t) =>
+                      t.id === updatedTask.id ? { ...t, ...updatedTask } : t
+                    )
+                  );
                 }
-                setSelectedTask(updatedSubtask);
-                const updatedParentTask = await getTask(
-                  project.id,
-                  parentTaskId
-                );
-                setTasks((prevTasks) =>
-                  prevTasks.map((t) =>
-                    t.id === parentTaskId ? { ...t, ...updatedParentTask } : t
-                  )
-                );
-              } else {
-                const updatedTask = await getTask(project.id, selectedTask.id);
-                updatedTask.projectId = project.id;
-
-                const assigneeId =
-                  updatedTask.assigneeId || updatedTask.ownerId;
-                const assigneeInfo = users.find((u) => u?.id === assigneeId);
-                if (assigneeInfo) {
-                  const assigneeName =
-                    assigneeInfo.fullName ||
-                    assigneeInfo.displayName ||
-                    assigneeInfo.name ||
-                    assigneeInfo.email ||
-                    assigneeId;
-                  updatedTask.assigneeSummary = {
-                    id: assigneeId,
-                    name: assigneeName,
-                    email: assigneeInfo.email || "",
-                    role: assigneeInfo.role || "",
-                    avatar: assigneeInfo.avatar || assigneeInfo.photoURL || "",
-                  };
-                } else if (assigneeId) {
-                  updatedTask.assigneeSummary = {
-                    id: assigneeId,
-                    name: `User ${String(assigneeId).slice(0, 4)}`,
-                    email: "",
-                    role: "",
-                    avatar: "",
-                  };
-                }
-
-                setSelectedTask(updatedTask);
-                setTasks((prevTasks) =>
-                  prevTasks.map((t) =>
-                    t.id === updatedTask.id ? { ...t, ...updatedTask } : t
-                  )
-                );
+              } catch (err) {
+                console.error("Failed to refresh task:", err);
+                toast.error("Failed to refresh task details");
               }
-            } catch (err) {
-              console.error("Failed to refresh task:", err);
-              toast.error("Failed to refresh task details");
-            }
-          }}
-        />
-      )}
+            }}
+          />
+        )}
+      </div>
     </>
   );
 }
@@ -2285,7 +2221,7 @@ function ReportPanel({ project, tasks, onClose, resolveUserLabel }) {
           </section>
 
           <section>
-            <h4 className="mb-2 font-semibold">Summary</h4>
+                       <h4 className="mb-2 font-semibold">Summary</h4>
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               <Card className="p-4">
                 <div className="text-sm text-muted-foreground">Total tasks</div>
@@ -2440,4 +2376,207 @@ function toDate(v) {
   if (typeof v === "object" && "seconds" in v)
     return new Date(v.seconds * 1000);
   return null;
+}
+
+function TeamManagementModal({ 
+  isOpen, 
+  onClose, 
+  teamMembers, 
+  availableUsers, 
+  selectedMember,
+  onMemberSelect,
+  onAddMember, 
+  onRemoveMember, 
+  addingMember, 
+  removingMemberId, 
+  memberError 
+}) {
+  const [searchTerm, setSearchTerm] = useState("");
+
+  const filteredUsers = availableUsers.filter(user =>
+    user.label.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (user.email && user.email.toLowerCase().includes(searchTerm.toLowerCase()))
+  );
+
+  const handleUserSelect = (userId) => {
+    const user = availableUsers.find(u => u.id === userId);
+    if (user) {
+      onMemberSelect(userId);
+      // Clear search term immediately after selection
+      setSearchTerm("");
+    }
+  };
+
+  const handleAddUser = async () => {
+    if (selectedMember) {
+      await onAddMember();
+      // Clear search term after adding
+      setSearchTerm("");
+    }
+  };
+
+  // Clear search and selection when modal closes
+  const handleClose = (open) => {
+    if (!open) {
+      setSearchTerm("");
+      onClose();
+    }
+  };
+
+  return (
+    <Dialog open={isOpen} onOpenChange={handleClose}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Users className="h-5 w-5" />
+            Manage Team Members
+          </DialogTitle>
+          <p className="text-sm text-muted-foreground">
+            Add or remove collaborators for this project
+          </p>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          {/* Add New Member Section */}
+          <div className="space-y-3">
+            <h4 className="font-medium">Add Team Member</h4>
+            
+            {/* Search Input with Autocomplete */}
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Search for team members..."
+                value={searchTerm}
+                onChange={(e) => {
+                  setSearchTerm(e.target.value);
+                  // Clear selection when user types
+                  if (selectedMember) {
+                    onMemberSelect("");
+                  }
+                }}
+                className="w-full h-9 px-3 rounded-md border bg-background text-sm"
+              />
+              
+              {/* Autocomplete Dropdown */}
+              {searchTerm && filteredUsers.length > 0 && (
+                <div className="absolute top-full left-0 right-0 mt-1 bg-background border rounded-md shadow-lg max-h-40 overflow-y-auto z-50">
+                  {filteredUsers.map((user) => (
+                    <button
+                      key={user.id}
+                      onClick={() => handleUserSelect(user.id)}
+                      className="w-full px-3 py-2 text-left hover:bg-muted text-sm flex flex-col"
+                    >
+                      <span className="font-medium">{user.label}</span>
+                      {user.email && user.email !== user.label && (
+                        <span className="text-xs text-muted-foreground leading-tight">
+                          {user.email}
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Show selected user */}
+            {selectedMember && !searchTerm && (
+              <div className="p-2 bg-muted/50 rounded-md border">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">
+                    Selected: {availableUsers.find(u => u.id === selectedMember)?.label || selectedMember}
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => onMemberSelect("")}
+                    className="h-6 w-6 p-0"
+                  >
+                    ×
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            <Button
+              onClick={handleAddUser}
+              disabled={!selectedMember || addingMember}
+              className="w-full"
+              size="sm"
+            >
+              {addingMember ? "Adding..." : "Add Member"}
+            </Button>
+
+            {memberError && (
+              <div className="flex items-center gap-2 rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                <AlertCircle className="h-4 w-4" />
+                <span>{memberError}</span>
+              </div>
+            )}
+          </div>
+
+          {/* Current Team Members */}
+          {teamMembers.length > 0 && (
+            <div className="space-y-3 border-t pt-4">
+              <h4 className="font-medium">Current Team Members</h4>
+              <div className="space-y-2 max-h-40 overflow-y-auto">
+                {teamMembers.map((member) => {
+                  const displayName =
+                    member.displayName ||
+                    member.fullName ||
+                    member.email ||
+                    member.id;
+                  const isRemoving = removingMemberId === member.id;
+                  
+                  return (
+                    <div
+                      key={member.id}
+                      className="flex items-center justify-between p-2 rounded-md border bg-muted/30"
+                    >
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-primary"></div>
+                        <div>
+                          <p className="text-sm font-medium">{displayName}</p>
+                          {member.email && member.email !== displayName && (
+                            <p className="text-xs text-muted-foreground">{member.email}</p>
+                          )}
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-center gap-1">
+                        {member.isOwner && (
+                          <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded-full">
+                            Owner
+                          </span>
+                        )}
+                        {member.isCurrentUser && (
+                          <span className="text-xs bg-muted text-muted-foreground px-2 py-1 rounded-full">
+                            You
+                          </span>
+                        )}
+                        {!member.isOwner && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => onRemoveMember(member.id)}
+                            disabled={isRemoving}
+                            className="h-6 w-6 p-0 text-destructive hover:text-destructive"
+                          >
+                            {isRemoving ? (
+                              <div className="h-3 w-3 animate-spin rounded-full border-2 border-destructive border-r-transparent" />
+                            ) : (
+                              "×"
+                            )}
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
 }

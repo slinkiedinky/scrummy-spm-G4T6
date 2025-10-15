@@ -619,9 +619,9 @@ export function TaskDetailModal({
                       </p>
                     ) : (
                       <div className="space-y-2">
-                        {collaborators.map((person) => (
+                        {collaborators.map((person, idx) => (
                           <div
-                            key={person.id}
+                            key={person.id || person.email || idx}
                             className="flex items-center gap-2"
                           >
                             <Avatar className="h-6 w-6">

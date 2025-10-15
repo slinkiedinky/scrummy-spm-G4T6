@@ -26,7 +26,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -69,6 +69,7 @@ import { TaskDetailModal } from "@/components/TaskDetailModal";
 import { getTask } from "@/lib/api";
 import TeamCalendar from '@/components/TeamCalendar';
 import { Users } from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 const TAG_BASE =
   "rounded-full px-2.5 py-1 text-xs font-medium inline-flex items-center gap-1";
@@ -1726,6 +1727,7 @@ export default function ProjectDetailPage() {
                     <TeamCalendar 
                       teamMembers={teamMembers?.map(member => member.id) || []} 
                       currentUser={currentUser}
+                      projectId={id} // Pass the project ID from the URL params
                     />
                   </div>
                 </Card>

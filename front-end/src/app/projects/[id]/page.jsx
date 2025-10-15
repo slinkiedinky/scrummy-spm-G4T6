@@ -1722,15 +1722,12 @@ export default function ProjectDetailPage() {
                 )}
 
                 {/* Team Calendar - Full Height */}
-                <Card className="w-full">
-                  <div className="p-0">
                     <TeamCalendar 
                       teamMembers={teamMembers?.map(member => member.id) || []} 
                       currentUser={currentUser}
                       projectId={id} // Pass the project ID from the URL params
                     />
-                  </div>
-                </Card>
+                  
 
                 {/* Team Management Modal */}
                 <TeamManagementModal

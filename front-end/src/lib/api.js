@@ -1,3 +1,36 @@
+// ---- Standalone Task Comments ----
+export async function listStandaloneComments(taskId) {
+  const r = await fetch(`${API}/standalone-tasks/${taskId}/comments`, { cache: "no-store" });
+  if (!r.ok) throw new Error(`Failed to load comments (${r.status})`);
+  return r.json();
+}
+
+export async function addStandaloneComment(taskId, payload) {
+  const r = await fetch(`${API}/standalone-tasks/${taskId}/comments`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!r.ok) throw new Error(`Failed to add comment (${r.status})`);
+  return r.json();
+}
+
+export async function editStandaloneComment(taskId, commentId, payload) {
+  const r = await fetch(`${API}/standalone-tasks/${taskId}/comments/${commentId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!r.ok) throw new Error(`Failed to edit comment (${r.status})`);
+  return r.json();
+}
+
+export async function deleteStandaloneComment(taskId, commentId) {
+  const r = await fetch(`${API}/standalone-tasks/${taskId}/comments/${commentId}`, {
+    method: "DELETE" });
+  if (!r.ok) throw new Error(`Failed to delete comment (${r.status})`);
+  return r.json();
+}
 // ---- Comments ----
 export async function listComments(projectId, taskId) {
   const r = await fetch(`${API}/tasks/${taskId}/comments?project_id=${projectId}`, { cache: "no-store" });

@@ -35,6 +35,10 @@ import {
   addComment,
   editComment,
   deleteComment,
+  listStandaloneComments,
+  addStandaloneComment,
+  editStandaloneComment,
+  deleteStandaloneComment,
 } from "@/lib/api";
 import { Input } from "@/components/ui/input";
 import {
@@ -159,14 +163,17 @@ export function TaskDetailModal({
 
   // Load comments when modal opens or task changes
   useEffect(() => {
-    if (isOpen && task.id && task.projectId) {
-      setLoadingComments(true);
-      listComments(task.projectId, task.id)
-        .then(setComments)
-        .catch(() => setComments([]))
-        .finally(() => setLoadingComments(false));
-    }
-  }, [isOpen, task.id, task.projectId]);
+    if (!isOpen || !task?.id) return;
+    setLoadingComments(true);
+    const isStandalone = task.projectId === "standalone" || task.isStandalone;
+    const load = isStandalone
+      ? listStandaloneComments(task.id)
+      : listComments(task.projectId, task.id);
+    Promise.resolve(load)
+      .then(setComments)
+      .catch(() => setComments([]))
+      .finally(() => setLoadingComments(false));
+  }, [isOpen, task.id, task.projectId, task.isStandalone]);
 
   const handleAddComment = async () => {
     if (!newComment.trim()) return;
@@ -175,7 +182,10 @@ export function TaskDetailModal({
         user_id: currentUserId,
         text: newComment.trim(),
       };
-      const comment = await addComment(task.projectId, task.id, payload);
+      const isStandalone = task.projectId === "standalone" || task.isStandalone;
+      const comment = isStandalone
+        ? await addStandaloneComment(task.id, payload)
+        : await addComment(task.projectId, task.id, payload);
       setComments((prev) => [...prev, comment]);
       setNewComment("");
     } catch (err) {
@@ -187,7 +197,10 @@ export function TaskDetailModal({
     if (!editingText.trim()) return;
     try {
       const payload = { text: editingText.trim() };
-      const updated = await editComment(task.projectId, task.id, commentId, payload);
+      const isStandalone = task.projectId === "standalone" || task.isStandalone;
+      const updated = isStandalone
+        ? await editStandaloneComment(task.id, commentId, payload)
+        : await editComment(task.projectId, task.id, commentId, payload);
       setComments((prev) => prev.map((c) => (c.id === commentId ? updated : c)));
       setEditingCommentId(null);
       setEditingText("");
@@ -203,7 +216,12 @@ export function TaskDetailModal({
   const confirmDeleteComment = async () => {
     if (!deleteConfirmId) return;
     try {
-      await deleteComment(task.projectId, task.id, deleteConfirmId);
+      const isStandalone = task.projectId === "standalone" || task.isStandalone;
+      if (isStandalone) {
+        await deleteStandaloneComment(task.id, deleteConfirmId);
+      } else {
+        await deleteComment(task.projectId, task.id, deleteConfirmId);
+      }
       setComments((prev) => prev.filter((c) => c.id !== deleteConfirmId));
       setDeleteConfirmId(null);
     } catch (err) {

@@ -97,6 +97,8 @@ export function TeamCalendar({ teamMembers = [], currentUser, projectId }) {
         projectId={projectId}
         currentUser={currentUser}
         onBack={handleBackToGrid}
+        teamMembers={teamMembers}
+        users={users}
       />
     );
   }
@@ -154,12 +156,27 @@ export function TeamCalendar({ teamMembers = [], currentUser, projectId }) {
 }
 
 // Member Schedule View Component (Full Screen)
-function MemberScheduleView({ memberId, memberName, projectId, currentUser, onBack }) {
+function MemberScheduleView({ memberId, memberName, projectId, currentUser, onBack, teamMembers = [], users = {} }) {
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [viewMode, setViewMode] = useState("month"); // Default to month view
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
+  
+  const formatTeamMembersForModal = () => {
+    return teamMembers.map(memberId => {
+      const user = users[memberId];
+      return {
+        id: memberId,
+        uid: memberId,
+        fullName: user?.fullName || user?.name || user?.displayName || `User ${memberId?.slice(0, 8)}`,
+        displayName: user?.displayName || user?.fullName || user?.name,
+        email: user?.email || '',
+        name: user?.name || user?.fullName || user?.displayName,
+        role: user?.role || 'Member',
+        photoURL: user?.photoURL || user?.avatar
+      };
+    });
+  };
 
   // Fetch tasks for the specific member from the project
   useEffect(() => {
@@ -241,31 +258,12 @@ function MemberScheduleView({ memberId, memberName, projectId, currentUser, onBa
 
   const navigateDate = (direction) => {
     const newDate = new Date(currentDate);
-    if (viewMode === "week") {
-      newDate.setDate(newDate.getDate() + direction * 7);
-    } else {
-      newDate.setMonth(newDate.getMonth() + direction);
-    }
+    newDate.setMonth(newDate.getMonth() + direction);
     setCurrentDate(newDate);
   };
 
   const goToToday = () => {
     setCurrentDate(new Date());
-  };
-
-  const getWeekDates = () => {
-    const dates = [];
-    const startOfWeek = new Date(currentDate);
-    const day = startOfWeek.getDay();
-    const diff = startOfWeek.getDate() - day + (day === 0 ? -6 : 1);
-    startOfWeek.setDate(diff);
-
-    for (let i = 0; i < 7; i++) {
-      const date = new Date(startOfWeek);
-      date.setDate(startOfWeek.getDate() + i);
-      dates.push(date);
-    }
-    return dates;
   };
 
   const getMonthDates = () => {
@@ -316,11 +314,6 @@ function MemberScheduleView({ memberId, memberName, projectId, currentUser, onBa
             <h3 className="text-lg font-semibold">
               {currentDate.toLocaleDateString("en-US", { month: "long", year: "numeric" })}
             </h3>
-            {viewMode === "week" && (
-              <span className="text-sm text-muted-foreground">
-                Week of {currentDate.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-              </span>
-            )}
           </div>
         </div>
 
@@ -334,43 +327,23 @@ function MemberScheduleView({ memberId, memberName, projectId, currentUser, onBa
           <Button variant="outline" size="sm" onClick={() => navigateDate(1)}>
             <ChevronRight className="h-4 w-4" />
           </Button>
-          <select
-            value={viewMode}
-            onChange={(e) => setViewMode(e.target.value)}
-            className="h-9 px-3 rounded-md border bg-background text-sm"
-          >
-            <option value="week">Week view</option>
-            <option value="month">Month view</option>
-          </select>
         </div>
       </div>
 
-      {/* Calendar Content */}
+      {/* Calendar Content - Month View Only */}
       <div className="w-full">
         {loading ? (
           <div className="flex items-center justify-center h-64">
             <div className="text-muted-foreground">Loading schedule...</div>
           </div>
         ) : (
-          <>
-            {viewMode === "week" && (
-              <MemberWeekView
-                dates={getWeekDates()}
-                tasks={tasks}
-                onTaskClick={handleTaskClick}
-                getStatusColor={getStatusColor}
-              />
-            )}
-            {viewMode === "month" && (
-              <MemberMonthView
-                dates={getMonthDates()}
-                currentMonth={currentDate.getMonth()}
-                tasks={tasks}
-                onTaskClick={handleTaskClick}
-                getStatusColor={getStatusColor}
-              />
-            )}
-          </>
+          <MemberMonthView
+            dates={getMonthDates()}
+            currentMonth={currentDate.getMonth()}
+            tasks={tasks}
+            onTaskClick={handleTaskClick}
+            getStatusColor={getStatusColor}
+          />
         )}
       </div>
 
@@ -381,70 +354,11 @@ function MemberScheduleView({ memberId, memberName, projectId, currentUser, onBa
           isOpen={!!selectedTask}
           onClose={() => setSelectedTask(null)}
           currentUser={currentUser}
+          teamMembers={formatTeamMembersForModal()}
+          currentUserId={currentUser?.uid || currentUser?.id}
+          projectId={projectId}
         />
       )}
-    </div>
-  );
-}
-
-// Member Week View Component
-function MemberWeekView({ dates, tasks, onTaskClick, getStatusColor }) {
-  const HOURS = Array.from({ length: 18 }, (_, i) => i + 6); // 6 AM to 11 PM
-
-  return (
-    <div className="border rounded-lg overflow-hidden">
-      <div className="grid grid-cols-8 gap-px bg-border">
-        {/* Time column header */}
-        <div className="bg-background p-2"></div>
-
-        {/* Day headers */}
-        {dates.map((date, i) => {
-          const isToday = date.toDateString() === new Date().toDateString();
-          return (
-            <div key={i} className="bg-background p-2 text-center">
-              <div className="text-sm text-muted-foreground">
-                {DAYS_OF_WEEK[i]} {date.getDate()}
-              </div>
-              {isToday && (
-                <div className="mt-1 w-8 h-8 mx-auto rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-semibold">
-                  {date.getDate()}
-                </div>
-              )}
-            </div>
-          );
-        })}
-
-        {/* Time slots */}
-        {HOURS.map((hour) => (
-          <React.Fragment key={hour}>
-            <div className="bg-background p-2 text-sm text-muted-foreground">
-              {hour === 0 ? "12 am" : hour < 12 ? `${hour} am` : hour === 12 ? "12 pm" : `${hour - 12} pm`}
-            </div>
-            {dates.map((date, i) => {
-              const dateStr = date.toISOString().split("T")[0];
-              const dayTasks = tasks.filter((task) => task.date === dateStr);
-
-              return (
-                <div key={`${i}-${hour}`} className="bg-background p-1 min-h-[60px] relative">
-                  {dayTasks.map((task) => (
-                    <button
-                      key={task.id}
-                      onClick={() => onTaskClick(task)}
-                      className={cn(
-                        "w-full mb-1 p-2 rounded text-left text-xs border truncate hover:shadow-sm transition-shadow",
-                        getStatusColor(task.status)
-                      )}
-                    >
-                      <div className="font-medium truncate">{task.title}</div>
-                      <div className="opacity-80 text-xs">{task.status}</div>
-                    </button>
-                  ))}
-                </div>
-              );
-            })}
-          </React.Fragment>
-        ))}
-      </div>
     </div>
   );
 }

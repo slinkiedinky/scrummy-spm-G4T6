@@ -640,13 +640,16 @@ export default function ProjectDetailPage() {
   }
 
   async function handleTaskStatus(taskId, status) {
-    await updateTask(id, taskId, { status });
-    const updated = tasks.map((t) => (t.id === taskId ? { ...t, status } : t));
-    setTasks(updated);
+    if (isEditingTask && editingTaskId) {
+      payload.updatedBy = auth.currentUser?.uid || "";   // ← add this
+      await updateTask(id, editingTaskId, payload);
+    }
 
-    // ⭐ ADDED: auto-sync project status after inline status change
-    await syncProjectStatusWithTasks(updated);
+    await updateTask(id, taskId, { status, updatedBy: auth.currentUser?.uid || "" });
+
+    setTasks(prev => prev.map(t => (t.id === taskId ? { ...t, status } : t)));
   }
+
 
   const requestDeleteTask = (task) => {
     if (!task) return;

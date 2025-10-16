@@ -1,5 +1,5 @@
 import datetime
-from firebase_functions import https_fn
+from firebase_functions import https_fn, scheduler_fn
 from firebase_functions.params import SecretParam
 from firebase_admin import firestore, initialize_app
 import google.cloud.firestore
@@ -147,3 +147,9 @@ def get_task_digest(req: https_fn.Request) -> https_fn.Response:
             code=https_fn.FunctionsErrorCode.INTERNAL,
             message='Failed to retrieve task data due to a server error.'
         )
+
+@scheduler_fn.on_schedule(schedule="every day 09:00", timezone="Asia/Singapore")
+def scheduled_task_digest(event):
+    userID = "U101"
+    response = requests.post(f"https://us-central1-scrummy-be0d6.cloudfunctions.net/get_task_digest?userId={userID}")
+    print("Triggered:", response.status_code)

@@ -71,27 +71,54 @@ function priorityInfo(p) {
     return { label, cls: "bg-red-100 text-red-700 border-red-200", number: n };
   }
   if (n >= 4) {
-    return { label, cls: "bg-yellow-100 text-yellow-700 border-yellow-200", number: n };
+    return {
+      label,
+      cls: "bg-yellow-100 text-yellow-700 border-yellow-200",
+      number: n,
+    };
   }
-  return { label, cls: "bg-emerald-100 text-emerald-700 border-emerald-200", number: n };
+  return {
+    label,
+    cls: "bg-emerald-100 text-emerald-700 border-emerald-200",
+    number: n,
+  };
 }
-
 
 function statusInfo(s) {
   const key = String(s || "").toLowerCase();
   if (key === "to-do" || key === "todo") {
-    return { label: "To Do", cls: "bg-gray-100 text-gray-700 border-gray-200", norm: "To Do" };
+    return {
+      label: "To Do",
+      cls: "bg-gray-100 text-gray-700 border-gray-200",
+      norm: "To Do",
+    };
   }
   if (key === "in-progress" || key === "in progress") {
-    return { label: "In Progress", cls: "bg-blue-100 text-blue-700 border-blue-200", norm: "In Progress" };
+    return {
+      label: "In Progress",
+      cls: "bg-blue-100 text-blue-700 border-blue-200",
+      norm: "In Progress",
+    };
   }
   if (key === "done" || key === "completed" || key === "complete") {
-    return { label: "Completed", cls: "bg-emerald-100 text-emerald-700 border-emerald-200", norm: "Completed" };
+    return {
+      label: "Completed",
+      cls: "bg-emerald-100 text-emerald-700 border-emerald-200",
+      norm: "Completed",
+    };
   }
   if (key === "blocked") {
-    return { label: "Blocked", cls: "bg-rose-100 text-rose-700 border-rose-200", norm: "Blocked" };
+    return {
+      label: "Blocked",
+      cls: "bg-rose-100 text-rose-700 border-rose-200",
+      norm: "Blocked",
+    };
   }
-  return { label: s ?? "—", cls: "bg-gray-100 text-gray-700 border-gray-200", norm: s ?? "—" };
+  return {
+    label: s ?? "—",
+    cls: "bg-gray-100 text-gray-700 border-gray-200",
+    norm: s ?? "—",
+  };
 }
 
 /* --------------------------- Reusable UI: Dropdowns --------------------------- */
@@ -106,18 +133,24 @@ function useClickOutside(ref, onClose) {
   }, [ref, onClose]);
 }
 
-function MultiSelectDropdown({ label, options, selected, setSelected, searchable=false, placeholder="Select..." }) {
+function MultiSelectDropdown({
+  label,
+  options,
+  selected,
+  setSelected,
+  searchable = false,
+  placeholder = "Select...",
+}) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const ref = useRef(null);
   useClickOutside(ref, () => setOpen(false));
 
   const filtered = useMemo(() => {
-  if (!searchable || !q.trim()) return options;
-  const s = q.toLowerCase();
-  return options.filter((o) => o.label.toLowerCase().includes(s));
-}, [options, q, searchable]);
-
+    if (!searchable || !q.trim()) return options;
+    const s = q.toLowerCase();
+    return options.filter((o) => o.label.toLowerCase().includes(s));
+  }, [options, q, searchable]);
 
   const toggle = (v) =>
     setSelected((prev) =>
@@ -140,8 +173,16 @@ function MultiSelectDropdown({ label, options, selected, setSelected, searchable
         <span className={selected.length ? "text-gray-900" : "text-gray-400"}>
           {summary}
         </span>
-        <svg className="w-4 h-4 text-gray-400" viewBox="0 0 20 20" fill="currentColor">
-          <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
+        <svg
+          className="w-4 h-4 text-gray-400"
+          viewBox="0 0 20 20"
+          fill="currentColor"
+        >
+          <path
+            fillRule="evenodd"
+            d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"
+            clipRule="evenodd"
+          />
         </svg>
       </button>
 
@@ -201,7 +242,9 @@ function MultiSelectDropdown({ label, options, selected, setSelected, searchable
 
 function Tag({ label, className = "", onRemove }) {
   return (
-    <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 text-xs shadow-sm bg-white ${className}`}>
+    <span
+      className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 text-xs shadow-sm bg-white ${className}`}
+    >
       <span className="truncate max-w-[200px]">{label}</span>
       <button
         type="button"
@@ -249,75 +292,62 @@ export default function Timeline() {
       setLoading(true);
       setError("");
       try {
-        const cg = collectionGroup(db, "tasks");
+        // Use the existing listAssignedTasks API instead of collectionGroup
+        const { listAssignedTasks } = await import("@/lib/api");
+        const tasksData = await listAssignedTasks({ assignedTo: uid });
 
-        const [rAssignee, rCollab, rOwner] = await Promise.all([
-          safeGetDocs(query(cg, where("assigneeId", "==", uid)), "assigneeId"),
-          safeGetDocs(query(cg, where("collaboratorsIds", "array-contains", uid)), "collaboratorsIds"),
-          safeGetDocs(query(cg, where("ownerId", "==", uid)), "ownerId"),
-        ]);
+        if (!tasksData || tasksData.length === 0) {
+          setTasks([]);
+          setLoading(false);
+          return;
+        }
 
-        const rows = [];
-        const push = (snap) =>
-          snap.forEach((d) => {
-            const pRef = d.ref.parent?.parent; // projects/{projectId}
-            rows.push({ _taskId: d.id, _projectId: pRef?.id || null, ...d.data() });
-          });
-        push(rAssignee);
-        push(rCollab);
-        push(rOwner);
-
-        const dedup = Array.from(
-          new Map(rows.map((t) => [`${t._projectId}-${t._taskId}`, t])).values()
-        );
-
-        // fetch project names
-        const pids = Array.from(
-          new Set(dedup.map((t) => t._projectId).filter(Boolean))
-        );
-        const projectNameById = {};
-        await Promise.all(
-          pids.map(async (pid) => {
-            try {
-              const ps = await getDoc(doc(db, "projects", pid));
-              projectNameById[pid] = ps.exists() ? ps.data().name || `Project ${pid}` : pid;
-            } catch {
-              projectNameById[pid] = pid;
-            }
-          })
-        );
-
-        // fetch "assigned by" user names (from users/{uid}.fullName)
+        // Fetch user names for "assigned by"
         const userIds = Array.from(
           new Set(
-            dedup
-              .map((t) => t.createdBy || t.ownerId)
-              .filter(Boolean)
+            tasksData.map((t) => t.createdBy || t.ownerId).filter(Boolean)
           )
         );
+
+        console.log("Fetching assigner names for user IDs:", userIds); // Debug log
+
         const userNameById = {};
         await Promise.all(
           userIds.map(async (u) => {
             try {
               const us = await getDoc(doc(db, "users", u));
-              userNameById[u] = us.exists() ? (us.data().fullName || u) : u;
-            } catch {
+              if (us.exists()) {
+                const userData = us.data();
+                console.log(`User data for ${u}:`, userData); // Debug what we get from Firebase
+                
+                // Check both fullName and name fields
+                const displayName = userData.fullName || userData.name || userData.displayName || u;
+                userNameById[u] = displayName;
+                console.log(`Mapped ${u} -> ${displayName}`); // Debug the mapping
+              } else {
+                console.warn(`User document does not exist for ${u}`);
+                userNameById[u] = u;
+              }
+            } catch (error) {
+              console.error(`Failed to fetch user ${u}:`, error);
               userNameById[u] = u;
             }
           })
         );
 
-        const normalized = dedup.map((t) => {
+        console.log("Final user name mapping:", userNameById); // See the complete mapping
+
+        const normalized = tasksData.map((t) => {
           const pr = priorityInfo(t.priority);
           const st = statusInfo(t.status);
           const assignedById = t.createdBy || t.ownerId || "—";
           return {
-            id: `${t._projectId}-${t._taskId}`,
+            id: `${t.projectId}-${t.id}`,
             name: t.title || t.name || "(untitled)",
             dueDate: t.dueDate || null,
             updatedAt: t.updatedAt || null,
             assignedBy: userNameById[assignedById] || assignedById,
-            projectName: projectNameById[t._projectId] || t._projectId || "—",
+            projectName: t.projectName || t.projectId || "—",
             priorityNumber: pr.number,
             priorityLabel: pr.label,
             priorityCls: pr.cls,
@@ -326,7 +356,7 @@ export default function Timeline() {
           };
         });
 
-        // sort chronologically by due date, then by most recently updated
+        // Sort chronologically by due date, then by most recently updated
         normalized.sort((a, b) => {
           const ad = toDate(a.dueDate)?.getTime() ?? Infinity;
           const bd = toDate(b.dueDate)?.getTime() ?? Infinity;
@@ -338,6 +368,7 @@ export default function Timeline() {
 
         setTasks(normalized);
       } catch (e) {
+        console.error("Timeline error:", e);
         setError(e?.message || "Failed to load tasks.");
       } finally {
         setLoading(false);
@@ -375,21 +406,21 @@ export default function Timeline() {
   );
 
   const filtered = useMemo(() => {
-  return tasks.filter((t) => {
-    // hide completed (whether overdue or not)
-    if (t.statusLabel === "Completed") return false;
+    return tasks.filter((t) => {
+      // hide completed (whether overdue or not)
+      if (t.statusLabel === "Completed") return false;
 
-    const okProj =
-      projectFilter.length === 0 || projectFilter.includes(t.projectName);
-    const okPrio =
-      priorityFilter.length === 0 || priorityFilter.includes(t.priorityNumber);
-    const okStat =
-      statusFilter.length === 0 || statusFilter.includes(t.statusLabel);
+      const okProj =
+        projectFilter.length === 0 || projectFilter.includes(t.projectName);
+      const okPrio =
+        priorityFilter.length === 0 ||
+        priorityFilter.includes(t.priorityNumber);
+      const okStat =
+        statusFilter.length === 0 || statusFilter.includes(t.statusLabel);
 
-    return okProj && okPrio && okStat;
-  });
-}, [tasks, projectFilter, priorityFilter, statusFilter]);
-
+      return okProj && okPrio && okStat;
+    });
+  }, [tasks, projectFilter, priorityFilter, statusFilter]);
 
   const groups = useMemo(() => {
     const map = new Map();
@@ -428,10 +459,10 @@ export default function Timeline() {
 
   const priorityTagCls = (n) => {
     const p = Number(n);
-    if (p >= 8) return "bg-white text-red-600 border-red-300";        // 8–10
-    if (p >= 4) return "bg-white text-yellow-600 border-yellow-300";  // 4–7
-    return "bg-white text-emerald-600 border-emerald-300";            // 1–3
-    };
+    if (p >= 8) return "bg-white text-red-600 border-red-300"; // 8–10
+    if (p >= 4) return "bg-white text-yellow-600 border-yellow-300"; // 4–7
+    return "bg-white text-emerald-600 border-emerald-300"; // 1–3
+  };
   const statusTagCls = (s) => statusInfo(s).cls;
 
   /* ---------------------------------- UI ---------------------------------- */
@@ -443,7 +474,8 @@ export default function Timeline() {
         <div>
           <h1 className="text-2xl font-semibold">Timeline</h1>
           <p className="text-sm text-gray-500">
-            Chronological task timeline with project, priority, and status filters.
+            Chronological task timeline with project, priority, and status
+            filters.
           </p>
         </div>
         <div className="flex gap-2">
@@ -491,12 +523,15 @@ export default function Timeline() {
       </div>
 
       {/* Selected filter TAGS just below dropdowns */}
-      {(projectFilter.length ||
-        priorityFilter.length ||
-        statusFilter.length) > 0 && (
+      {(projectFilter.length || priorityFilter.length || statusFilter.length) >
+        0 && (
         <div className="mt-3 flex flex-wrap items-center gap-2">
           {projectFilter.map((p) => (
-            <Tag key={`pj-${p}`} label={`Project: ${p}`} onRemove={() => removeProject(p)} />
+            <Tag
+              key={`pj-${p}`}
+              label={`Project: ${p}`}
+              onRemove={() => removeProject(p)}
+            />
           ))}
           {priorityFilter.map((n) => (
             <Tag
@@ -522,87 +557,107 @@ export default function Timeline() {
         {/* timeline line */}
         <div className="absolute left-3 top-0 bottom-0 w-px bg-gray-200" />
 
-        {loading && <div className="py-10 text-center text-gray-500">Loading your timeline…</div>}
-        {error && !loading && <div className="py-3 text-red-600">Error: {error}</div>}
+        {loading && (
+          <div className="py-10 text-center text-gray-500">
+            Loading your timeline…
+          </div>
+        )}
+        {error && !loading && (
+          <div className="py-3 text-red-600">Error: {error}</div>
+        )}
         {!loading && !error && filtered.length === 0 && (
-          <div className="py-10 text-center text-gray-500">No task available</div>
+          <div className="py-10 text-center text-gray-500">
+            No task available
+          </div>
         )}
 
-        {!loading && !error && groups.map(([day, items], gi) => (
-          <div key={day} className="mb-6">
-            {/* Day header */}
-            <div className="flex items-center gap-2 mb-3 pl-8">
-              <div className="text-sm font-semibold text-gray-700">{day}</div>
-            </div>
+        {!loading &&
+          !error &&
+          groups.map(([day, items], gi) => (
+            <div key={day} className="mb-6">
+              {/* Day header */}
+              <div className="flex items-center gap-2 mb-3 pl-8">
+                <div className="text-sm font-semibold text-gray-700">{day}</div>
+              </div>
 
-            {/* Entries */}
-            <div className="space-y-4">
-              {items.map((t, i) => (
-                <div key={t.id} className="relative pl-8">
-                  {/* dot — centered on the line */}
-                  <div className="absolute left-3 top-3 -translate-x-1/2">
-                    <div className={`w-3 h-3 rounded-full border-2 ${t.priorityCls}`} />
-                  </div>
+              {/* Entries */}
+              <div className="space-y-4">
+                {items.map((t, i) => (
+                  <div key={t.id} className="relative pl-8">
+                    {/* dot — centered on the line */}
+                    <div className="absolute left-3 top-3 -translate-x-1/2">
+                      <div
+                        className={`w-3 h-3 rounded-full border-2 ${t.priorityCls}`}
+                      />
+                    </div>
 
-                  {/* card */}
-                  <div className="rounded-lg border bg-white p-4 shadow-sm">
-                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
-                      <div>
-                        <div className="text-base font-semibold text-gray-900">
-                          {t.name}
-                        </div>
-                        <div className="mt-1 flex items-center gap-2">
-                          <span
-                            className={`text-[11px] border rounded px-1.5 py-0.5 ${t.priorityCls}`}
-                            title="Priority"
-                          >
-                            {t.priorityLabel}
-                          </span>
-                          <span
-                            className={`text-[11px] border rounded px-1.5 py-0.5 ${t.statusCls}`}
-                            title="Status"
-                          >
-                            {t.statusLabel}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="text-sm text-gray-600">
+                    {/* card */}
+                    <div className="rounded-lg border bg-white p-4 shadow-sm">
+                      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
                         <div>
-                          <span className="font-medium text-gray-700">Project:</span>{" "}
-                          {t.projectName}
+                          <div className="text-base font-semibold text-gray-900">
+                            {t.name}
+                          </div>
+                          <div className="mt-1 flex items-center gap-2">
+                            <span
+                              className={`text-[11px] border rounded px-1.5 py-0.5 ${t.priorityCls}`}
+                              title="Priority"
+                            >
+                              {t.priorityLabel}
+                            </span>
+                            <span
+                              className={`text-[11px] border rounded px-1.5 py-0.5 ${t.statusCls}`}
+                              title="Status"
+                            >
+                              {t.statusLabel}
+                            </span>
+                          </div>
                         </div>
-                        <div>
-                          <span className="font-medium text-gray-700">Deadline:</span>{" "}
-                          {formatDateTime(t.dueDate)}
-                        </div>
-                        <div>
-                          <span className="font-medium text-gray-700">Updated:</span>{" "}
-                          {formatDateTime(t.updatedAt)}
-                        </div>
-                        <div className="break-all">
-                          <span className="font-medium text-gray-700">Assigned by:</span>{" "}
-                          {t.assignedBy}
+                        <div className="text-sm text-gray-600">
+                          <div>
+                            <span className="font-medium text-gray-700">
+                              Project:
+                            </span>{" "}
+                            {t.projectName}
+                          </div>
+                          <div>
+                            <span className="font-medium text-gray-700">
+                              Deadline:
+                            </span>{" "}
+                            {formatDateTime(t.dueDate)}
+                          </div>
+                          <div>
+                            <span className="font-medium text-gray-700">
+                              Updated:
+                            </span>{" "}
+                            {formatDateTime(t.updatedAt)}
+                          </div>
+                          <div className="break-all">
+                            <span className="font-medium text-gray-700">
+                              Assigned by:
+                            </span>{" "}
+                            {t.assignedBy}
+                          </div>
                         </div>
                       </div>
                     </div>
+
+                    {/* connector to next item */}
+                    {i !== items.length - 1 && (
+                      <div className="absolute left-3 top-7 bottom-[-16px] w-px bg-gray-200" />
+                    )}
                   </div>
-
-                  {/* connector to next item */}
-                  {i !== items.length - 1 && (
-                    <div className="absolute left-3 top-7 bottom-[-16px] w-px bg-gray-200" />
-                  )}
-                </div>
-              ))}
-            </div>
-
-            {/* connector between groups */}
-            {gi !== groups.length - 1 && (
-              <div className="relative h-6">
-                <div className="absolute left-3 right-0 top-0 bottom-0 w-px bg-gray-200" />
+                ))}
               </div>
-            )}
-          </div>
-        ))}
+
+              {/* connector between groups */}
+              {gi !== groups.length - 1 && (
+                <div className="relative h-6">
+                  <div className="absolute left-3 right-0 top-0 bottom-0 w-px bg-gray-200" />
+                </div>
+              )}
+            </div>
+          ))}
       </div>
     </div>
   );

@@ -4,16 +4,52 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { onAuthStateChanged } from "firebase/auth";
 
 import { TaskDetailModal } from "@/components/TaskDetailModal";
-
+import { StandaloneTaskModal } from "@/components/StandaloneTaskModal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Search, Filter, RefreshCw, AlertCircle, Trash2 } from "lucide-react";
-
+import {
+  Search,
+  Filter,
+  RefreshCw,
+  AlertCircle,
+  Trash2,
+  ChevronDown,
+  ChevronRight,
+  CheckCircle2,
+  Circle,
+  Plus,
+} from "lucide-react";
 import { auth } from "@/lib/firebase";
-import { listAssignedTasks, listUsers, updateTask, deleteTask } from "@/lib/api";
+import {
+  listAssignedTasks,
+  listUsers,
+  updateTask,
+  deleteTask,
+  getTask,
+  getProject,
+  listSubtasks,
+  getSubtask,
+  updateSubtask,
+  deleteSubtask,
+  createStandaloneTask,
+  listStandaloneTasks,
+  getStandaloneTask,
+  updateStandaloneTask,
+  deleteStandaloneTask,
+  listStandaloneSubtasks,
+  getStandaloneSubtask,
+  updateStandaloneSubtask,
+  deleteStandaloneSubtask,
+} from "@/lib/api";
 import {
   Dialog,
   DialogContent,
@@ -22,7 +58,17 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { toast } from "sonner";
 const ensureArray = (value) => {
   if (Array.isArray(value)) {
     return value.filter((item) => item !== undefined && item !== null);
@@ -58,19 +104,26 @@ const PRIORITY_OPTIONS = [
 const toDate = (value) => {
   if (!value) return null;
   if (value instanceof Date) return value;
-  if (typeof value === "string" || typeof value === "number") return new Date(value);
-  if (typeof value === "object" && "seconds" in value) return new Date(value.seconds * 1000);
+  if (typeof value === "string" || typeof value === "number")
+    return new Date(value);
+  if (typeof value === "object" && "seconds" in value)
+    return new Date(value.seconds * 1000);
   return null;
 };
 
-const TAG_BASE = "rounded-full px-2.5 py-1 text-xs font-medium inline-flex items-center gap-1";
+const TAG_BASE =
+  "rounded-full px-2.5 py-1 text-xs font-medium inline-flex items-center gap-1";
 
 const getStatusBadgeClass = (status) => {
   const s = (status || "").toLowerCase();
-  if (s === "to-do" || s === "todo") return `${TAG_BASE} bg-gray-100 text-gray-700 border border-gray-200`;
-  if (s === "in progress" || s === "in-progress") return `${TAG_BASE} bg-blue-100 text-blue-700 border border-blue-200`;
-  if (s === "completed" || s === "done") return `${TAG_BASE} bg-emerald-100 text-emerald-700 border border-emerald-200`;
-  if (s === "blocked") return `${TAG_BASE} bg-red-100 text-red-700 border border-red-200`;
+  if (s === "to-do" || s === "todo")
+    return `${TAG_BASE} bg-gray-100 text-gray-700 border border-gray-200`;
+  if (s === "in progress" || s === "in-progress")
+    return `${TAG_BASE} bg-blue-100 text-blue-700 border border-blue-200`;
+  if (s === "completed" || s === "done")
+    return `${TAG_BASE} bg-emerald-100 text-emerald-700 border border-emerald-200`;
+  if (s === "blocked")
+    return `${TAG_BASE} bg-red-100 text-red-700 border border-red-200`;
   return `${TAG_BASE} bg-gray-100 text-gray-700 border border-gray-200`; // fallback
 };
 
@@ -105,7 +158,211 @@ const toDateInputValue = (value) => {
   if (!date) return "";
   return date.toISOString().slice(0, 10);
 };
+function TaskCardWithSubtasks({
+  task,
+  onClick,
+  onSubtaskClick,
+  getStatusBadgeClass,
+  statusLabel,
+  getPriorityBadgeClass,
+  priorityLabel,
+  toDate,
+}) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [subtasks, setSubtasks] = useState([]);
+  const [loadingSubtasks, setLoadingSubtasks] = useState(false);
 
+  const hasSubtasks = (task.subtaskCount || 0) > 0;
+
+  const handleToggleExpand = async (e) => {
+    e.stopPropagation();
+
+    if (!isExpanded && subtasks.length === 0 && hasSubtasks) {
+      setLoadingSubtasks(true);
+      try {
+        const data = await listSubtasks(task.projectId, task.id);
+        setSubtasks(data || []);
+      } catch (error) {
+        console.error("Failed to load subtasks:", error);
+        setSubtasks([]);
+      } finally {
+        setLoadingSubtasks(false);
+      }
+    }
+
+    setIsExpanded(!isExpanded);
+  };
+
+  const handleSubtaskClick = (e, subtask) => {
+    e.stopPropagation();
+    onSubtaskClick(subtask, task);
+  };
+  useEffect(() => {
+    const reloadIfExpanded = async () => {
+      if (isExpanded && hasSubtasks) {
+        setLoadingSubtasks(true);
+        try {
+          const data = await listSubtasks(task.projectId, task.id);
+          setSubtasks(data || []);
+        } catch (error) {
+          console.error("Failed to reload subtasks:", error);
+        } finally {
+          setLoadingSubtasks(false);
+        }
+      }
+    };
+    reloadIfExpanded();
+  }, [
+    task.subtaskCount,
+    task.subtaskCompletedCount,
+    isExpanded,
+    hasSubtasks,
+    task.projectId,
+    task.id,
+  ]);
+  const due = toDate(task.dueDate);
+  const updated = toDate(task.updatedAt);
+  const overdue = due && due < new Date() && task.status !== "completed";
+
+  return (
+    <div className="rounded-lg border border-border bg-background/50 transition hover:border-primary/40">
+      <button
+        type="button"
+        onClick={() => onClick(task)}
+        className="w-full text-left p-4 focus:outline-none focus:ring-2 focus:ring-primary/40"
+      >
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="flex-1 min-w-0 flex items-start gap-2">
+            {hasSubtasks && (
+              <div
+                onClick={handleToggleExpand}
+                className="flex-shrink-0 p-1 hover:bg-muted rounded transition mt-0.5 cursor-pointer"
+                aria-label={
+                  isExpanded ? "Collapse subtasks" : "Expand subtasks"
+                }
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    handleToggleExpand(e);
+                  }
+                }}
+              >
+                {isExpanded ? (
+                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                ) : (
+                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                )}
+              </div>
+            )}
+
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-foreground truncate">
+                {task.title || "Untitled task"}
+              </p>
+              {task.description && (
+                <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                  {task.description}
+                </p>
+              )}
+            </div>
+          </div>
+          <Badge className={getStatusBadgeClass(task.status)}>
+            {statusLabel(task.status)}
+          </Badge>
+        </div>
+
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <Badge className={getPriorityBadgeClass(task.priority)}>
+            {priorityLabel(task.priority)}
+          </Badge>
+
+          {hasSubtasks && (
+            <Badge variant="outline" className="text-xs">
+              {task.subtaskCompletedCount || 0}/{task.subtaskCount || 0}{" "}
+              subtasks
+            </Badge>
+          )}
+
+          <span
+            className={`text-xs text-muted-foreground ${
+              overdue ? "text-destructive font-medium" : ""
+            }`}
+          >
+            Due: {due ? due.toLocaleDateString() : "—"}
+          </span>
+          <span className="text-xs text-muted-foreground">
+            Updated: {updated ? updated.toLocaleDateString() : "—"}
+          </span>
+
+          {(() => {
+            const allAssigneeNames = [
+              task.assigneeSummary?.name,
+              ...(task.collaboratorNames || []),
+            ].filter(Boolean);
+            return (
+              allAssigneeNames.length > 0 && (
+                <div className="flex flex-wrap gap-1">
+                  {allAssigneeNames.map((name, idx) => (
+                    <span
+                      key={idx}
+                      className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-xs font-medium"
+                    >
+                      {name}
+                    </span>
+                  ))}
+                </div>
+              )
+            );
+          })()}
+
+          {task.tags?.length > 0 && (
+            <span className="text-xs text-muted-foreground">
+              Tags: {task.tags.join(", ")}
+            </span>
+          )}
+        </div>
+      </button>
+
+      {isExpanded && hasSubtasks && (
+        <div className="px-4 pb-3 border-t border-border/50 pt-3">
+          {loadingSubtasks ? (
+            <p className="text-xs text-muted-foreground py-2">
+              Loading subtasks...
+            </p>
+          ) : subtasks.length === 0 ? (
+            <p className="text-xs text-muted-foreground py-2">No subtasks</p>
+          ) : (
+            <div className="space-y-1">
+              {subtasks.map((subtask) => (
+                <div
+                  key={subtask.id}
+                  onClick={(e) => handleSubtaskClick(e, subtask)}
+                  className="flex items-center gap-2 p-2 rounded hover:bg-muted/50 cursor-pointer transition text-xs"
+                >
+                  {subtask.status === "completed" ? (
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600 flex-shrink-0" />
+                  ) : (
+                    <Circle className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                  )}
+                  <span
+                    className={`flex-1 truncate ${
+                      subtask.status === "completed"
+                        ? "line-through text-muted-foreground"
+                        : "text-foreground"
+                    }`}
+                  >
+                    {subtask.title}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 export default function TasksPage() {
   const [currentUser, setCurrentUser] = useState(null);
   const [userLoading, setUserLoading] = useState(true);
@@ -124,6 +381,7 @@ export default function TasksPage() {
   const [projectFilter, setProjectFilter] = useState("all");
 
   const [selectedTask, setSelectedTask] = useState(null);
+  const [selectedTaskProject, setSelectedTaskProject] = useState(null);
   const [editingTask, setEditingTask] = useState(null);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [editForm, setEditForm] = useState({
@@ -132,6 +390,8 @@ export default function TasksPage() {
     status: "to-do",
     priority: "5",
     dueDate: "",
+    tags: "",
+    collaboratorsIds: [],
   });
   const [editError, setEditError] = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
@@ -139,44 +399,96 @@ export default function TasksPage() {
   const [deleteCandidate, setDeleteCandidate] = useState(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [deleteError, setDeleteError] = useState("");
+  const [isCreateStandaloneOpen, setIsCreateStandaloneOpen] = useState(false);
+  const [standaloneForm, setStandaloneForm] = useState({
+    title: "",
+    description: "",
+    status: "to-do",
+    priority: "5",
+    dueDate: "",
+    tags: "",
+  });
+  const [savingStandalone, setSavingStandalone] = useState(false);
+  const [standaloneError, setStandaloneError] = useState("");
 
-  const loadTasks = useCallback(async (uid) => {
-    if (!uid) {
-      setTasks([]);
-      setLoading(false);
-      return;
-    }
+  const loadTasks = useCallback(
+    async (uid) => {
+      if (!uid) {
+        setTasks([]);
+        setLoading(false);
+        return;
+      }
 
-    try {
-      setLoading(true);
-      setError("");
-      const data = await listAssignedTasks({ assignedTo: uid });
-      setTasks(
-        (data || []).map((t) => {
+      try {
+        setLoading(true);
+        setError("");
+        const [projectTasksData, standaloneTasksData] = await Promise.all([
+          listAssignedTasks({ assignedTo: uid }),
+          listStandaloneTasks(uid),
+        ]);
+        const projectTasks = (projectTasksData || []).map((t) => {
           const projectId = t.projectId || "unassigned";
-          const projectName = t.projectName || (projectId === "unassigned" ? "Unassigned Project" : projectId);
+          const projectName =
+            t.projectName ||
+            (projectId === "unassigned" ? "Unassigned Project" : projectId);
           const priorityNumber = Number(t.priority);
-          const priority = Number.isFinite(priorityNumber) ? String(priorityNumber) : "";
+          const priority = Number.isFinite(priorityNumber)
+            ? String(priorityNumber)
+            : "";
           return {
             ...t,
             projectId,
             projectName,
             status: (t.status || "").toLowerCase(),
             priority,
-            priorityNumber: Number.isFinite(priorityNumber) ? priorityNumber : null,
+            priorityNumber: Number.isFinite(priorityNumber)
+              ? priorityNumber
+              : null,
             tags: Array.isArray(t.tags) ? t.tags : [],
-            collaboratorsIds: ensureArray(t.collaboratorsIds),
+            isStandalone: false,
           };
-        })
-      );
-    } catch (err) {
-      setTasks([]);
-      setError(err?.message || "Failed to load tasks");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+        });
+        const standaloneTasks = (standaloneTasksData || []).map((t) => {
+          const priorityNumber = Number(t.priority);
+          const priority = Number.isFinite(priorityNumber)
+            ? String(priorityNumber)
+            : "";
+          return {
+            ...t,
+            projectId: "standalone",
+            projectName: "Standalone",
+            status: (t.status || "").toLowerCase(),
+            priority,
+            priorityNumber: Number.isFinite(priorityNumber)
+              ? priorityNumber
+              : null,
+            tags: Array.isArray(t.tags) ? t.tags : [],
+            isStandalone: true,
+          };
+        });
+        const allTasks = [...projectTasks, ...standaloneTasks];
 
+        setTasks(allTasks);
+      } catch (err) {
+        setError(err?.message || "Failed to load tasks.");
+        setTasks([]);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [currentUser?.uid]
+  );
+  const handleCreateStandalone = async (payload) => {
+    try {
+      await createStandaloneTask(payload);
+      toast.success("Standalone task created!");
+      setIsCreateStandaloneOpen(false);
+      await loadTasks(currentUser.uid);
+    } catch (error) {
+      console.error("Failed to create standalone task:", error);
+      throw error;
+    }
+  };
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setCurrentUser(user);
@@ -256,9 +568,13 @@ export default function TasksPage() {
           avatar: "",
         };
       }
-      const nameCandidate = [info.fullName, info.displayName, info.name, info.email, key].find(
-        (value) => typeof value === "string" && value.trim()
-      );
+      const nameCandidate = [
+        info.fullName,
+        info.displayName,
+        info.name,
+        info.email,
+        key,
+      ].find((value) => typeof value === "string" && value.trim());
       return {
         id: key,
         name: nameCandidate ? nameCandidate.trim() : fallbackUserLabel(key),
@@ -282,7 +598,8 @@ export default function TasksPage() {
     const unique = new Map();
     tasks.forEach((task) => {
       const id = task.projectId || "unassigned";
-      const name = task.projectName || (id === "unassigned" ? "Unassigned Project" : id);
+      const name =
+        task.projectName || (id === "unassigned" ? "Unassigned Project" : id);
       if (!unique.has(id)) {
         unique.set(id, { id, name });
       }
@@ -300,29 +617,40 @@ export default function TasksPage() {
           (task.description || "").toLowerCase().includes(search) ||
           (task.projectName || "").toLowerCase().includes(search);
 
-        const matchesPriority = priorityFilter === "all" || task.priority === priorityFilter;
-        const matchesStatus = statusFilter === "all" || task.status === statusFilter;
-        const matchesProject = projectFilter === "all" || task.projectId === projectFilter;
+        const matchesPriority =
+          priorityFilter === "all" || task.priority === priorityFilter;
+        const matchesStatus =
+          statusFilter === "all" || task.status === statusFilter;
+        const matchesProject =
+          projectFilter === "all" || task.projectId === projectFilter;
 
-        return matchesSearch && matchesPriority && matchesStatus && matchesProject;
+        return (
+          matchesSearch && matchesPriority && matchesStatus && matchesProject
+        );
       })
       .map((task) => {
         const collaboratorIds = ensureArray(task.collaboratorsIds);
         const dedupedCollaboratorIds = Array.from(
-          new Set(collaboratorIds.filter((id) => id !== undefined && id !== null && String(id).trim()))
+          new Set(
+            collaboratorIds.filter(
+              (id) => id !== undefined && id !== null && String(id).trim()
+            )
+          )
         ).map((id) => String(id).trim());
 
-        const collaboratorSummaries = dedupedCollaboratorIds.map((id, index) => {
-          const summary = summarizeUser(id);
-          if (summary) return summary;
-          return {
-            id,
-            name: fallbackUserLabel(id, index),
-            email: "",
-            role: "",
-            avatar: "",
-          };
-        });
+        const collaboratorSummaries = dedupedCollaboratorIds.map(
+          (id, index) => {
+            const summary = summarizeUser(id);
+            if (summary) return summary;
+            return {
+              id,
+              name: fallbackUserLabel(id, index),
+              email: "",
+              role: "",
+              avatar: "",
+            };
+          }
+        );
 
         const assigneeSummary = summarizeUser(task.assigneeId || task.ownerId);
 
@@ -334,7 +662,14 @@ export default function TasksPage() {
           collaboratorNames: collaboratorSummaries.map((item) => item.name),
         };
       });
-  }, [tasks, searchTerm, priorityFilter, statusFilter, projectFilter, summarizeUser]);
+  }, [
+    tasks,
+    searchTerm,
+    priorityFilter,
+    statusFilter,
+    projectFilter,
+    summarizeUser,
+  ]);
 
   const statusOrder = useMemo(
     () => STATUS_COLUMNS.map((column) => column.status),
@@ -349,7 +684,9 @@ export default function TasksPage() {
       if (!map.has(id)) {
         map.set(id, {
           projectId: id,
-          projectName: task.projectName || (id === "unassigned" ? "Unassigned Project" : id),
+          projectName:
+            task.projectName ||
+            (id === "unassigned" ? "Unassigned Project" : id),
           tasks: [],
         });
       }
@@ -364,7 +701,8 @@ export default function TasksPage() {
     return Array.from(map.values())
       .map((entry) => {
         const sortedTasks = entry.tasks.slice().sort((a, b) => {
-          const statusDiff = orderForStatus(a.status) - orderForStatus(b.status);
+          const statusDiff =
+            orderForStatus(a.status) - orderForStatus(b.status);
           if (statusDiff !== 0) return statusDiff;
           const dueA = toDate(a.dueDate)?.getTime() ?? Number.POSITIVE_INFINITY;
           const dueB = toDate(b.dueDate)?.getTime() ?? Number.POSITIVE_INFINITY;
@@ -392,25 +730,32 @@ export default function TasksPage() {
     },
     [tasks]
   );
-
   const handleTaskClick = useCallback(
-    (task) => {
+    async (task) => {
       if (!task) return;
 
       const resolved = resolveTaskRecord(task) || task;
-      const assigneeSummary = summarizeUser(resolved.assigneeId || resolved.ownerId);
+      const assigneeSummary = summarizeUser(
+        resolved.assigneeId || resolved.ownerId
+      );
 
-      const sourceCollaborators = Array.isArray(resolved.collaboratorSummaries) && resolved.collaboratorSummaries.length > 0
-        ? resolved.collaboratorSummaries
-        : (Array.isArray(resolved.collaboratorIds) ? resolved.collaboratorIds : ensureArray(resolved.collaboratorsIds)).map(
-            (id, index) => summarizeUser(id) || {
-              id: String(id ?? ""),
-              name: fallbackUserLabel(id, index),
-              email: "",
-              role: "",
-              avatar: "",
-            }
-          );
+      const sourceCollaborators =
+        Array.isArray(resolved.collaboratorSummaries) &&
+        resolved.collaboratorSummaries.length > 0
+          ? resolved.collaboratorSummaries
+          : (Array.isArray(resolved.collaboratorIds)
+              ? resolved.collaboratorIds
+              : ensureArray(resolved.collaboratorsIds)
+            ).map(
+              (id, index) =>
+                summarizeUser(id) || {
+                  id: String(id ?? ""),
+                  name: fallbackUserLabel(id, index),
+                  email: "",
+                  role: "",
+                  avatar: "",
+                }
+            );
 
       const collaborators = [];
       const seen = new Set();
@@ -428,26 +773,117 @@ export default function TasksPage() {
         });
       });
 
+      const creatorSummary = summarizeUser(resolved.createdBy);
+      let projectData = null;
+      if (
+        resolved.projectId &&
+        resolved.projectId !== "unassigned" &&
+        resolved.projectId !== "standalone" &&
+        !resolved.isStandalone
+      ) {
+        try {
+          projectData = await getProject(resolved.projectId, {
+            assignedTo: currentUser?.uid,
+          });
+        } catch (err) {
+          console.error("Failed to load project data:", err);
+        }
+      }
+
+      setSelectedTaskProject(projectData);
       setSelectedTask({
         ...resolved,
-        assignee: assigneeSummary || undefined,
+        assigneeSummary: assigneeSummary || undefined,
+        creatorSummary: creatorSummary || undefined,
         collaborators,
       });
     },
-    [resolveTaskRecord, summarizeUser]
+    [resolveTaskRecord, summarizeUser, currentUser?.uid]
   );
 
+  const handleSubtaskClick = useCallback(
+    async (subtask, parentTask) => {
+      try {
+        // Load full subtask details
+        const fullSubtask = await getSubtask(
+          parentTask.projectId,
+          parentTask.id,
+          subtask.id
+        );
+
+        fullSubtask.projectId = parentTask.projectId;
+        fullSubtask.parentTaskId = parentTask.id;
+        fullSubtask.isSubtask = true;
+
+        // Resolve assignee
+        const assigneeSummary = summarizeUser(
+          fullSubtask.assigneeId || fullSubtask.ownerId
+        );
+
+        // Resolve creator
+        const creatorSummary = summarizeUser(fullSubtask.createdBy);
+
+        // Resolve collaborators
+        const collaboratorIds = Array.isArray(fullSubtask.collaboratorsIds)
+          ? fullSubtask.collaboratorsIds
+          : [];
+
+        const collaboratorNames = collaboratorIds
+          .map((collabId) => {
+            const summary = summarizeUser(collabId);
+            return summary ? summary.name : null;
+          })
+          .filter(Boolean);
+
+        const collaborators = collaboratorIds.map((collabId, index) => {
+          const summary = summarizeUser(collabId);
+          return (
+            summary || {
+              id: String(collabId),
+              name: fallbackUserLabel(collabId, index),
+              email: "",
+              role: "",
+              avatar: "",
+            }
+          );
+        });
+
+        setSelectedTask({
+          ...fullSubtask,
+          assigneeSummary,
+          creatorSummary,
+          collaboratorNames,
+          collaborators,
+        });
+      } catch (error) {
+        console.error("Failed to load subtask:", error);
+      }
+    },
+    [summarizeUser]
+  );
   const openEditDialog = useCallback(
     (task) => {
       const base = resolveTaskRecord(task);
       if (!base) return;
       setEditingTask(base);
+      const primaryAssignee = base.assigneeId || base.ownerId || "";
+      const existingCollaborators = ensureArray(base.collaboratorsIds);
+      const allAssignees = primaryAssignee
+        ? [primaryAssignee, ...existingCollaborators]
+        : existingCollaborators;
+
       setEditForm({
         title: base.title || "",
         description: base.description || "",
         status: (base.status || "to-do").toLowerCase(),
-        priority: base.priority || (Number.isFinite(base.priorityNumber) ? String(base.priorityNumber) : "5"),
+        priority:
+          base.priority ||
+          (Number.isFinite(base.priorityNumber)
+            ? String(base.priorityNumber)
+            : "5"),
         dueDate: toDateInputValue(base.dueDate),
+        tags: Array.isArray(base.tags) ? base.tags.join(", ") : "",
+        collaboratorsIds: allAssignees,
       });
       setEditError("");
       setSavingEdit(false);
@@ -485,17 +921,47 @@ export default function TasksPage() {
         setEditError("Priority must be a number between 1 and 10.");
         return;
       }
-      const clampedPriority = Math.min(10, Math.max(1, Math.round(priorityNumber)));
+      const clampedPriority = Math.min(
+        10,
+        Math.max(1, Math.round(priorityNumber))
+      );
 
       setSavingEdit(true);
       setEditError("");
 
       try {
+        // Validation for assignees
+        if (
+          !editForm.collaboratorsIds ||
+          editForm.collaboratorsIds.length === 0
+        ) {
+          setEditError("At least one assignee is required.");
+          setSavingEdit(false);
+          return;
+        }
+        if (editForm.collaboratorsIds.length > 5) {
+          setEditError("Maximum 5 assignees allowed per task.");
+          setSavingEdit(false);
+          return;
+        }
+
+        // Parse tags
+        const tags = editForm.tags
+          .split(",")
+          .map((tag) => tag.trim())
+          .filter(Boolean);
+
+        // Split assignees: first is primary, rest are collaborators
+        const [primaryAssignee, ...otherAssignees] = editForm.collaboratorsIds;
+
         const payload = {
           title,
           description: editForm.description.trim(),
           status: editForm.status || "to-do",
           priority: clampedPriority,
+          assigneeId: primaryAssignee,
+          collaboratorsIds: otherAssignees.length > 0 ? otherAssignees : [],
+          tags,
         };
 
         if (editForm.dueDate) {
@@ -510,7 +976,43 @@ export default function TasksPage() {
           payload.dueDate = null;
         }
 
-        await updateTask(editingTask.projectId, editingTask.id, payload);
+        const isStandalone =
+          editingTask.isStandalone || editingTask.projectId === "standalone";
+
+        const isSubtask = editingTask.isSubtask || editingTask.parentTaskId;
+
+        if (isStandalone) {
+          if (isSubtask && editingTask.parentTaskId) {
+            await updateStandaloneSubtask(
+              editingTask.parentTaskId,
+              editingTask.id,
+              payload
+            );
+          } else {
+            const standalonePayload = {
+              ...payload,
+              assigneeId: currentUser.uid,
+              collaboratorsIds: [],
+              updatedBy: currentUser.uid,
+            };
+            await updateStandaloneTask(editingTask.id, standalonePayload);
+          }
+        } else {
+          if (isSubtask && editingTask.parentTaskId) {
+            await updateSubtask(
+              editingTask.projectId,
+              editingTask.parentTaskId,
+              editingTask.id,
+              payload
+            );
+          } else {
+            await updateTask(editingTask.projectId, editingTask.id, payload);
+          }
+        }
+        toast.success(
+          isStandalone ? "Standalone task updated!" : "Task updated!"
+        );
+
         await loadTasks(currentUser.uid);
         closeEditDialog();
         setSelectedTask(null);
@@ -540,27 +1042,61 @@ export default function TasksPage() {
     setDeletingTaskId("");
   }, []);
 
-  const confirmDeleteTask = useCallback(
-    async () => {
-      if (!deleteCandidate || !deleteCandidate.projectId || !deleteCandidate.id || !currentUser?.uid) {
-        return;
-      }
-      setDeletingTaskId(deleteCandidate.id);
-      setDeleteError("");
-      try {
+  const confirmDeleteTask = useCallback(async () => {
+    if (
+      !deleteCandidate ||
+      !deleteCandidate.projectId ||
+      !deleteCandidate.id ||
+      !currentUser?.uid
+    ) {
+      return;
+    }
+    setDeletingTaskId(deleteCandidate.id);
+    setDeleteError("");
+    const isStandalone =
+      deleteCandidate.isStandalone ||
+      deleteCandidate.projectId === "standalone";
+
+    try {
+      // Check if this is a subtask
+      const isSubtask =
+        deleteCandidate.isSubtask || deleteCandidate.parentTaskId;
+
+      if (isSubtask && deleteCandidate.parentTaskId) {
+        // Delete as subtask
+        await deleteSubtask(
+          deleteCandidate.projectId,
+          deleteCandidate.parentTaskId,
+          deleteCandidate.id
+        );
+      } else {
+        // Delete as regular task
         await deleteTask(deleteCandidate.projectId, deleteCandidate.id);
-        await loadTasks(currentUser.uid);
-        if (selectedTask?.id === deleteCandidate.id) {
-          setSelectedTask(null);
-        }
-        closeDeleteDialog();
-      } catch (err) {
-        setDeleteError(err?.message || "Failed to delete task.");
-        setDeletingTaskId("");
       }
-    },
-    [closeDeleteDialog, currentUser?.uid, deleteCandidate, loadTasks, selectedTask?.id]
-  );
+      if (isStandalone) {
+        toast.success(
+          isSubtask ? "Standalone subtask updated!" : "Standalone task updated!"
+        );
+      } else {
+        toast.success(isSubtask ? "Subtask updated!" : "Task updated!");
+      }
+
+      await loadTasks(currentUser.uid);
+      if (selectedTask?.id === deleteCandidate.id) {
+        setSelectedTask(null);
+      }
+      closeDeleteDialog();
+    } catch (err) {
+      setDeleteError(err?.message || "Failed to delete task.");
+      setDeletingTaskId("");
+    }
+  }, [
+    closeDeleteDialog,
+    currentUser?.uid,
+    deleteCandidate,
+    loadTasks,
+    selectedTask?.id,
+  ]);
 
   const handleRefresh = () => {
     if (currentUser?.uid) {
@@ -571,7 +1107,9 @@ export default function TasksPage() {
   if (userLoading) {
     return (
       <div className="flex-1 overflow-auto p-6">
-        <div className="h-64 grid place-items-center text-muted-foreground">Validating session…</div>
+        <div className="h-64 grid place-items-center text-muted-foreground">
+          Validating session…
+        </div>
       </div>
     );
   }
@@ -579,7 +1117,9 @@ export default function TasksPage() {
   if (loading) {
     return (
       <div className="flex-1 overflow-auto p-6">
-        <div className="h-64 grid place-items-center text-muted-foreground">Loading your tasks…</div>
+        <div className="h-64 grid place-items-center text-muted-foreground">
+          Loading your tasks…
+        </div>
       </div>
     );
   }
@@ -601,14 +1141,14 @@ export default function TasksPage() {
               Delete Task
             </DialogTitle>
             <DialogDescription>
-              This action permanently removes the task and any associated metadata.
+              This action permanently removes the task and any associated
+              metadata.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-3">
             <p className="text-sm text-muted-foreground">
-              Are you sure you want to delete
-              {" "}
+              Are you sure you want to delete{" "}
               <span className="font-semibold text-foreground">
                 {deleteCandidate?.title || "this task"}
               </span>
@@ -623,7 +1163,12 @@ export default function TasksPage() {
           </div>
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={closeDeleteDialog} disabled={Boolean(deletingTaskId)}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={closeDeleteDialog}
+              disabled={Boolean(deletingTaskId)}
+            >
               Cancel
             </Button>
             <Button
@@ -650,48 +1195,70 @@ export default function TasksPage() {
           <form onSubmit={handleEditSubmit} className="space-y-6">
             <DialogHeader>
               <DialogTitle>Edit Task</DialogTitle>
-              <DialogDescription>Update task details and save to keep everyone aligned.</DialogDescription>
+              <DialogDescription>
+                Update task details and save to keep everyone aligned.
+              </DialogDescription>
             </DialogHeader>
 
             <div className="space-y-4">
               <div className="space-y-2">
-                <label htmlFor="edit-title" className="text-sm font-medium text-foreground">
+                <label
+                  htmlFor="edit-title"
+                  className="text-sm font-medium text-foreground"
+                >
                   Title
                 </label>
                 <Input
                   id="edit-title"
                   value={editForm.title}
-                  onChange={(e) => handleEditFieldChange("title", e.target.value)}
+                  onChange={(e) =>
+                    handleEditFieldChange("title", e.target.value)
+                  }
                   placeholder="Task title"
                 />
               </div>
 
               <div className="space-y-2">
-                <label htmlFor="edit-description" className="text-sm font-medium text-foreground">
+                <label
+                  htmlFor="edit-description"
+                  className="text-sm font-medium text-foreground"
+                >
                   Description
                 </label>
                 <textarea
                   id="edit-description"
                   className="min-h-[96px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   value={editForm.description}
-                  onChange={(e) => handleEditFieldChange("description", e.target.value)}
+                  onChange={(e) =>
+                    handleEditFieldChange("description", e.target.value)
+                  }
                   placeholder="Add helpful context for this task"
                 />
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
-                  <label htmlFor="edit-status" className="text-sm font-medium text-foreground">
+                  <label
+                    htmlFor="edit-status"
+                    className="text-sm font-medium text-foreground"
+                  >
                     Status
                   </label>
-                  <Select value={editForm.status} onValueChange={(value) => handleEditFieldChange("status", value)}>
+                  <Select
+                    value={editForm.status}
+                    onValueChange={(value) =>
+                      handleEditFieldChange("status", value)
+                    }
+                  >
                     <SelectTrigger id="edit-status">
                       <SelectValue placeholder="Select status" />
                     </SelectTrigger>
                     <SelectContent>
                       {STATUS.map((status) => (
                         <SelectItem key={status} value={status}>
-                          {STATUS_COLUMNS.find((column) => column.status === status)?.title || status}
+                          {STATUS_COLUMNS.find(
+                            (column) => column.status === status
+                          )?.title || status}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -699,10 +1266,18 @@ export default function TasksPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <label htmlFor="edit-priority" className="text-sm font-medium text-foreground">
+                  <label
+                    htmlFor="edit-priority"
+                    className="text-sm font-medium text-foreground"
+                  >
                     Priority (1 = least urgent, 10 = most urgent)
                   </label>
-                  <Select value={editForm.priority} onValueChange={(value) => handleEditFieldChange("priority", value)}>
+                  <Select
+                    value={editForm.priority}
+                    onValueChange={(value) =>
+                      handleEditFieldChange("priority", value)
+                    }
+                  >
                     <SelectTrigger id="edit-priority">
                       <SelectValue placeholder="Select priority" />
                     </SelectTrigger>
@@ -718,17 +1293,117 @@ export default function TasksPage() {
               </div>
 
               <div className="space-y-2">
-                <label htmlFor="edit-due-date" className="text-sm font-medium text-foreground">
+                <label
+                  htmlFor="edit-due-date"
+                  className="text-sm font-medium text-foreground"
+                >
                   Due date
                 </label>
                 <Input
                   id="edit-due-date"
                   type="date"
                   value={editForm.dueDate}
-                  onChange={(e) => handleEditFieldChange("dueDate", e.target.value)}
+                  onChange={(e) =>
+                    handleEditFieldChange("dueDate", e.target.value)
+                  }
                 />
               </div>
-
+              {/* NEW: Assignees field */}
+              <div className="space-y-2">
+                <label
+                  htmlFor="edit-assignees"
+                  className="text-sm font-medium text-foreground"
+                >
+                  Assignees
+                </label>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className={`w-full justify-between ${
+                        editForm.collaboratorsIds.length > 5
+                          ? "border-destructive"
+                          : ""
+                      }`}
+                    >
+                      <span className="truncate text-left">
+                        {editForm.collaboratorsIds.length === 0
+                          ? "Select assignees"
+                          : `${editForm.collaboratorsIds.length} selected`}
+                      </span>
+                      <span
+                        className={`text-xs ${
+                          editForm.collaboratorsIds.length > 5
+                            ? "text-destructive font-semibold"
+                            : "text-muted-foreground"
+                        }`}
+                      >
+                        {editForm.collaboratorsIds.length}/5 selected
+                      </span>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent className="w-64">
+                    <DropdownMenuLabel>Select assignees</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    {users.length === 0 ? (
+                      <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                        No users available
+                      </div>
+                    ) : (
+                      users.map((user) => (
+                        <DropdownMenuCheckboxItem
+                          key={user.id}
+                          checked={editForm.collaboratorsIds.includes(user.id)}
+                          onCheckedChange={(checked) => {
+                            const current = editForm.collaboratorsIds;
+                            const updated = checked
+                              ? [...current, user.id]
+                              : current.filter((id) => id !== user.id);
+                            handleEditFieldChange("collaboratorsIds", updated);
+                          }}
+                        >
+                          <div className="flex flex-col">
+                            <span className="leading-tight">
+                              {user.fullName ||
+                                user.displayName ||
+                                user.name ||
+                                user.email}
+                            </span>
+                            {user.email && (
+                              <span className="text-xs text-muted-foreground leading-tight">
+                                {user.email}
+                              </span>
+                            )}
+                          </div>
+                        </DropdownMenuCheckboxItem>
+                      ))
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                <p className="text-xs text-muted-foreground">
+                  Required: Select 1-5 team members to assign this task to.
+                </p>
+              </div>
+              <div className="space-y-2">
+                <label
+                  htmlFor="edit-tags"
+                  className="text-sm font-medium text-foreground"
+                >
+                  Tags
+                </label>
+                <Input
+                  id="edit-tags"
+                  value={editForm.tags}
+                  onChange={(e) =>
+                    handleEditFieldChange("tags", e.target.value)
+                  }
+                  placeholder="e.g., frontend, urgent, bug-fix"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Separate multiple tags with commas
+                </p>
+              </div>
               {editError && (
                 <div className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
                   <AlertCircle className="h-4 w-4" />
@@ -738,7 +1413,12 @@ export default function TasksPage() {
             </div>
 
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={closeEditDialog} disabled={savingEdit}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={closeEditDialog}
+                disabled={savingEdit}
+              >
                 Cancel
               </Button>
               <Button type="submit" disabled={savingEdit}>
@@ -753,28 +1433,52 @@ export default function TasksPage() {
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <h2 className="text-2xl font-bold text-foreground">My Tasks</h2>
-            <p className="text-sm text-muted-foreground">Tasks assigned to {currentUser?.displayName || currentUser?.email}</p>
+            <p className="text-sm text-muted-foreground">
+              Tasks assigned to {currentUser?.displayName || currentUser?.email}
+            </p>
           </div>
-          <Button variant="outline" onClick={handleRefresh} className="self-start lg:self-auto">
-            <RefreshCw className="h-4 w-4 mr-2" />
-            Refresh
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              variant="default"
+              onClick={() => setIsCreateStandaloneOpen(true)}
+              className="self-start lg:self-auto"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Create Standalone Task
+            </Button>
+            <Button
+              variant="outline"
+              onClick={handleRefresh}
+              className="self-start lg:self-auto"
+            >
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Refresh
+            </Button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <Card className="p-4">
             <p className="text-sm text-muted-foreground">Total tasks</p>
-            <p className="text-2xl font-semibold text-foreground">{totalTasks}</p>
+            <p className="text-2xl font-semibold text-foreground">
+              {totalTasks}
+            </p>
           </Card>
           <Card className="p-4">
             <p className="text-sm text-muted-foreground">Overdue</p>
-            <p className={`text-2xl font-semibold ${overdueTasks.length ? "text-destructive" : "text-foreground"}`}>
+            <p
+              className={`text-2xl font-semibold ${
+                overdueTasks.length ? "text-destructive" : "text-foreground"
+              }`}
+            >
               {overdueTasks.length}
             </p>
           </Card>
           <Card className="p-4">
             <p className="text-sm text-muted-foreground">Active projects</p>
-            <p className="text-2xl font-semibold text-foreground">{projectsList.length}</p>
+            <p className="text-2xl font-semibold text-foreground">
+              {projectsList.length}
+            </p>
           </Card>
         </div>
 
@@ -865,68 +1569,26 @@ export default function TasksPage() {
                       </p>
                     </div>
                     <Badge variant="secondary">
-                      {project.tasks.length} task{project.tasks.length === 1 ? "" : "s"}
+                      {project.tasks.length} task
+                      {project.tasks.length === 1 ? "" : "s"}
                     </Badge>
                   </div>
                 </CardHeader>
                 <CardContent className="py-6">
                   <div className="space-y-3">
-                    {project.tasks.map((task) => {
-                      const due = toDate(task.dueDate);
-                      const updated = toDate(task.updatedAt);
-                      const overdue = due && due < new Date() && task.status !== "completed";
-                      return (
-                        <button
-                          key={task.id}
-                          type="button"
-                          onClick={() => handleTaskClick(task)}
-                          className="w-full text-left rounded-lg border border-border bg-background/50 p-4 transition hover:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/40"
-                        >
-                          <div className="flex flex-wrap items-start justify-between gap-3">
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-semibold text-foreground truncate">
-                                {task.title || "Untitled task"}
-                              </p>
-                              {task.description && (
-                                <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
-                                  {task.description}
-                                </p>
-                              )}
-                            </div>
-                            <Badge className={getStatusBadgeClass(task.status)}>
-                              {statusLabel(task.status)}
-                            </Badge>
-                          </div>
-                          <div className="mt-3 flex flex-wrap items-center gap-2">
-                            <Badge className={getPriorityBadgeClass(task.priority)}>
-                              {priorityLabel(task.priority)}
-                            </Badge>
-                            <span className={`text-xs text-muted-foreground ${overdue ? "text-destructive font-medium" : ""}`}>
-                              Due: {due ? due.toLocaleDateString() : "—"}
-                            </span>
-                            <span className="text-xs text-muted-foreground">Updated: {updated ? updated.toLocaleDateString() : "—"}</span>
-                            {(() => {
-                              const allAssigneeNames = [
-                                task.assigneeSummary?.name,
-                                ...(task.collaboratorNames || [])
-                              ].filter(Boolean);
-                              return allAssigneeNames.length > 0 && (
-                                <div className="flex flex-wrap gap-1">
-                                  {allAssigneeNames.map((name, idx) => (
-                                    <span key={idx} className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-xs font-medium">
-                                      {name}
-                                    </span>
-                                  ))}
-                                </div>
-                              );
-                            })()}
-                            {task.tags?.length > 0 && (
-                              <span className="text-xs text-muted-foreground">Tags: {task.tags.join(", ")}</span>
-                            )}
-                          </div>
-                        </button>
-                      );
-                    })}
+                    {project.tasks.map((task) => (
+                      <TaskCardWithSubtasks
+                        key={task.id}
+                        task={task}
+                        onClick={handleTaskClick}
+                        onSubtaskClick={handleSubtaskClick}
+                        getStatusBadgeClass={getStatusBadgeClass}
+                        statusLabel={statusLabel}
+                        getPriorityBadgeClass={getPriorityBadgeClass}
+                        priorityLabel={priorityLabel}
+                        toDate={toDate}
+                      />
+                    ))}
                   </div>
                 </CardContent>
               </Card>
@@ -935,16 +1597,138 @@ export default function TasksPage() {
         )}
       </div>
 
-      {selectedTask && (
-        <TaskDetailModal
-          task={selectedTask}
-          isOpen={!!selectedTask}
-          onClose={() => setSelectedTask(null)}
-          onEdit={openEditDialog}
-          onDelete={requestDeleteTask}
-          disableActions={Boolean(deletingTaskId) || savingEdit}
-        />
-      )}
+      {selectedTask &&
+        (() => {
+          let teamMembers = [];
+
+          if (
+            selectedTaskProject &&
+            Array.isArray(selectedTaskProject.teamIds)
+          ) {
+            teamMembers = users.filter((u) =>
+              selectedTaskProject.teamIds.includes(u.id)
+            );
+          } else if (
+            !selectedTask.projectId ||
+            selectedTask.projectId === "unassigned"
+          ) {
+            const creator = users.find((u) => u.id === currentUser?.uid);
+            if (creator) {
+              teamMembers = [creator];
+            }
+          }
+
+          return (
+            <TaskDetailModal
+              task={selectedTask}
+              isOpen={!!selectedTask}
+              onClose={() => {
+                setSelectedTask(null);
+                setSelectedTaskProject(null);
+              }}
+              onEdit={openEditDialog}
+              onDelete={requestDeleteTask}
+              disableActions={Boolean(deletingTaskId) || savingEdit}
+              teamMembers={teamMembers}
+              currentUserId={currentUser?.uid}
+              onSubtaskClick={handleSubtaskClick}
+              onSubtaskChange={async () => {
+                try {
+                  await new Promise((resolve) => setTimeout(resolve, 300));
+
+                  // Determine if viewing a subtask or parent task
+                  const isViewingSubtask =
+                    selectedTask.isSubtask || selectedTask.parentTaskId;
+
+                  if (isViewingSubtask) {
+                    // Refresh the subtask itself
+                    const parentTaskId = selectedTask.parentTaskId;
+
+                    // Check if this is a standalone task's subtask
+                    const isStandaloneSubtask =
+                      selectedTask.isStandalone || !selectedTask.projectId;
+
+                    const updatedSubtask = isStandaloneSubtask
+                      ? await getStandaloneSubtask(
+                          parentTaskId,
+                          selectedTask.id
+                        )
+                      : await getSubtask(
+                          selectedTask.projectId,
+                          parentTaskId,
+                          selectedTask.id
+                        );
+
+                    updatedSubtask.projectId = selectedTask.projectId;
+                    updatedSubtask.parentTaskId = parentTaskId;
+                    updatedSubtask.isSubtask = true;
+                    updatedSubtask.isStandalone = isStandaloneSubtask;
+
+                    const assigneeSummary = summarizeUser(
+                      updatedSubtask.assigneeId || updatedSubtask.ownerId
+                    );
+                    const creatorSummary = summarizeUser(
+                      updatedSubtask.createdBy
+                    );
+
+                    setSelectedTask({
+                      ...updatedSubtask,
+                      assigneeSummary,
+                      creatorSummary,
+                    });
+                  } else {
+                    // Refresh the parent task with updated subtask info
+                    // Check if this is a standalone task
+                    const isStandaloneTask =
+                      selectedTask.isStandalone || !selectedTask.projectId;
+
+                    const updatedTask = isStandaloneTask
+                      ? await getStandaloneTask(selectedTask.id)
+                      : await getTask(selectedTask.projectId, selectedTask.id);
+
+                    const assigneeSummary = summarizeUser(
+                      updatedTask.assigneeId || updatedTask.ownerId
+                    );
+                    const creatorSummary = summarizeUser(updatedTask.createdBy);
+
+                    const refreshedTask = {
+                      ...updatedTask,
+                      assigneeSummary,
+                      creatorSummary,
+                      isStandalone: isStandaloneTask,
+                      projectId: isStandaloneTask
+                        ? "standalone"
+                        : updatedTask.projectId,
+                      projectName: isStandaloneTask
+                        ? "Standalone"
+                        : updatedTask.projectName,
+                    };
+
+                    setSelectedTask(refreshedTask);
+
+                    // Update the task in the tasks list
+                    setTasks((prevTasks) =>
+                      prevTasks.map((t) =>
+                        t.id === refreshedTask.id ? refreshedTask : t
+                      )
+                    );
+                  }
+                } catch (err) {
+                  console.error(
+                    "Failed to refresh task after subtask change:",
+                    err
+                  );
+                }
+              }}
+            />
+          );
+        })()}
+      <StandaloneTaskModal
+        isOpen={isCreateStandaloneOpen}
+        onClose={() => setIsCreateStandaloneOpen(false)}
+        onSubmit={handleCreateStandalone}
+        currentUser={currentUser}
+      />
     </div>
   );
 }

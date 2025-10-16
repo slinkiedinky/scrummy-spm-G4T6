@@ -1,5 +1,6 @@
 "use client";
 
+import { RoleGuard } from "@/components/RoleGuard";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 
@@ -212,6 +213,7 @@ export default function ProjectDetailPage() {
   const [showCalendar, setShowCalendar] = useState(false);
   const [showTeamModal, setShowTeamModal] = useState(false);
   const isEditingTask = Boolean(editingTaskId);
+  const [status, setStatus] = useState("loading"); // "loading" | "authorized" | "unauthorized" | "unauthenticated"
 
   // ⭐ ADDED: infer next project status from a list of tasks
   const inferProjectStatusFromTasks = useCallback((arr) => {
@@ -1122,6 +1124,24 @@ export default function ProjectDetailPage() {
     }
   };
 
+  useEffect(() => {
+  const unsubscribe = onAuthStateChanged(auth, (user) => {
+    if (!user) {
+      setStatus("unauthorized");
+      return;
+    }
+
+    if (project && !project.teamIds.includes(user.uid)) {
+      setStatus("unauthorized");
+      return;
+    }
+    setStatus("authorized");
+  });
+
+  return () => unsubscribe();
+}, [project]);
+
+
   if (userLoading) {
     return (
       <div className="flex h-full items-center justify-center p-6 text-muted-foreground">
@@ -1146,8 +1166,24 @@ export default function ProjectDetailPage() {
     );
   }
 
+  if (status === "unauthorized") {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen space-y-4">
+        <h1 className="text-2xl font-semibold text-red-600">
+          You are not authorized to view this project.
+        </h1>
+        <button
+          onClick={() => router.push("/projects")}
+          className="px-4 py-2 text-white bg-blue-600 rounded-lg hover:bg-blue-700"
+        >
+          Back to Projects
+        </button>
+      </div>
+    )
+  }
+
   return (
-    <>
+    <RoleGuard allowedRoles={["Staff", "Manager"]}>
       <Dialog
         open={isDeleteDialogOpen}
         onOpenChange={(open) => {
@@ -1333,6 +1369,8 @@ export default function ProjectDetailPage() {
                     <Button
                       type="button"
                       variant="outline"
+                      disabled={users.find((u) => u?.id === currentUser.uid)?.role !== "Manager"  &&
+                        currentUser.uid !== taskForm.assigneeId} // disable if not Manager and not owner
                       className={`w-full justify-between ${
                         selectedCollaborators.length > 5
                           ? "border-destructive"
@@ -1342,51 +1380,61 @@ export default function ProjectDetailPage() {
                       <span className="truncate text-left">
                         {collaboratorButtonLabel}
                       </span>
-                      <span
-                        className={`text-xs ${
-                          selectedCollaborators.length > 5
-                            ? "text-destructive font-semibold"
-                            : "text-muted-foreground"
-                        }`}
-                      >
-                        {selectedCollaborators.length}/5 selected
-                      </span>
+                      {(
+                        users.find((u) => u?.id === currentUser.uid)?.role === "Manager" ||
+                        currentUser.uid === taskForm.assigneeId
+                      ) && (
+                        <span
+                          className={`text-xs ${
+                            selectedCollaborators.length > 5
+                              ? "text-destructive font-semibold"
+                              : "text-muted-foreground"
+                          }`}
+                        >
+                          {selectedCollaborators.length}/5 selected
+                        </span>
+                      )}
                     </Button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent className="w-64">
-                    <DropdownMenuLabel>Select assignees</DropdownMenuLabel>
-                    <DropdownMenuSeparator />
-                    {collaboratorOptions.length === 0 ? (
-                      <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                        Add team members to this project first.
-                      </div>
-                    ) : (
-                      collaboratorOptions.map((option) => (
-                        <DropdownMenuCheckboxItem
-                          key={option.id}
-                          checked={selectedCollaborators.includes(option.id)}
-                          onCheckedChange={(checked) =>
-                            handleCollaboratorToggle(option.id, checked)
-                          }
-                        >
-                          <div className="flex flex-col">
-                            <span className="leading-tight">
-                              {option.label}
-                            </span>
-                            {option.email && option.email !== option.label && (
-                              <span className="text-xs text-muted-foreground leading-tight">
-                                {option.email}
+                    <DropdownMenuContent className="w-64">
+                      <DropdownMenuLabel>Select assignees</DropdownMenuLabel>
+                      <DropdownMenuSeparator />
+                      {collaboratorOptions.length === 0 ? (
+                        <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                          Add team members to this project first.
+                        </div>
+                      ) : (
+                        collaboratorOptions.map((option) => (
+                          <DropdownMenuCheckboxItem
+                            key={option.id}
+                            checked={selectedCollaborators.includes(option.id)}
+                            onCheckedChange={(checked) =>
+                              handleCollaboratorToggle(option.id, checked)
+                            }
+                          >
+                            <div className="flex flex-col">
+                              <span className="leading-tight">
+                                {option.label}
                               </span>
-                            )}
-                          </div>
-                        </DropdownMenuCheckboxItem>
-                      ))
-                    )}
-                  </DropdownMenuContent>
+                              {option.email && option.email !== option.label && (
+                                <span className="text-xs text-muted-foreground leading-tight">
+                                  {option.email}
+                                </span>
+                              )}
+                            </div>
+                          </DropdownMenuCheckboxItem>
+                        ))
+                      )}
+                    </DropdownMenuContent>
                 </DropdownMenu>
-                <p className="text-xs text-muted-foreground">
-                  Required: Select 1-5 team members to assign this task to.
-                </p>
+                 {(
+                  users.find((u) => u?.id === currentUser.uid)?.role === "Manager" ||
+                  currentUser.uid === taskForm.assigneeId) && 
+                  (
+                  <p className="text-xs text-muted-foreground">
+                    Required: Select 1–5 team members to assign this task to.
+                  </p>
+                )}
               </div>
 
               <div className="space-y-2">
@@ -1860,7 +1908,7 @@ export default function ProjectDetailPage() {
           />
         )}
       </div>
-    </>
+    </RoleGuard>
   );
 }
 

@@ -151,5 +151,18 @@ def get_task_digest(req: https_fn.Request) -> https_fn.Response:
 @scheduler_fn.on_schedule(schedule="every day 09:00", timezone="Asia/Singapore")
 def scheduled_task_digest(event):
     userID = "U101"
-    response = requests.post(f"https://us-central1-scrummy-be0d6.cloudfunctions.net/get_task_digest?userId={userID}")
+    response = requests.post(f"https://us-central1-scrummy-be0d6.cloudfunctions.net/get_task_digest?userId={userID}") 
     print("Triggered:", response.status_code)
+    # db: google.cloud.firestore.Client = firestore.client()
+    # users_ref = db.collection('users')
+    # users = users_ref.stream()
+    # for user_doc in users:
+    #     user_data = user_doc.to_dict()
+    #     user_id = user_data.get('userID') or user_doc.id
+    #     try:
+    #         response = requests.post(
+    #             f"https://us-central1-scrummy-be0d6.cloudfunctions.net/get_task_digest?userId={user_id}"
+    #         )
+    #         print(f"Digest sent for user {user_id}: {response.status_code}")
+    #     except Exception as e:
+    #         print(f"Failed to send digest for user {user_id}: {e}")

@@ -40,35 +40,33 @@ const fetchUserData = async (userId) => {
   }
 }
 
-export function RoleGuard({ children, allowedRoles, redirectTo = "/tasks" }) {
+export function RoleGuard({ children, allowedRoles }) {
   const router = useRouter()
-  const [isAuthorized, setIsAuthorized] = useState(false)
-  const [isLoading, setIsLoading] = useState(true)
+  const [status, setStatus] = useState("loading") // "loading" | "authorized" | "unauthorized" | "unauthenticated"
 
   useEffect(() => {
     const checkAccess = async () => {
       const user = auth.currentUser
-      
+
       if (!user) {
-        router.replace("/")
+        setStatus("unauthenticated")
         return
       }
 
       const userData = await fetchUserData(user.uid)
-      
+
       if (!allowedRoles.includes(userData.role)) {
-        router.replace(redirectTo)
+        setStatus("unauthorized")
         return
       }
-      
-      setIsAuthorized(true)
-      setIsLoading(false)
+
+      setStatus("authorized")
     }
 
     checkAccess()
-  }, [router, allowedRoles, redirectTo])
+  }, [allowedRoles])
 
-  if (isLoading) {
+  if (status === "loading") {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-gray-500">Verifying access...</div>
@@ -76,5 +74,21 @@ export function RoleGuard({ children, allowedRoles, redirectTo = "/tasks" }) {
     )
   }
 
-  return isAuthorized ? children : null
+  if (status === "unauthorized" || status === "unauthenticated") {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen space-y-4">
+        <h1 className="text-2xl font-semibold text-red-600">
+          You are not authorized to view this page.
+        </h1>
+        <button
+          onClick={() => router.push("/tasks")}
+          className="px-4 py-2 text-white font-semibold bg-gray-400 rounded-lg hover:bg-gray-500"
+        >
+          Go to Tasks
+        </button>
+      </div>
+    )
+  }
+
+  return children
 }

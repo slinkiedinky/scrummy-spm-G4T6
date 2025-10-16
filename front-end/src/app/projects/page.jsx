@@ -1,5 +1,6 @@
 "use client";
 
+import { RoleGuard } from "@/components/RoleGuard";
 import { listProjects, createProject, listUsers } from "@/lib/api";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ProjectCard } from "@/components/ProjectCard";
@@ -484,7 +485,7 @@ const selectedMemberRecords = useMemo(() => {
   }
 
   return (
-    <>
+    <RoleGuard allowedRoles={["Staff", "Manager"]}>
       <Dialog open={isCreateDialogOpen} onOpenChange={handleCreateDialogChange}>
         <DialogContent>
           <form onSubmit={onCreateProject} className="space-y-6">
@@ -845,6 +846,6 @@ const selectedMemberRecords = useMemo(() => {
           )}
         </div>
       </div>
-    </>
+    </RoleGuard>
   );
 }

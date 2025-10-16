@@ -21,20 +21,20 @@ const navigationItems = [
     name: "Projects",
     icon: FolderOpen,
     href: "/projects",
-    roles: ["Staff", "Manager", "HR"]
+    roles: ["Staff", "Manager"]
   },
   {
     name: "Analytics",
     icon: BarChart3,
     href: "/analytics",
-    roles: ["Staff", "Manager", "HR"]
+    roles: ["Manager"]
   },
   {
     name: "Timeline",
     icon: Clock,
     href: "/timeline",
-    roles: ["Staff", "Manager", "HR"]
-  }, 
+    roles: ["Staff", "Manager"]
+  },
   {
     name: "User Management",
     icon: Users,

@@ -69,6 +69,8 @@ lcov.info
 .vscode/
 .idea/
 
+.scannerwork/
+
 back-end/scrummy-be0d6-firebase-adminsdk-fbsvc-9b33421a7f.json
 back-end/sendgrid.env
 

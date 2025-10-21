@@ -1,0 +1,212 @@
+
+1.0PythonFrontend"1761034484714*py2.B•
+
+imports1
+
+extends2
+
+returns3
+
+	has param4
+
+module5
+
+
+class6
+
+function7
+-
+(back-end/tests/test_projects_extended.py9
+
+test_projects_extended11
+
+os12
+	
+sys14
+
+datetime16
+	
+app18
+
+projects20
+
+test_projects_api22
+,
+&test_projects_extended.TestTaskUpdates24
+M
+Gtest_projects_extended.TestTaskUpdates.test_update_task_clears_due_date26
+V
+Ptest_projects_extended.TestTaskUpdates.test_update_task_title_empty_uses_default28
+W
+Qtest_projects_extended.TestTaskUpdates.test_update_task_assignee_syncs_with_owner30
+)
+#test_projects_extended.TestSubtasks32
+<
+6test_projects_extended.TestSubtasks.test_list_subtasks34
+=
+7test_projects_extended.TestSubtasks.test_delete_subtask36
+N
+Htest_projects_extended.TestSubtasks.test_create_subtask_parent_not_found38
+=
+7test_projects_extended.TestSubtasks.test_update_subtask40
+E
+?test_projects_extended.TestSubtasks.test_create_subtask_success42
+9
+3test_projects_extended.TestTaskCreationAndRetrieval44
+`
+Ztest_projects_extended.TestTaskCreationAndRetrieval.test_create_task_adds_assignee_to_team46
+a
+[test_projects_extended.TestTaskCreationAndRetrieval.test_create_task_with_project_not_found48
+[
+Utest_projects_extended.TestTaskCreationAndRetrieval.test_list_tasks_project_not_found50
+]
+Wtest_projects_extended.TestTaskCreationAndRetrieval.test_task_priority_canonicalization52
+Z
+Ttest_projects_extended.TestTaskCreationAndRetrieval.test_list_tasks_user_not_on_team54
+]
+Wtest_projects_extended.TestTaskCreationAndRetrieval.test_create_task_with_default_title56
+a
+[test_projects_extended.TestTaskCreationAndRetrieval.test_create_task_without_assignee_fails58
+9
+3test_projects_extended.TestProjectStatusAndPriority60
+V
+Ptest_projects_extended.TestProjectStatusAndPriority.test_status_canonicalization62
+X
+Rtest_projects_extended.TestProjectStatusAndPriority.test_priority_canonicalization64
+3
+-test_projects_extended.TestTaskAcrossProjects66
+_
+Ytest_projects_extended.TestTaskAcrossProjects.test_list_tasks_across_projects_no_assignee68
+`
+Ztest_projects_extended.TestTaskAcrossProjects.test_list_tasks_across_projects_with_filters70
+(
+"test_projects_extended.test_client72
+0
+*test_projects_extended.TestProjectDeletion74
+D
+>test_projects_extended.TestProjectDeletion.test_delete_project76J
+
+8
+89j·
+ 
+10
+10115 *
+8 (
+
+13
+13125
+
+15
+15145
+
+17
+17165
+
+19
+19185
+
+21
+21205
+
+23
+23225
+
+25
+25246 210
+
+27
+27267 225
+
+29
+29287 225
+
+31
+31307 225
+
+33
+33326 210
+
+35
+35347 233
+
+37
+37367 233
+
+39
+39387 233
+
+41
+41407 233
+
+43
+43427 233
+
+45
+45446 210
+
+47
+47467 245
+
+49
+49487 245
+
+51
+51507 245
+
+53
+53527 245
+
+55
+55547 245
+
+57
+57567 245
+
+59
+59587 245
+
+61
+61606 210
+
+63
+63627 261
+
+65
+65647 261
+
+67
+67666 210
+
+69
+69687 267
+
+71
+71707 267
+
+73
+73727 210
+
+75
+75746 210
+
+77
+77767 275rœ
+
+10131*
+8 (
+
+
+10151*
+8 (
+
+10171*
+8 ((
+
+10191*
+8 (!
+
+10211*
+8 (
+
+10231*
+8 (,

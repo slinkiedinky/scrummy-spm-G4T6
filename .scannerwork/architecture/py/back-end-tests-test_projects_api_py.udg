@@ -1,0 +1,420 @@
+
+1.0PythonFrontend"1761034484655*py2.B‰
+
+imports1
+
+extends2
+
+returns3
+
+	has param4
+
+module5
+
+
+class6
+
+function7
+(
+#back-end/tests/test_projects_api.py9
+
+test_projects_api11
+
+os12
+	
+sys14
+
+collections16
+
+datetime18
+
+typing20
+	
+app22
+
+projects24
+
+firebase_admin26
+;
+5test_projects_api.test_list_tasks_filters_by_assignee28
+-
+'test_projects_api.FakeDocumentReference30
+4
+.test_projects_api.FakeDocumentReference.update32
+
+
+dict34
+1
++test_projects_api.FakeDocumentReference.get36
+6
+0test_projects_api.FakeDocumentReference.__init__38
+	
+str40
+1
++test_projects_api.FakeDocumentReference.set42
+8
+2test_projects_api.FakeDocumentReference.collection44
+;
+5test_projects_api.FakeDocumentReference._get_document46
+
+
+bool48
+4
+.test_projects_api.FakeDocumentReference.delete50
+%
+test_projects_api.FakeFirestore52
+.
+(test_projects_api.FakeFirestore.__init__54
+=
+7test_projects_api.FakeFirestore._iterate_subcollections56
+6
+0test_projects_api.FakeFirestore.collection_group58
++
+%test_projects_api.FakeCollectionGroup60
+.
+(test_projects_api.FakeFirestore._next_id62
+0
+*test_projects_api.FakeFirestore.collection64
+&
+ test_projects_api.FakeCollection66
+E
+?test_projects_api.test_list_projects_filters_by_assigned_member68
+,
+&test_projects_api.FakeDocumentSnapshot70
+5
+/test_projects_api.FakeDocumentSnapshot.__init__72
+$
+test_projects_api.FakeDocument74
+4
+.test_projects_api.FakeDocumentSnapshot.to_dict76
+H
+Btest_projects_api.test_get_project_forbidden_when_user_not_on_team78
+1
++test_projects_api.FakeCollectionGroup.where80
+
+object82
+4
+.test_projects_api.FakeCollectionGroup.__init__84
+2
+,test_projects_api.FakeCollectionGroup.stream86
+
+typing.Iterable88
+-
+'test_projects_api.FakeDocument.__init__90
+!
+test_projects_api.FakeQuery92
+(
+"test_projects_api.FakeQuery.stream94
+*
+$test_projects_api.FakeQuery.__init__96
+*
+$test_projects_api.FakeQuery._matches98
+(
+!test_projects_api.FakeQuery.where100
+C
+<test_projects_api.test_create_project_includes_owner_in_team102
+D
+=test_projects_api.test_update_project_casts_tags_and_priority104
+$
+test_projects_api.test_client106
+0
+)test_projects_api.FakeCollection.document108
+-
+&test_projects_api.FakeCollection.where110
+0
+)test_projects_api.FakeCollection.__init__112
++
+$test_projects_api.FakeCollection.add114
+.
+'test_projects_api.FakeCollection.stream116J
+
+8
+89jú
+
+ 
+10
+10115 *
+8 (
+
+13
+13125
+
+15
+15145
+
+17
+17165
+
+19
+19185
+
+21
+21205
+
+23
+23225
+
+25
+25245
+
+27
+27265
+
+29
+29287 210
+
+31
+31306 210
+
+33
+33327 231
+
+35
+35346
+
+37
+37367 231
+
+39
+39387 231
+
+41
+41406
+
+43
+43427 231
+
+45
+45447 231
+
+47
+47467 231
+
+49
+49486
+
+51
+51507 231
+
+53
+53526 210
+
+55
+55547 253
+
+57
+57567 253
+
+59
+59587 253
+
+61
+61606 210
+
+63
+63627 253
+
+65
+65647 253
+
+67
+67666 210
+
+69
+69687 210
+
+71
+71706 210
+
+73
+73727 271
+
+75
+75746 210
+
+77
+77767 271
+
+79
+79787 210
+
+81
+81807 261
+
+83
+83826
+
+85
+85847 261
+
+87
+87867 261
+
+89
+89886
+
+91
+91907 275
+
+93
+93926 210
+
+95
+95947 293
+
+97
+97967 293
+
+99
+99987 293
+
+101
+1011007 293
+
+103
+1031027 210
+
+105
+1051047 210
+
+107
+1071067 210
+
+109
+1091087 267
+
+111
+1111107 267
+
+113
+1131127 267
+
+115
+1151147 267
+
+117
+1171167 267rœ
+
+10131*
+8 (
+
+
+10151*
+8 (
+
+10171*
+8 ($
+
+10191*
+8 ((
+
+10211*
+8 (9
+
+10231*
+8 (!
+
+10251*
+8 (
+
+10271*
+8 (%
+
+33354*
+8>	 >(
+
+39414*
+8)	 )(
+
+43354*
+8;	 ;(
+
+45414*
+8R	 R(
+
+47494*
+8-	 -(
+
+57414*
+8Ø	 Ø( 
+
+59613*
+8¨	 ¨(
+
+59414*
+8¨	 ¨(
+
+63413*
+8•	 •(
+
+63414*
+8•	 •(
+
+65673*
+8©	 ©(
+
+65414*
+8©	 ©(
+
+73414*
+8	 (
+
+73754*
+8	 (
+
+81414*
+8ç	 ç(
+
+81414*
+8ç	 ç(
+
+81834*
+8ç	 ç(
+
+85414*
+8à	 à(
+
+87893*
+8ô	 ô(
+
+95893*
+8d	 d(
+
+99493*
+8i	 i(
+
+99354*
+8i	 i(
+
+101414*
+8]	 ](
+
+101414*
+8]	 ](
+
+101834*
+8]	 ](
+
+109414*
+8{	 {(
+
+111414*
+8~	 ~(
+
+111414*
+8~	 ~(
+
+111834*
+8~	 ~(
+
+113414*
+8q	 q(
+
+113354*
+8q	 q(
+
+115354*
+8v	 v(
+
+117893*
+8Ç	 Ç(

@@ -1,6 +1,131 @@
-# SPM G4T6
+# Scrummy - Smart Task Management System
 
-All-In-One is rolling out an internal Smart Task Management System to support hybrid work, drive productivity, and attract younger talent with flexible arrangements. The platform extends the company’s existing remote-friendly culture by giving teams a shared space to organise tasks, coordinate deliverables, and optimise performance across regional offices.
+All-In-One is rolling out an internal Smart Task Management System to support hybrid work, drive productivity, and attract younger talent with flexible arrangements. The platform extends the company's existing remote-friendly culture by giving teams a shared space to organise tasks, coordinate deliverables, and optimise performance across regional offices.
+
+## Project Structure
+
+```
+scrummy-spm-G4T6/
+├── back-end/               # Flask API server
+│   ├── tests/             # Backend test suite
+│   ├── .coveragerc        # Python coverage configuration
+│   ├── requirements.txt   # Python dependencies
+│   └── firebase.py        # Firebase configuration
+│
+├── front-end/             # Next.js application
+│   ├── src/
+│   │   ├── app/          # Next.js app router pages
+│   │   ├── components/   # React components
+│   │   │   └── __tests__/  # Component tests
+│   │   └── lib/          # Utilities and configs
+│   ├── jest.config.js    # Jest configuration
+│   └── jest.setup.js     # Jest setup file
+│
+├── docs/                  # Documentation
+│   ├── TESTING.md        # Testing guide
+│   └── SONARQUBE_SETUP.md # SonarQube configuration guide
+│
+├── scripts/               # Utility scripts
+│   ├── run-all-tests.sh
+│   └── run-coverage-and-scan.sh
+│
+├── .github/
+│   └── workflows/        # CI/CD workflows
+│       └── github_actions_workflow.yaml
+│
+├── sonar-project.properties  # SonarQube configuration
+└── README.md
+```
+
+## Quick Start
+
+### Backend Setup
+
+```bash
+cd back-end
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+### Frontend Setup
+
+```bash
+cd front-end
+npm install
+npm run dev
+```
+
+## Testing
+
+### Run All Tests
+
+```bash
+# From project root
+./scripts/run-all-tests.sh
+```
+
+### Backend Tests
+
+```bash
+cd back-end
+pytest tests/ --cov=. --cov-report=xml --cov-report=term -v
+```
+
+### Frontend Tests
+
+```bash
+cd front-end
+npm test                    # Run tests
+npm run test:coverage       # Run with coverage
+```
+
+For detailed testing information, see [docs/TESTING.md](docs/TESTING.md).
+
+## Code Quality
+
+### SonarQube Analysis
+
+This project uses SonarQube Cloud for code quality and security analysis. The analysis runs automatically on every push via GitHub Actions.
+
+To run a manual scan:
+
+```bash
+./scripts/run-coverage-and-scan.sh
+```
+
+For SonarQube setup instructions, see [docs/SONARQUBE_SETUP.md](docs/SONARQUBE_SETUP.md).
+
+### Coverage
+
+Current test coverage:
+- Backend: 82% (41 tests)
+- Frontend: Comprehensive test suite with 100+ tests
+
+## Tech Stack
+
+### Backend
+- **Python 3.11**
+- **Flask** - Web framework
+- **Firebase Admin SDK** - Database and authentication
+- **pytest** - Testing framework
+- **pytest-cov** - Coverage reporting
+
+### Frontend
+- **Next.js 14** - React framework with App Router
+- **React 18** - UI library
+- **Tailwind CSS** - Styling
+- **Jest** - Testing framework
+- **React Testing Library** - Component testing
+- **Firebase** - Authentication and database
+
+## CI/CD
+
+GitHub Actions workflow automatically:
+- Runs backend tests with coverage
+- Runs frontend tests with coverage
+- Performs SonarQube code analysis
+- Generates coverage reports
 
 ## Users
 

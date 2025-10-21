@@ -1,0 +1,7 @@
+organization=slinkiedinky
+projectKey=slinkiedinky_scrummy-spm-G4T6
+serverUrl=https://sonarcloud.io
+serverVersion=8.0.0.68933
+dashboardUrl=https://sonarcloud.io/dashboard?id=slinkiedinky_scrummy-spm-G4T6
+ceTaskId=AZoF1f1-IZi89Vchai_8
+ceTaskUrl=https://sonarcloud.io/api/ce/task?id=AZoF1f1-IZi89Vchai_8

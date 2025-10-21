@@ -1,0 +1,217 @@
+
+1.0PythonFrontend"1761034484711*py2.Bþ
+
+imports1
+
+extends2
+
+returns3
+
+	has param4
+
+module5
+
+
+class6
+
+function7
+
+back-end/projects.py9
+
+projects11
+
+flask12
+
+
+flask_cors14
+
+firebase_admin16
+
+datetime18
+
+notifications20
+
+projects.update_project22
+
+projects.ensure_list24
+"
+projects.canon_task_priority26
+	
+int28
+
+projects.update_subtask30
+)
+#projects._priority_number_to_bucket32
+	
+str34
+
+projects.create_project36
+!
+projects.normalize_task_out38
+
+projects.canon_status40
+
+projects.list_tasks42
+
+projects.get_task44
+$
+projects.normalize_project_out46
+
+projects.delete_project48
+*
+$projects.update_parent_task_progress50
+
+projects.create_subtask52
+%
+projects.canon_project_priority54
+)
+#projects.list_tasks_across_projects56
+
+projects.update_task58
+
+projects.now_utc60
+
+projects.get_project62
+
+projects.delete_subtask64
+
+projects.list_subtasks66
+
+projects.delete_task68
+
+projects.create_task70
+
+projects.list_projects72J
+
+8
+89jÿ
+ 
+10
+10115 *
+8 (
+
+13
+13125
+
+15
+15145
+
+17
+17165
+
+19
+19185
+
+21
+21205
+
+23
+23227 210
+
+25
+25247 210
+
+27
+27267 210
+
+29
+29286
+
+31
+31307 210
+
+33
+33327 210
+
+35
+35346
+
+37
+37367 210
+
+39
+39387 210
+
+41
+41407 210
+
+43
+43427 210
+
+45
+45447 210
+
+47
+47467 210
+
+49
+49487 210
+
+51
+51507 210
+
+53
+53527 210
+
+55
+55547 210
+
+57
+57567 210
+
+59
+59587 210
+
+61
+61607 210
+
+63
+63627 210
+
+65
+65647 210
+
+67
+67667 210
+
+69
+69687 210
+
+71
+71707 210
+
+73
+73727 210r¢
+
+10131*
+8 (;
+
+10151*
+8 ($
+
+10171*
+8 (%
+
+10191*
+8 ((
+
+10211*
+8â	 â(3
+
+10211*
+8© ©(7
+
+27293*
+8> >(
+
+33353*
+86 6(
+
+33294*
+86 6(
+
+41353*
+8 (
+
+55353*
+8" "(

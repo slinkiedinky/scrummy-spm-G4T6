@@ -11,7 +11,7 @@ if ROOT_DIR not in sys.path:
 
 from app import app as flask_app  # noqa: E402
 import users  # noqa: E402
-from test_projects_api import FakeFirestore  # noqa: E402
+from fake_firestore import FakeFirestore  # noqa: E402
 
 
 @pytest.fixture

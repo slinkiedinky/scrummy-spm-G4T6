@@ -12,8 +12,8 @@ jest.mock('@/components/ui/badge', () => ({
 
 // Mock the Card components
 jest.mock('@/components/ui/card', () => ({
-  Card: ({ children, className, onClick }) => (
-    <div className={className} onClick={onClick} data-testid="task-card">
+  Card: ({ children, className }) => (
+    <div className={className} data-testid="task-card">
       {children}
     </div>
   ),
@@ -214,8 +214,9 @@ describe('TaskColumn Component', () => {
       />
     )
 
-    const taskCards = screen.getAllByTestId('task-card')
-    fireEvent.click(taskCards[0])
+    // Click on the task title which is inside the clickable div
+    const taskTitle = screen.getByText('Design landing page')
+    fireEvent.click(taskTitle)
 
     expect(mockOnTaskClick).toHaveBeenCalledWith(mockTasks[0])
   })

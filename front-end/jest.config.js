@@ -17,6 +17,10 @@ const customJestConfig = {
     '!src/**/*.d.ts',
     '!src/**/*.stories.{js,jsx,ts,tsx}',
     '!src/**/__tests__/**',
+    '!src/**/*.test.{js,jsx,ts,tsx}',
+    '!src/**/*.spec.{js,jsx,ts,tsx}',
+    '!src/**/test*.{js,jsx,ts,tsx}',
+    '!src/**/__mocks__/**',
   ],
   testMatch: [
     '**/__tests__/**/*.[jt]s?(x)',

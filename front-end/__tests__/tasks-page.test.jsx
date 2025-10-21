@@ -10,6 +10,20 @@ import {
   listAssignedTasks,
   listUsers,
   updateTask,
+  listStandaloneTasks,
+  createStandaloneTask,
+  getStandaloneTask,
+  updateStandaloneTask,
+  deleteStandaloneTask,
+  listStandaloneSubtasks,
+  getStandaloneSubtask,
+  updateStandaloneSubtask,
+  deleteStandaloneSubtask,
+  listSubtasks,
+  getSubtask,
+  updateSubtask,
+  deleteSubtask,
+  getProject,
 } from "@/lib/api";
 
 const taskDetailModalSpy = jest.fn();
@@ -53,6 +67,20 @@ jest.mock("@/lib/api", () => ({
   updateTask: jest.fn(),
   deleteTask: jest.fn(),
   getTask: jest.fn(),
+  listStandaloneTasks: jest.fn(),
+  createStandaloneTask: jest.fn(),
+  getStandaloneTask: jest.fn(),
+  updateStandaloneTask: jest.fn(),
+  deleteStandaloneTask: jest.fn(),
+  listStandaloneSubtasks: jest.fn(),
+  getStandaloneSubtask: jest.fn(),
+  updateStandaloneSubtask: jest.fn(),
+  deleteStandaloneSubtask: jest.fn(),
+  listSubtasks: jest.fn(),
+  getSubtask: jest.fn(),
+  updateSubtask: jest.fn(),
+  deleteSubtask: jest.fn(),
+  getProject: jest.fn(),
 }));
 
 jest.mock("@/components/ui/select", () => {
@@ -220,8 +248,40 @@ describe("TasksPage", () => {
     updateTask.mockReset();
     deleteTask.mockReset();
     getTask.mockReset();
+    listStandaloneTasks.mockReset();
+    createStandaloneTask.mockReset();
+    getStandaloneTask.mockReset();
+    updateStandaloneTask.mockReset();
+    deleteStandaloneTask.mockReset();
+    listStandaloneSubtasks.mockReset();
+    getStandaloneSubtask.mockReset();
+    updateStandaloneSubtask.mockReset();
+    deleteStandaloneSubtask.mockReset();
+    listSubtasks.mockReset();
+    getSubtask.mockReset();
+    updateSubtask.mockReset();
+    deleteSubtask.mockReset();
+    getProject.mockReset();
     listAssignedTasks.mockResolvedValue([]);
     listUsers.mockResolvedValue([]);
+    listStandaloneTasks.mockResolvedValue([]);
+    listStandaloneSubtasks.mockResolvedValue([]);
+    createStandaloneTask.mockResolvedValue({ id: "standalone" });
+    getStandaloneTask.mockResolvedValue(null);
+    updateStandaloneTask.mockResolvedValue({});
+    deleteStandaloneTask.mockResolvedValue({});
+    getStandaloneSubtask.mockResolvedValue(null);
+    updateStandaloneSubtask.mockResolvedValue({});
+    deleteStandaloneSubtask.mockResolvedValue({});
+    listSubtasks.mockResolvedValue([]);
+    getSubtask.mockResolvedValue({});
+    updateSubtask.mockResolvedValue({});
+    deleteSubtask.mockResolvedValue({});
+    getProject.mockResolvedValue({
+      id: "proj-1",
+      name: "Project Phoenix",
+      teamIds: ["user-1"],
+    });
   });
 
   it("shows the session validation state before authentication resolves", () => {

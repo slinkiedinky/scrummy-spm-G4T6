@@ -58,7 +58,7 @@ import {
   FileText,
 } from "lucide-react";
 import { TaskColumn } from "@/components/TaskColumn";
-import { format, startOfDay } from "date-fns";
+import { format, startOfDay, toDate } from "date-fns";
 import { auth } from "@/lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import jsPDF from "jspdf";
@@ -100,9 +100,22 @@ const PROJECT_PRIORITY_LABELS = PROJECT_PRIORITIES.reduce((acc, option) => {
   return acc;
 }, {});
 
+export const inferProjectStatus = (arr) => {
+  const list = Array.isArray(arr) ? arr : [];
+  if (list.length === 0) return "to-do";
+  const statuses = list.map((t) => (t?.status || "").toLowerCase());
+  if (statuses.length > 0 && statuses.every((s) => s === "completed")) {
+    return "completed";
+  }
+  if (statuses.some((s) => s === "in progress")) {
+    return "in progress";
+  }
+  return "to-do";
+};
+
 const projectPriorityOrder = { low: 1, medium: 2, high: 3 };
 
-const ensureProjectPriority = (value) => {
+export const ensureProjectPriority = (value) => {
   if (typeof value === "string") {
     const normalized = value.trim().toLowerCase();
     if (projectPriorityOrder[normalized]) {
@@ -122,7 +135,7 @@ const ensureProjectPriority = (value) => {
   return "medium";
 };
 
-const getPriorityBadgeClass = (value) => {
+export const getPriorityBadgeClass = (value) => {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) {
     return `${TAG_BASE} bg-muted text-muted-foreground border border-border/50`;
@@ -136,7 +149,7 @@ const getPriorityBadgeClass = (value) => {
   return `${TAG_BASE} bg-emerald-100 text-emerald-700 border border-emerald-200`;
 };
 
-const ensureArray = (value) => {
+export const ensureArray = (value) => {
   if (Array.isArray(value)) {
     return value
       .map((item) =>
@@ -150,7 +163,7 @@ const ensureArray = (value) => {
   return str ? [str] : [];
 };
 
-const createEmptyTaskForm = (uid = "") => ({
+export const createEmptyTaskForm = (uid = "") => ({
   title: "",
   description: "",
   assigneeId: uid,
@@ -161,7 +174,7 @@ const createEmptyTaskForm = (uid = "") => ({
   collaboratorsIds: [],
 });
 
-const toDateInputValue = (value) => {
+export const toDateInputValue = (value) => {
   if (!value) return "";
 
   const date = toDate(value);
@@ -216,18 +229,10 @@ export default function ProjectDetailPage() {
   const [status, setStatus] = useState("loading"); // "loading" | "authorized" | "unauthorized" | "unauthenticated"
 
   // ⭐ ADDED: infer next project status from a list of tasks
-  const inferProjectStatusFromTasks = useCallback((arr) => {
-    const list = Array.isArray(arr) ? arr : [];
-    if (list.length === 0) return "to-do"; // default when no tasks
-    const statuses = list.map((t) => (t?.status || "").toLowerCase());
-    const allCompleted =
-      statuses.length > 0 && statuses.every((s) => s === "completed");
-    if (allCompleted) return "completed";
-    const anyInProgress = statuses.some((s) => s === "in progress");
-    if (anyInProgress) return "in progress";
-    // fallback if nothing in progress and not all completed
-    return "to-do";
-  }, []);
+  const inferProjectStatusFromTasks = useCallback(
+    (arr) => inferProjectStatus(arr),
+    []
+  );
 
   // ⭐ ADDED: apply inferred status, persist to DB, and keep local state in sync
   const syncProjectStatusWithTasks = useCallback(

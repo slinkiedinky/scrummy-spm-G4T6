@@ -323,6 +323,16 @@ def update_task_endpoint(project_id, task_id):
     prev_doc = task_ref.get()
     prev_task = prev_doc.to_dict() if prev_doc.exists else {}
 
+    if "title" in updates:
+        title = (updates.get("title") or "").strip()
+        updates["title"] = title or "Untitled task"
+    if "description" in updates:
+        updates["description"] = (updates.get("description") or "").strip()
+    if "assigneeId" in updates:
+        updates["ownerId"] = updates.get("assigneeId")
+    if "ownerId" in updates and "assigneeId" not in updates:
+        updates["assigneeId"] = updates.get("ownerId")
+
     # perform update (existing logic may be different; keep your existing update calls)
     try:
         # If your code uses .update or .set, keep that instead of this line

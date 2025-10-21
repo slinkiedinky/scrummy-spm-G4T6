@@ -11,6 +11,10 @@ jest.mock('firebase/auth', () => ({
   onAuthStateChanged: jest.fn(),
 }))
 
+jest.mock('@/components/RoleGuard', () => ({
+  RoleGuard: ({ children }) => <>{children}</>,
+}))
+
 // Mock next/navigation
 jest.mock('next/navigation', () => ({
   useRouter: jest.fn(() => ({
@@ -40,7 +44,8 @@ describe('ProjectsPage', () => {
   beforeEach(() => {
     jest.clearAllMocks()
 
-    mockUser = { uid: 'test-user-123' }
+    mockUser = { uid: 'user-1' }
+    auth.currentUser = mockUser
 
     // Setup auth mock
     mockOnAuthStateChanged = require('firebase/auth').onAuthStateChanged
@@ -52,7 +57,7 @@ describe('ProjectsPage', () => {
     // Mock API functions
     api.listProjects = jest.fn().mockResolvedValue([])
     api.createProject = jest.fn().mockResolvedValue({ id: 'new-project-id' })
-    api.listUsers = jest.fn(() => [])
+    api.listUsers = jest.fn().mockResolvedValue([])
   })
 
   describe('Loading States', () => {
@@ -135,11 +140,11 @@ describe('ProjectsPage', () => {
   describe('KPI Cards', () => {
     it('displays KPI metrics correctly', async () => {
       const mockProjects = [
-        { id: '1', name: 'P1', status: 'to-do', priority: 'high', teamIds: [] },
-        { id: '2', name: 'P2', status: 'in progress', priority: 'medium', teamIds: [] },
-        { id: '3', name: 'P3', status: 'in progress', priority: 'low', teamIds: [] },
-        { id: '4', name: 'P4', status: 'completed', priority: 'high', teamIds: [] },
-        { id: '5', name: 'P5', status: 'blocked', priority: 'medium', teamIds: [] },
+        { id: '1', name: 'P1', status: 'to-do', priority: 'high', teamIds: ['user-1'] },
+        { id: '2', name: 'P2', status: 'in progress', priority: 'medium', teamIds: ['user-1'] },
+        { id: '3', name: 'P3', status: 'in progress', priority: 'low', teamIds: ['user-1'] },
+        { id: '4', name: 'P4', status: 'completed', priority: 'high', teamIds: ['user-1'] },
+        { id: '5', name: 'P5', status: 'blocked', priority: 'medium', teamIds: ['user-1'] },
       ]
 
       api.listProjects.mockResolvedValue(mockProjects)
@@ -160,8 +165,8 @@ describe('ProjectsPage', () => {
   describe('Search Functionality', () => {
     it('filters projects by search term', async () => {
       const mockProjects = [
-        { id: '1', name: 'Website Redesign', status: 'to-do', priority: 'high', teamIds: [] },
-        { id: '2', name: 'Mobile App', status: 'to-do', priority: 'medium', teamIds: [] },
+        { id: '1', name: 'Website Redesign', status: 'to-do', priority: 'high', teamIds: ['user-1'] },
+        { id: '2', name: 'Mobile App', status: 'to-do', priority: 'medium', teamIds: ['user-1'] },
       ]
 
       api.listProjects.mockResolvedValue(mockProjects)
@@ -183,8 +188,8 @@ describe('ProjectsPage', () => {
 
     it('clears search when input is cleared', async () => {
       const mockProjects = [
-        { id: '1', name: 'Website Redesign', status: 'to-do', priority: 'high', teamIds: [] },
-        { id: '2', name: 'Mobile App', status: 'to-do', priority: 'medium', teamIds: [] },
+        { id: '1', name: 'Website Redesign', status: 'to-do', priority: 'high', teamIds: ['user-1'] },
+        { id: '2', name: 'Mobile App', status: 'to-do', priority: 'medium', teamIds: ['user-1'] },
       ]
 
       api.listProjects.mockResolvedValue(mockProjects)
@@ -209,9 +214,9 @@ describe('ProjectsPage', () => {
   describe('Status Filter', () => {
     it('filters projects by status', async () => {
       const mockProjects = [
-        { id: '1', name: 'Project 1', status: 'to-do', priority: 'high', teamIds: [] },
-        { id: '2', name: 'Project 2', status: 'in progress', priority: 'medium', teamIds: [] },
-        { id: '3', name: 'Project 3', status: 'completed', priority: 'low', teamIds: [] },
+        { id: '1', name: 'Project 1', status: 'to-do', priority: 'high', teamIds: ['user-1'] },
+        { id: '2', name: 'Project 2', status: 'in progress', priority: 'medium', teamIds: ['user-1'] },
+        { id: '3', name: 'Project 3', status: 'completed', priority: 'low', teamIds: ['user-1'] },
       ]
 
       api.listProjects.mockResolvedValue(mockProjects)
@@ -230,9 +235,9 @@ describe('ProjectsPage', () => {
   describe('Priority Filter', () => {
     it('filters projects by priority', async () => {
       const mockProjects = [
-        { id: '1', name: 'High Priority', status: 'to-do', priority: 'high', teamIds: [] },
-        { id: '2', name: 'Medium Priority', status: 'to-do', priority: 'medium', teamIds: [] },
-        { id: '3', name: 'Low Priority', status: 'to-do', priority: 'low', teamIds: [] },
+        { id: '1', name: 'High Priority', status: 'to-do', priority: 'high', teamIds: ['user-1'] },
+        { id: '2', name: 'Medium Priority', status: 'to-do', priority: 'medium', teamIds: ['user-1'] },
+        { id: '3', name: 'Low Priority', status: 'to-do', priority: 'low', teamIds: ['user-1'] },
       ]
 
       api.listProjects.mockResolvedValue(mockProjects)
@@ -316,7 +321,7 @@ describe('ProjectsPage', () => {
             name: 'New Test Project',
             status: 'to-do',
             priority: 'medium',
-            ownerId: 'test-user-123',
+            ownerId: 'user-1',
           })
         )
       })
@@ -368,7 +373,7 @@ describe('ProjectsPage', () => {
   describe('Active Filters Display', () => {
     it('shows active filters when filters are applied', async () => {
       const mockProjects = [
-        { id: '1', name: 'Project 1', status: 'to-do', priority: 'high', teamIds: [] },
+        { id: '1', name: 'Project 1', status: 'to-do', priority: 'high', teamIds: ['user-1'] },
       ]
 
       api.listProjects.mockResolvedValue(mockProjects)
@@ -388,7 +393,7 @@ describe('ProjectsPage', () => {
 
     it('clears all filters when Clear all clicked', async () => {
       const mockProjects = [
-        { id: '1', name: 'Project 1', status: 'to-do', priority: 'high', teamIds: [] },
+        { id: '1', name: 'Project 1', status: 'to-do', priority: 'high', teamIds: ['user-1'] },
       ]
 
       api.listProjects.mockResolvedValue(mockProjects)
@@ -413,9 +418,9 @@ describe('ProjectsPage', () => {
     it('normalizes project priority correctly', () => {
       // These are internal functions, but we can test through component behavior
       const mockProjects = [
-        { id: '1', name: 'P1', status: 'to-do', priority: 8, teamIds: [] }, // should be 'high'
-        { id: '2', name: 'P2', status: 'to-do', priority: 2, teamIds: [] }, // should be 'low'
-        { id: '3', name: 'P3', status: 'to-do', priority: 'HIGH', teamIds: [] }, // should be 'high'
+        { id: '1', name: 'P1', status: 'to-do', priority: 8, teamIds: ['user-1'] }, // should be 'high'
+        { id: '2', name: 'P2', status: 'to-do', priority: 2, teamIds: ['user-1'] }, // should be 'low'
+        { id: '3', name: 'P3', status: 'to-do', priority: 'HIGH', teamIds: ['user-1'] }, // should be 'high'
       ]
 
       api.listProjects.mockResolvedValue(mockProjects)
@@ -435,7 +440,7 @@ describe('ProjectsPage', () => {
           name: 'Completed Project',
           status: 'completed',
           priority: 'high',
-          teamIds: [],
+          teamIds: ['user-1'],
           tasks: [],
         },
       ]

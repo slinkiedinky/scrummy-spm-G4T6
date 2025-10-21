@@ -13,6 +13,8 @@ yarn-error.log*
 .next/cache/
 .turbo/
 .parcel-cache/
+/front-end/.swc/
+.swc/
 
 /front-end/.env.local
 /front-end/.env.development.local
@@ -42,6 +44,19 @@ venv.bak/
 .mypy_cache/
 .ruff_cache/
 
+# Coverage reports
+coverage/
+htmlcov/
+.coverage
+coverage.xml
+lcov.info
+/back-end/coverage/
+/back-end/htmlcov/
+/back-end/.coverage
+/back-end/coverage.xml
+/front-end/coverage/
+/front-end/lcov.info
+
 /back-end/.python-version
 /back-end/.pytest_cache/
 /back-end/.mypy_cache/
@@ -53,6 +68,8 @@ venv.bak/
 
 .vscode/
 .idea/
+
+.scannerwork/
 
 back-end/scrummy-be0d6-firebase-adminsdk-fbsvc-9b33421a7f.json
 back-end/sendgrid.env

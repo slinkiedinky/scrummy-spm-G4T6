@@ -3,3 +3,5 @@ Flask-CORS==4.0.0
 firebase-admin==6.5.0
 schedule==1.2.0
 pytz==2024.1
+pytest==8.0.0
+pytest-cov==4.1.0

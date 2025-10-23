@@ -4,6 +4,7 @@ from google.cloud import firestore as gcf
 
 def add_notification(task_data: dict, project_name: str):
   notif = {
+    "author":task_data.get("author"),
     "userId": task_data.get("userId"),
     "assigneeId": task_data.get("assigneeId"),
     "projectId": task_data.get("projectId"),

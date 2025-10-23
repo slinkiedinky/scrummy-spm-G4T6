@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { Bell, Calendar, Check, X, ClipboardList, UserPlus } from "lucide-react";
+import { Bell, Calendar, Check, X, ClipboardList, UserPlus, MessageSquare } from "lucide-react";
 import {
   collection,
   query,
@@ -46,6 +46,7 @@ const NOTIF_TYPE_LABELS = {
   "add collaborator": "Added as Collaborator",
   "task status update": "Task Status Update",
   "add task": "New Task Assigned",
+  // "add sub task": "New SubTask Assigned",
   "deadline_overdue": "Deadline Overdue",
 };
 
@@ -71,8 +72,11 @@ const TYPE_ICON_MAP = {
   "deadline_today": { icon: Calendar, color: "text-amber-600" },
   "deadline_reminder": { icon: Calendar, color: "text-blue-600" },
   "deadline_overdue": { icon: Calendar, color: "text-red-500" },
+  "task comment": { icon: MessageSquare, color: "text-teal-600" },
   "add task": { icon: ClipboardList, color: "text-teal-600" },
   "add collaborator": { icon: UserPlus, color: "text-indigo-600" },
+  "add subtask": { icon: ClipboardList, color: "text-teal-600" },
+  "add subtask collaborator": { icon: UserPlus, color: "text-indigo-600" },
   "task status update": { icon: Check, color: "text-purple-600" },
   "default": { icon: Bell, color: "text-gray-700" },
 };
@@ -307,9 +311,47 @@ export default function NotificationsPage() {
                       })()}
 
                       <div className="flex-1">
-                        {notif.type === "add task" ? (
+                        {notif.type === "task comment" ? (
+                          <>
+                            <h2 className="font-medium text-gray-900">New Comment</h2>
+                            <div className="text-sm text-gray-700">
+                              <span className="font-semibold">Task:</span> {notif.title || notif.taskTitle || "-"}
+                            </div>
+                            <div className="text-sm text-gray-700">
+                              <span className="font-semibold">Project:</span> {notif.projectName || "-"}
+                            </div>
+                            <div className="text-sm text-gray-700">
+                              <span className="font-semibold">Comment by:</span> {notif.author || notif.createdBy || "-"}
+                            </div>
+                            <div className="text-sm text-gray-700">
+                              <span className="font-semibold">Comment:</span> {notif.text || notif.message || "-"}
+                            </div>
+                            <div className="text-xs text-gray-400 mt-1">{notif.createdAt ? formatTimeAgo(notif.createdAt) : ""}</div>
+                          </>
+                        ) :
+                        // ...existing notification rendering blocks...
+                        notif.type === "add task" ? (
                           <>
                             <h2 className="font-medium text-gray-900">New Task Assigned</h2>
+                            <div className="text-sm text-gray-700">
+                              <span className="font-semibold">Task:</span> {notif.title || "-"}
+                            </div>
+                            <div className="text-sm text-gray-700">
+                              <span className="font-semibold">Project:</span> {notif.projectName || "-"}
+                            </div>
+                            <div className="text-sm text-gray-700">
+                              <span className="font-semibold">Assigned by:</span> {notif.assignedByName || "-"}
+                            </div>
+                            {notif.description && (
+                              <div className="text-sm text-gray-600 mt-1">
+                                <span className="font-semibold">Description:</span> {notif.description}
+                              </div>
+                            )}
+                            <div className="text-xs text-gray-400 mt-1">{notif.createdAt ? formatTimeAgo(notif.createdAt) : ""}</div>
+                          </>
+                        ) : notif.type === "add subtask" ? (
+                          <>
+                            <h2 className="font-medium text-gray-900">New SubTask Assigned</h2>
                             <div className="text-sm text-gray-700">
                               <span className="font-semibold">Task:</span> {notif.title || "-"}
                             </div>
@@ -345,6 +387,25 @@ export default function NotificationsPage() {
                             )}
                             <div className="text-xs text-gray-400 mt-1">{notif.createdAt ? formatTimeAgo(notif.createdAt) : ""}</div>
                           </>
+                        ) : notif.type === "add subtask collaborator" ? (
+                          <>
+                            <h2 className="font-medium text-gray-900">You've been added as a collaborator</h2>
+                            <div className="text-sm text-gray-700">
+                              <span className="font-semibold">Task:</span> {notif.title || "-"}
+                            </div>
+                            <div className="text-sm text-gray-700">
+                              <span className="font-semibold">Project:</span> {notif.projectName || "-"}
+                            </div>
+                            <div className="text-sm text-gray-700">
+                              <span className="font-semibold">Added by:</span> {notif.assignedByName || "-"}
+                            </div>
+                            {notif.description && (
+                              <div className="text-sm text-gray-600 mt-1">
+                                <span className="font-semibold">Description:</span> {notif.description}
+                              </div>
+                            )}
+                            <div className="text-xs text-gray-400 mt-1">{notif.createdAt ? formatTimeAgo(notif.createdAt) : ""}</div>
+                          </>
                         ) : notif.type === "task status update" ? (
                           <>
                             <h2 className="font-medium text-gray-900">Task status updated</h2>
@@ -359,9 +420,7 @@ export default function NotificationsPage() {
                           </>
                         ) : notif.type?.startsWith("deadline_") ? (
                           <>
-                            <h2 className="font-medium text-gray-900">
-                              {formatTypeLabel(notif.type)}
-                            </h2>
+                            <h2 className="font-medium text-gray-900">{formatTypeLabel(notif.type)}</h2>
                             <div className="text-sm text-gray-700">
                               <span className="font-semibold">Task:</span> {notif.title || "-"}
                             </div>

@@ -2427,7 +2427,7 @@ function StatusBadge({ status }) {
   return <span className={getStatusStyle(s)}>{label}</span>;
 }
 
-function toDate(v) {
+function toLocalDate(v) {
   if (!v) return null;
   if (v instanceof Date) return v;
   if (typeof v === "string" || typeof v === "number") return new Date(v);

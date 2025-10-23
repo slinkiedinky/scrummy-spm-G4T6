@@ -55,6 +55,43 @@ def standalone_comments_collection(task_id):
         }
         task_ref.collection('comments').document(comment_id).set(comment)
         comment['id'] = comment_id
+
+        # Notify assignee and collaborators
+        try:
+            from notifications import add_notification
+            task_doc = task_ref.get().to_dict()
+            assignee_id = task_doc.get('assigneeId') or task_doc.get('ownerId')
+            collaborators = task_doc.get('collaboratorsIds', [])
+            notified = set()
+            project_doc = db.collection('projects').document(task_doc.get('projectId')).get().to_dict() if task_doc.get('projectId') else None
+            notif_author = comment.get('author', author) or 'Unknown'
+            notif_project_name = project_doc['name'] if project_doc and 'name' in project_doc else 'Standalone'
+            notif = {
+                'userId': None,
+                'taskId': task_id,
+                'commentId': comment_id,
+                'type': 'task comment',
+                'icon': 'messageSquare',
+                'title': task_doc.get('title', '-') if task_doc else '-',
+                'projectName': notif_project_name,
+                'author': notif_author,
+                'message': f"{notif_author} has posted a new comment \"{comment.get('text', '-')}\"",
+                'text': comment.get('text', '-'),
+                'timestamp': comment.get('timestamp', '-')
+            }
+            print('DEBUG NOTIF PAYLOAD:', notif)
+            if assignee_id:
+                notif['userId'] = assignee_id
+                add_notification(notif, None)
+                notified.add(assignee_id)
+            for collab_id in collaborators:
+                if collab_id and collab_id not in notified:
+                    notif['userId'] = collab_id
+                    add_notification(notif, None)
+                    notified.add(collab_id)
+        except Exception as e:
+            print(f"Comment notification error: {e}")
+
         return jsonify(comment), 201
 
 # Standalone task comment item endpoints
@@ -76,25 +113,24 @@ def standalone_comment_item(task_id, comment_id):
         comment = doc.to_dict()
         comment['text'] = data.get('text', comment.get('text'))
         comment['edited'] = True
-        # Format edited_timestamp in SGT and ISO format
-        utc_now = datetime.utcnow()
-        sgt = pytz.timezone('Asia/Singapore')
-        sgt_now = pytz.utc.localize(utc_now).astimezone(sgt)
-        comment['edited_timestamp'] = sgt_now.isoformat()
-        # Update author if user_id changes
-        user_id = comment.get('user_id')
-        author = comment.get('author')
-        if user_id:
-            user_doc = db.collection('users').document(user_id).get()
-            if user_doc.exists:
-                user_data = user_doc.to_dict()
-                author = user_data.get('fullName') or user_data.get('name')
-            else:
-                author = None
-        comment['author'] = author
-        comment_ref.set(comment)
-        comment['id'] = comment_id
-        return jsonify(comment)
+    # Format edited_timestamp in SGT and ISO format
+    utc_now = datetime.utcnow()
+    sgt = pytz.timezone('Asia/Singapore')
+    comment['edited_timestamp'] = sgt_now.isoformat()
+    # Update author if user_id changes
+    user_id = comment.get('user_id')
+    author = comment.get('author')
+    if user_id:
+        user_doc = db.collection('users').document(user_id).get()
+        if user_doc.exists:
+            user_data = user_doc.to_dict()
+            author = user_data.get('fullName') or user_data.get('name')
+        else:
+            author = None
+    comment['author'] = author
+    comment_ref.set(comment)
+    comment['id'] = comment_id
+    return jsonify(comment)
     
     if request.method == 'DELETE':
         doc = comment_ref.get()
@@ -170,6 +206,44 @@ def comments_collection(task_id):
         }
         task_ref.collection('comments').document(comment_id).set(comment)
         comment['id'] = comment_id
+
+        # Notify assignee and collaborators
+        try:
+            from notifications import add_notification
+            task_doc = task_ref.get().to_dict()
+            assignee_id = task_doc.get('assigneeId') or task_doc.get('ownerId')
+            collaborators = task_doc.get('collaboratorsIds', [])
+            notified = set()
+            project_doc = db.collection('projects').document(project_id).get().to_dict() if project_id else None
+            notif_author = author or 'Unknown'
+            notif_project_name = project_doc['name'] if project_doc and 'name' in project_doc else 'Unknown Project'
+            notif = {
+                'userId': None,
+                'projectId': project_id,
+                'taskId': task_id,
+                'commentId': comment_id,
+                'type': 'task comment',
+                'icon': 'messageSquare',
+                'title': task_doc.get('title', '-') if task_doc else '-',
+                'projectName': notif_project_name,
+                'author': notif_author,
+                'message': comment.get('text', '-'),
+                'text': comment.get('text', '-'),
+                'timestamp': comment.get('timestamp', '-')
+            }
+            # print('DEBUG NOTIF PAYLOAD:', notif)
+            if assignee_id:
+                notif['userId'] = assignee_id
+                add_notification(notif, notif_project_name)
+                notified.add(assignee_id)
+            for collab_id in collaborators:
+                if collab_id and collab_id not in notified:
+                    notif['userId'] = collab_id
+                    add_notification(notif, notif_project_name)
+                    notified.add(collab_id)
+        except Exception as e:
+            print(f"Comment notification error: {e}")
+
         return jsonify(comment), 201
 
 @comments_bp.route('/tasks/<task_id>/comments/<comment_id>', methods=['PUT', 'DELETE', 'OPTIONS'])
@@ -192,7 +266,6 @@ def comment_item(task_id, comment_id):
         doc = comment_ref.get()
         if not doc.exists:
             return jsonify({'error': 'Comment not found'}), 404
-        comment = doc.to_dict()
         comment['text'] = data.get('text', comment.get('text'))
         comment['edited'] = True
         # Format edited_timestamp in SGT and ISO format

@@ -245,69 +245,87 @@ def list_tasks_across_projects():
 
 @projects_bp.route("/<project_id>/tasks", methods=["POST"])
 def create_task(project_id):
-  data = request.json or {}
-  now = now_utc()
-  assignee_id = data.get("assigneeId") or data.get("ownerId")
-  if not assignee_id: return jsonify({"error":"assigneeId is required"}), 400
+    data = request.json or {}
+    now = now_utc()
+    assignee_id = data.get("assigneeId") or data.get("ownerId")
+    if not assignee_id: return jsonify({"error":"assigneeId is required"}), 400
 
-  project_ref = db.collection("projects").document(project_id)
-  project_doc = project_ref.get()
-  if not project_doc.exists: return jsonify({"error":"Project not found"}), 404
+    project_ref = db.collection("projects").document(project_id)
+    project_doc = project_ref.get()
+    if not project_doc.exists: return jsonify({"error":"Project not found"}), 404
 
-  team_ids = ensure_list(project_doc.to_dict().get("teamIds"))
-  if assignee_id not in team_ids:
-    project_ref.update({"teamIds": firestore.ArrayUnion([assignee_id]), "updatedAt": now})
+    team_ids = ensure_list(project_doc.to_dict().get("teamIds"))
+    if assignee_id not in team_ids:
+        project_ref.update({"teamIds": firestore.ArrayUnion([assignee_id]), "updatedAt": now})
 
-  title = (data.get("title") or "Untitled task").strip() or "Untitled task"
-  description = (data.get("description") or "").strip()
-  due_date = data.get("dueDate") or None
+    title = (data.get("title") or "Untitled task").strip() or "Untitled task"
+    description = (data.get("description") or "").strip()
+    due_date = data.get("dueDate") or None
 
-  doc_data = {
-    "assigneeId": assignee_id,
-    "ownerId": assignee_id,
-    "collaboratorsIds": ensure_list(data.get("collaboratorsIds")),
-    "createdAt": now,
-    "description": description,
-    "dueDate": due_date,
-    "priority": canon_task_priority(data.get("priority")),
-    "status": canon_status(data.get("status")),
-    "title": title,
-    "updatedAt": now,
-    "tags": ensure_list(data.get("tags")),
-  }
-
-  task_ref = db.collection("projects").document(project_id).collection("tasks").add(doc_data)
-  task_id = task_ref[1].id
-
-  # Notify collaborators (unchanged behavior)
-  try:
-    from notifications import add_notification
-    project_name = project_doc.to_dict().get("name", "")
-    assigner_id = data.get("createdBy") or data.get("ownerId") or data.get("assigneeId")
-    assigner_name = assigner_id
-    try:
-      u = db.collection("users").document(assigner_id).get()
-      if u.exists:
-        ud = u.to_dict()
-        assigner_name = ud.get("fullName") or ud.get("displayName") or ud.get("name") or assigner_id
-    except Exception:
-      pass
-
-    base = {
-      "projectId": project_id, "taskId": task_id,
-      "title": title, "description": description,
-      "createdBy": assigner_id, "assignedByName": assigner_name,
-      "dueDate": due_date, "priority": doc_data["priority"], "status": doc_data["status"],
-      "tags": doc_data["tags"], "type": "add task", "icon": "clipboardlist",
+    doc_data = {
+        "assigneeId": assignee_id,
+        "ownerId": assignee_id,
+        "collaboratorsIds": ensure_list(data.get("collaboratorsIds")),
+        "createdAt": now,
+        "description": description,
+        "dueDate": due_date,
+        "priority": canon_task_priority(data.get("priority")),
+        "status": canon_status(data.get("status")),
+        "title": title,
+        "updatedAt": now,
+        "tags": ensure_list(data.get("tags")),
     }
-    for collab_id in doc_data["collaboratorsIds"]:
-      if collab_id and collab_id != assignee_id:
-        n = base.copy(); n["userId"] = collab_id; n["assigneeId"] = collab_id
-        add_notification(n, project_name)
-  except Exception as e:
-    print(f"Notification error: {e}")
 
-  return jsonify({"id": task_id, "message":"Task created"}), 201
+    task_ref = db.collection("projects").document(project_id).collection("tasks").add(doc_data)
+    task_id = task_ref[1].id
+
+    # Notify assignee and collaborators
+    try:
+        from notifications import add_notification
+        project_name = project_doc.to_dict().get("name", "")
+        assigner_id = data.get("createdBy") or data.get("ownerId") or data.get("assigneeId")
+        assigner_name = assigner_id
+        try:
+            u = db.collection("users").document(assigner_id).get()
+            if u.exists:
+                ud = u.to_dict()
+                assigner_name = ud.get("fullName") or ud.get("displayName") or ud.get("name") or assigner_id
+        except Exception:
+            pass
+
+        # Notify assignee (new task assigned)
+        assignee_notif = {
+            "userId": assignee_id,
+            "assigneeId": assignee_id,
+            "projectId": project_id,
+        "taskId": task_id,
+        "title": title,
+        "description": description,
+        "createdBy": assigner_id,
+        "assignedByName": assigner_name,
+        "dueDate": due_date,
+        "priority": doc_data["priority"],
+        "status": doc_data["status"],
+        "tags": doc_data["tags"],
+        "type": "add task",
+        "icon": "clipboardlist",
+        "message": f"You have been assigned a new task: {title}"
+    }
+        add_notification(assignee_notif, project_name)
+
+        # Notify collaborators (added as collaborator)
+        for collab_id in doc_data["collaboratorsIds"]:
+            if collab_id and collab_id != assignee_id:
+                collab_notif = assignee_notif.copy()
+                collab_notif["userId"] = collab_id
+                collab_notif["assigneeId"] = collab_id
+                collab_notif["type"] = "add collaborator"
+                collab_notif["message"] = f"You have been added as a collaborator to task: {title}"
+                add_notification(collab_notif, project_name)
+    except Exception as e:
+        print(f"Notification error: {e}")
+
+    return jsonify({"id": task_id, "message":"Task created"}), 201
 
 @projects_bp.route("/<project_id>/tasks/<task_id>", methods=["PUT"])
 def update_task_endpoint(project_id, task_id):
@@ -466,9 +484,58 @@ def create_subtask(project_id, task_id):
     }
     
     ref = parent_task_ref.collection("subtasks").add(doc)
+    subtask_id = ref[1].id
     update_parent_task_progress(project_id, task_id)
-    
-    return jsonify({"id": ref[1].id, "message": "Subtask created"}), 201
+
+    # Notify subtask assignee and collaborators
+    try:
+        from notifications import add_notification
+        project_name = project_doc.to_dict().get("name", "")
+        parent_title = parent_task_doc.to_dict().get("title", "")
+        assigner_id = doc.get("createdBy") or doc.get("ownerId") or doc.get("assigneeId")
+        assigner_name = assigner_id
+        try:
+            u = db.collection("users").document(assigner_id).get()
+            if u.exists:
+                ud = u.to_dict()
+                assigner_name = ud.get("fullName") or ud.get("displayName") or ud.get("name") or assigner_id
+        except Exception:
+            pass
+
+        # Notify assignee (new subtask assigned)
+        assignee_notif = {
+            "userId": doc["assigneeId"],
+            "assigneeId": doc["assigneeId"],
+            "projectId": project_id,
+            "taskId": task_id,
+            "subtaskId": subtask_id,
+            "title": doc["title"],
+            "description": doc["description"],
+            "createdBy": assigner_id,
+            "assignedByName": assigner_name,
+            "dueDate": doc["dueDate"],
+            "priority": doc["priority"],
+            "status": doc["status"],
+            "tags": doc["tags"],
+            "type": "add subtask",
+            "icon": "clipboardlist",
+            "message": f"You have been assigned a new subtask: {doc['title']} (Parent task: {parent_title})"
+        }
+        add_notification(assignee_notif, project_name)
+
+        # Notify collaborators (added as collaborator)
+        for collab_id in doc["collaboratorsIds"]:
+            if collab_id and collab_id != doc["assigneeId"]:
+                collab_notif = assignee_notif.copy()
+                collab_notif["userId"] = collab_id
+                collab_notif["assigneeId"] = collab_id
+                collab_notif["type"] = "add subtask collaborator"
+                collab_notif["message"] = f"You have been added as a collaborator to subtask: {doc['title']} (Parent task: {parent_title})"
+                add_notification(collab_notif, project_name)
+    except Exception as e:
+        print(f"Subtask notification error: {e}")
+
+    return jsonify({"id": subtask_id, "message": "Subtask created"}), 201
 # ============================================================================
 # STANDALONE TASKS (not associated with any project)
 # ============================================================================

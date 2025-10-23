@@ -43,11 +43,14 @@ function parseOldNewFromMessage(msg = "") {
 const NOTIF_TYPE_LABELS = {
   "deadline_today": "Deadline Today",
   "deadline_reminder": "Upcoming Deadline",
-  "add collaborator": "Added as Collaborator",
+  "add collaborator" : "Added as Collaborator",
+  "add subtask collaborator": "Added as SubTask Collaborator",
   "task status update": "Task Status Update",
   "add task": "New Task Assigned",
-  // "add sub task": "New SubTask Assigned",
+  "add sub task": "New SubTask Assigned",
   "deadline_overdue": "Deadline Overdue",
+  "task comment": "Task Comment",
+  "subtask comment": "SubTask Comment",
 };
 
 // formatTypeLabel: friendly label for types (fallback to Title Case)
@@ -73,6 +76,7 @@ const TYPE_ICON_MAP = {
   "deadline_reminder": { icon: Calendar, color: "text-blue-600" },
   "deadline_overdue": { icon: Calendar, color: "text-red-500" },
   "task comment": { icon: MessageSquare, color: "text-teal-600" },
+  "subtask comment": { icon: MessageSquare, color: "text-teal-600" },
   "add task": { icon: ClipboardList, color: "text-teal-600" },
   "add collaborator": { icon: UserPlus, color: "text-indigo-600" },
   "add subtask": { icon: ClipboardList, color: "text-teal-600" },
@@ -316,6 +320,23 @@ export default function NotificationsPage() {
                             <h2 className="font-medium text-gray-900">New Comment</h2>
                             <div className="text-sm text-gray-700">
                               <span className="font-semibold">Task:</span> {notif.title || notif.taskTitle || "-"}
+                            </div>
+                            <div className="text-sm text-gray-700">
+                              <span className="font-semibold">Project:</span> {notif.projectName || "-"}
+                            </div>
+                            <div className="text-sm text-gray-700">
+                              <span className="font-semibold">Comment by:</span> {notif.author || notif.createdBy || "-"}
+                            </div>
+                            <div className="text-sm text-gray-700">
+                              <span className="font-semibold">Comment:</span> {notif.text || notif.message || "-"}
+                            </div>
+                            <div className="text-xs text-gray-400 mt-1">{notif.createdAt ? formatTimeAgo(notif.createdAt) : ""}</div>
+                          </>
+                        ) : notif.type === "subtask comment" ? (
+                          <>
+                            <h2 className="font-medium text-gray-900">New Comment</h2>
+                            <div className="text-sm text-gray-700">
+                              <span className="font-semibold">SubTask:</span> {notif.title || notif.taskTitle || "-"}
                             </div>
                             <div className="text-sm text-gray-700">
                               <span className="font-semibold">Project:</span> {notif.projectName || "-"}

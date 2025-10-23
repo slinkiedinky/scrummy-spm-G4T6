@@ -39,6 +39,10 @@ import {
   addStandaloneComment,
   editStandaloneComment,
   deleteStandaloneComment,
+  listSubtaskComments,
+  addSubtaskComment,
+  editSubtaskComment,
+  deleteSubtaskComment,
 } from "@/lib/api";
 import { Input } from "@/components/ui/input";
 import {
@@ -168,12 +172,14 @@ export function TaskDetailModal({
     const isStandalone = task.projectId === "standalone" || task.isStandalone;
     const load = isStandalone
       ? listStandaloneComments(task.id)
+      : isSubtask
+      ? listSubtaskComments(task.projectId, task.parentTaskId, task.id)
       : listComments(task.projectId, task.id);
     Promise.resolve(load)
       .then(setComments)
       .catch(() => setComments([]))
       .finally(() => setLoadingComments(false));
-  }, [isOpen, task.id, task.projectId, task.isStandalone]);
+  }, [isOpen, task.id, task.projectId, task.isStandalone, isSubtask, task.parentTaskId]);
 
   const handleAddComment = async () => {
     if (!newComment.trim()) return;
@@ -185,6 +191,8 @@ export function TaskDetailModal({
       const isStandalone = task.projectId === "standalone" || task.isStandalone;
       const comment = isStandalone
         ? await addStandaloneComment(task.id, payload)
+        : isSubtask
+        ? await addSubtaskComment(task.projectId, task.parentTaskId, task.id, payload)
         : await addComment(task.projectId, task.id, payload);
       setComments((prev) => [...prev, comment]);
       setNewComment("");
@@ -200,6 +208,8 @@ export function TaskDetailModal({
       const isStandalone = task.projectId === "standalone" || task.isStandalone;
       const updated = isStandalone
         ? await editStandaloneComment(task.id, commentId, payload)
+        : isSubtask
+        ? await editSubtaskComment(task.projectId, task.parentTaskId, task.id, commentId, payload)
         : await editComment(task.projectId, task.id, commentId, payload);
       setComments((prev) => prev.map((c) => (c.id === commentId ? updated : c)));
       setEditingCommentId(null);
@@ -219,6 +229,8 @@ export function TaskDetailModal({
       const isStandalone = task.projectId === "standalone" || task.isStandalone;
       if (isStandalone) {
         await deleteStandaloneComment(task.id, deleteConfirmId);
+      } else if (isSubtask) {
+        await deleteSubtaskComment(task.projectId, task.parentTaskId, task.id, deleteConfirmId);
       } else {
         await deleteComment(task.projectId, task.id, deleteConfirmId);
       }

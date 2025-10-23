@@ -1,3 +1,4 @@
+
 from flask import Blueprint, request, jsonify
 from datetime import datetime
 import pytz
@@ -151,10 +152,14 @@ def comments_collection(task_id):
     if request.method == 'GET':
         # Check if project and task exist
         project_ref = db.collection('projects').document(project_id)
-        if not project_ref.get().exists:
+        project_exists = project_ref.get().exists
+        print(f"DEBUG: Project {project_id} exists: {project_exists}")
+        if not project_exists:
             return jsonify({'error': 'Project not found'}), 404
         task_ref = project_ref.collection('tasks').document(task_id)
-        if not task_ref.get().exists:
+        task_exists = task_ref.get().exists
+        print(f"DEBUG: Task {task_id} in project {project_id} exists: {task_exists}")
+        if not task_exists:
             return jsonify({'error': 'Task not found'}), 404
         # Query Firestore for comments ordered by timestamp ascending
         comments_ref = task_ref.collection('comments').order_by('timestamp', direction='ASCENDING')
@@ -177,10 +182,14 @@ def comments_collection(task_id):
     if request.method == 'POST':
         # Check if project and task exist
         project_ref = db.collection('projects').document(project_id)
-        if not project_ref.get().exists:
+        project_exists = project_ref.get().exists
+        print(f"DEBUG POST: Project {project_id} exists: {project_exists}")
+        if not project_exists:
             return jsonify({'error': 'Project not found'}), 404
         task_ref = project_ref.collection('tasks').document(task_id)
-        if not task_ref.get().exists:
+        task_exists = task_ref.get().exists
+        print(f"DEBUG POST: Task {task_id} in project {project_id} exists: {task_exists}")
+        if not task_exists:
             return jsonify({'error': 'Task not found'}), 404
         data = request.json
         comment_id = str(uuid.uuid4())
@@ -287,6 +296,163 @@ def comment_item(task_id, comment_id):
         comment_ref.set(comment)
         comment['id'] = comment_id
         return jsonify(comment)
+    if request.method == 'DELETE':
+        doc = comment_ref.get()
+        if not doc.exists:
+            return jsonify({'error': 'Comment not found'}), 404
+        comment_ref.delete()
+        return jsonify({'success': True})
+
+# Subtask comments endpoints
+@comments_bp.route('/tasks/<task_id>/subtasks/<subtask_id>/comments', methods=['GET', 'POST', 'OPTIONS'])
+def subtask_comments_collection(task_id, subtask_id):
+    project_id = request.args.get('project_id')
+    if not project_id:
+        return jsonify({'error': 'Missing project_id'}), 400
+    if request.method == 'OPTIONS':
+        return '', 200
+    # Check if project, task, and subtask exist
+    project_ref = db.collection('projects').document(project_id)
+    if not project_ref.get().exists:
+        return jsonify({'error': 'Project not found'}), 404
+    task_ref = project_ref.collection('tasks').document(task_id)
+    if not task_ref.get().exists:
+        return jsonify({'error': 'Task not found'}), 404
+    subtask_ref = task_ref.collection('subtasks').document(subtask_id)
+    if not subtask_ref.get().exists:
+        return jsonify({'error': 'Subtask not found'}), 404
+    if request.method == 'GET':
+        comments_ref = subtask_ref.collection('comments').order_by('timestamp', direction='ASCENDING')
+        comments = []
+        for doc in comments_ref.stream():
+            comment = doc.to_dict()
+            user_id = comment.get('user_id')
+            author = None
+            if user_id:
+                user_doc = db.collection('users').document(user_id).get()
+                if user_doc.exists:
+                    user_data = user_doc.to_dict()
+                    author = user_data.get('fullName') or user_data.get('name')
+                else:
+                    author = None
+            comment['author'] = author or 'Unknown'
+            comment['id'] = doc.id
+            comments.append(comment)
+        return jsonify(comments)
+    if request.method == 'POST':
+        data = request.json
+        comment_id = str(uuid.uuid4())
+        user_id = data.get('user_id')
+        author = None
+        if user_id:
+            user_doc = db.collection('users').document(user_id).get()
+            if user_doc.exists:
+                user_data = user_doc.to_dict()
+                author = user_data.get('fullName') or user_data.get('name')
+            else:
+                author = None
+        utc_now = datetime.utcnow()
+        sgt = pytz.timezone('Asia/Singapore')
+        sgt_now = pytz.utc.localize(utc_now).astimezone(sgt)
+        comment = {
+            'user_id': user_id,
+            'author': author or 'Unknown',
+            'text': data.get('text'),
+            'timestamp': sgt_now.isoformat(),
+            'edited': False
+        }
+        subtask_ref.collection('comments').document(comment_id).set(comment)
+        comment['id'] = comment_id
+
+        # Notify subtask assignee and collaborators
+        try:
+            from notifications import add_notification
+            subtask_doc = subtask_ref.get().to_dict()
+            assignee_id = subtask_doc.get('assigneeId') or subtask_doc.get('ownerId')
+            collaborators = subtask_doc.get('collaboratorsIds', [])
+            notified = set()
+            project_doc = db.collection('projects').document(project_id).get().to_dict() if project_id else None
+            notif_author = comment['author']
+            notif_project_name = project_doc['name'] if project_doc and 'name' in project_doc else 'Unknown Project'
+            notif = {
+                'userId': None,
+                'projectId': project_id,
+                'taskId': task_id,
+                'subtaskId': subtask_id,
+                'commentId': comment_id,
+                'type': 'subtask comment',
+                'icon': 'messageSquare',
+                'title': subtask_doc.get('title', '-') if subtask_doc else '-',
+                'projectName': notif_project_name,
+                'author': notif_author,
+                'message': comment.get('text', '-'),
+                'text': comment.get('text', '-') ,
+                'timestamp': comment.get('timestamp', '-')
+            }
+            print('DEBUG SUBTASK COMMENT NOTIF:', notif)
+            if assignee_id:
+                notif['userId'] = assignee_id
+                add_notification(notif, notif_project_name)
+                notified.add(assignee_id)
+            for collab_id in collaborators:
+                if collab_id and collab_id not in notified:
+                    notif['userId'] = collab_id
+                    add_notification(notif, notif_project_name)
+                    notified.add(collab_id)
+        except Exception as e:
+            print(f"Subtask comment notification error: {e}")
+
+        return jsonify(comment), 201
+
+# Subtask comment item endpoints (PUT, DELETE)
+@comments_bp.route('/tasks/<task_id>/subtasks/<subtask_id>/comments/<comment_id>', methods=['PUT', 'DELETE', 'OPTIONS'])
+def subtask_comment_item(task_id, subtask_id, comment_id):
+    project_id = request.args.get('project_id')
+    if not project_id:
+        return jsonify({'error': 'Missing project_id'}), 400
+    if request.method == 'OPTIONS':
+        return '', 200
+    # Check if project, task, and subtask exist
+    project_ref = db.collection('projects').document(project_id)
+    if not project_ref.get().exists:
+        return jsonify({'error': 'Project not found'}), 404
+    task_ref = project_ref.collection('tasks').document(task_id)
+    if not task_ref.get().exists:
+        return jsonify({'error': 'Task not found'}), 404
+    subtask_ref = task_ref.collection('subtasks').document(subtask_id)
+    if not subtask_ref.get().exists:
+        return jsonify({'error': 'Subtask not found'}), 404
+    
+    comment_ref = subtask_ref.collection('comments').document(comment_id)
+    
+    if request.method == 'PUT':
+        data = request.json
+        doc = comment_ref.get()
+        if not doc.exists:
+            return jsonify({'error': 'Comment not found'}), 404
+        comment = doc.to_dict()
+        comment['text'] = data.get('text', comment.get('text'))
+        comment['edited'] = True
+        # Format edited_timestamp in SGT and ISO format
+        utc_now = datetime.utcnow()
+        sgt = pytz.timezone('Asia/Singapore')
+        sgt_now = pytz.utc.localize(utc_now).astimezone(sgt)
+        comment['edited_timestamp'] = sgt_now.isoformat()
+        # update author if user_id changes
+        user_id = comment.get('user_id')
+        author = comment.get('author')
+        if user_id:
+            user_doc = db.collection('users').document(user_id).get()
+            if user_doc.exists:
+                user_data = user_doc.to_dict()
+                author = user_data.get('fullName') or user_data.get('name')
+            else:
+                author = None
+        comment['author'] = author or 'Unknown'
+        comment_ref.set(comment)
+        comment['id'] = comment_id
+        return jsonify(comment)
+    
     if request.method == 'DELETE':
         doc = comment_ref.get()
         if not doc.exists:

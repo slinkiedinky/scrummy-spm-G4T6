@@ -64,6 +64,41 @@ export async function deleteComment(projectId, taskId, commentId) {
   if (!r.ok) throw new Error(`Failed to delete comment (${r.status})`);
   return r.json();
 }
+
+// ---- Subtask Comments ----
+export async function listSubtaskComments(projectId, taskId, subtaskId) {
+  const r = await fetch(`${API}/tasks/${taskId}/subtasks/${subtaskId}/comments?project_id=${projectId}`, { cache: "no-store" });
+  if (!r.ok) throw new Error(`Failed to load subtask comments (${r.status})`);
+  return r.json();
+}
+
+export async function addSubtaskComment(projectId, taskId, subtaskId, payload) {
+  const r = await fetch(`${API}/tasks/${taskId}/subtasks/${subtaskId}/comments?project_id=${projectId}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!r.ok) throw new Error(`Failed to add subtask comment (${r.status})`);
+  return r.json();
+}
+
+export async function editSubtaskComment(projectId, taskId, subtaskId, commentId, payload) {
+  const r = await fetch(`${API}/tasks/${taskId}/subtasks/${subtaskId}/comments/${commentId}?project_id=${projectId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!r.ok) throw new Error(`Failed to edit subtask comment (${r.status})`);
+  return r.json();
+}
+
+export async function deleteSubtaskComment(projectId, taskId, subtaskId, commentId) {
+  const r = await fetch(`${API}/tasks/${taskId}/subtasks/${subtaskId}/comments/${commentId}?project_id=${projectId}`, {
+    method: "DELETE" });
+  if (!r.ok) throw new Error(`Failed to delete subtask comment (${r.status})`);
+  return r.json();
+}
+
 const API = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:5000/api";
 
 // ---- Projects ----

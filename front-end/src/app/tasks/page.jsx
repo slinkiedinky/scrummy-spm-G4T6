@@ -486,7 +486,7 @@ export default function TasksPage() {
       await loadTasks(currentUser.uid);
     } catch (error) {
       console.error("Failed to create standalone task:", error);
-      throw error;
+      toast.error(error?.message || "Failed to create standalone task");
     }
   };
   useEffect(() => {
@@ -1062,23 +1062,35 @@ export default function TasksPage() {
       const isSubtask =
         deleteCandidate.isSubtask || deleteCandidate.parentTaskId;
 
-      if (isSubtask && deleteCandidate.parentTaskId) {
-        // Delete as subtask
-        await deleteSubtask(
-          deleteCandidate.projectId,
-          deleteCandidate.parentTaskId,
-          deleteCandidate.id
-        );
+      if (isStandalone) {
+        // Delete standalone task or subtask
+        if (isSubtask && deleteCandidate.parentTaskId) {
+          await deleteStandaloneSubtask(
+            deleteCandidate.parentTaskId,
+            deleteCandidate.id
+          );
+        } else {
+          await deleteStandaloneTask(deleteCandidate.id);
+        }
       } else {
-        // Delete as regular task
-        await deleteTask(deleteCandidate.projectId, deleteCandidate.id);
+        // Delete project task or subtask
+        if (isSubtask && deleteCandidate.parentTaskId) {
+          await deleteSubtask(
+            deleteCandidate.projectId,
+            deleteCandidate.parentTaskId,
+            deleteCandidate.id
+          );
+        } else {
+          await deleteTask(deleteCandidate.projectId, deleteCandidate.id);
+        }
       }
+
       if (isStandalone) {
         toast.success(
-          isSubtask ? "Standalone subtask updated!" : "Standalone task updated!"
+          isSubtask ? "Standalone subtask deleted!" : "Standalone task deleted!"
         );
       } else {
-        toast.success(isSubtask ? "Subtask updated!" : "Task updated!");
+        toast.success(isSubtask ? "Subtask deleted!" : "Task deleted!");
       }
 
       await loadTasks(currentUser.uid);

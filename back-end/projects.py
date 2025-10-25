@@ -7,7 +7,8 @@ from datetime import datetime, timezone
 # ✅ Use the SAME db client everywhere
 from firebase import db
 from google.cloud import firestore  # for FieldFilter, ArrayUnion
-from status_notifications import create_status_change_notifications
+from status_notifications import create_status_change_notifications, _get_user_display_name, _unique_non_null
+from notifications import add_notification
 
 projects_bp = Blueprint("projects", __name__)
 
@@ -393,9 +394,98 @@ def update_task(project_id, task_id, updates, updated_by=None):
     # ...existing return/value...
 @projects_bp.route("/<project_id>/tasks/<task_id>", methods=["DELETE"])
 def delete_task(project_id, task_id):
-    db.collection("projects").document(project_id).collection("tasks").document(task_id).delete()
-    return jsonify({"message": "Task deleted"}), 200
+    """
+    Delete a task and create notifications for assignee/project owner/collaborators.
+    Accept deletedBy from JSON body, query param, or X-User-Id header.
+    This version contains extra logging for debugging.
+    """
+    try:
+        # Log raw request bytes + content-type so we can see if JSON was parsed
+        raw = request.get_data(as_text=True)
+        print(f"[projects.delete_task] raw_request_body: {raw!r}")
+        print(f"[projects.delete_task] content_type: {request.headers.get('Content-Type')}")
+        print(f"[projects.delete_task] request.args: {dict(request.args)}")
+        print(f"[projects.delete_task] request.headers X-User-Id: {request.headers.get('X-User-Id')}")
 
+        payload = request.json or {}
+        print(f"[projects.delete_task] parsed json: {payload}")
+
+        deleted_by = (
+            payload.get("deletedBy")
+            or payload.get("updatedBy")
+            or payload.get("userId")
+            or payload.get("currentUserId")
+            or request.args.get("deletedBy")
+            or request.headers.get("X-User-Id")
+        )
+        print(f"[projects.delete_task] resolved deleted_by: {deleted_by}")
+
+        task_ref = db.collection("projects").document(project_id).collection("tasks").document(task_id)
+        task_doc = task_ref.get()
+        if not task_doc.exists:
+            print(f"[projects.delete_task] task not found: {project_id}/{task_id}")
+            return jsonify({"error": "Task not found"}), 404
+        task = task_doc.to_dict() or {}
+
+        proj_doc = db.collection("projects").document(project_id).get()
+        project = proj_doc.to_dict() if proj_doc.exists else {}
+        project_name = project.get("name", "")
+        project_owner = project.get("ownerId") or project.get("createdBy")
+
+        assignee = task.get("assigneeId")
+        collaborators = task.get("collaboratorsIds", []) or []
+
+        recipients = list(_unique_non_null([assignee, project_owner] + list(collaborators) + ([deleted_by] if deleted_by else [])))
+        print(f"[projects.delete_task] recipients: {recipients}")
+
+        actor_name = _get_user_display_name(deleted_by) if deleted_by else "Someone"
+        title = task.get("title", "Untitled Task")
+        notif_type = "task deleted"
+
+        created_any = 0
+        for user_id in recipients:
+            try:
+                if deleted_by and user_id == deleted_by:
+                    message = f"You deleted task '{title}'."
+                else:
+                    message = f"{actor_name} deleted task '{title}'."
+
+                # build payload: keep title as the task name (frontend expects this)
+                # keep title as the task name and include projectName so the UI shows:
+                # Header from type ("Task deleted"), then "Task: {title}" and "Project: {projectName}"
+                notif_data = {
+                    "projectId": project_id,
+                    "projectName": project_name,
+                    "taskId": task_id,
+                    "title": title,                       # task name (frontend shows this as Task:)
+                    "taskTitle": title,                   # extra explicit field (safe)
+                    "description": task.get("description", ""),
+                    "userId": user_id,
+                    "assigneeId": task.get("assigneeId"),
+                    "priority": task.get("priority"),
+                    "status": task.get("status"),
+                    "type": notif_type,                   # "task deleted"
+                    "message": message,
+                    "icon": "trash",
+                    "meta": {"deletedBy": deleted_by, "deletedByName": actor_name},
+                }
+
+                add_notification(notif_data, project_name)
+                created_any += 1
+                print(f"[projects.delete_task] add_notification succeeded for {user_id}")
+            except Exception as e:
+                print(f"[projects.delete_task] add_notification FAILED for {user_id}: {e}")
+
+        print(f"[projects.delete_task] notifications created: {created_any}/{len(recipients)}")
+
+        # delete after notifications queued
+        task_ref.delete()
+        print(f"[projects.delete_task] task deleted: {project_id}/{task_id}")
+        return jsonify({"message": "Task deleted"}), 200
+
+    except Exception as e:
+        print(f"[projects.delete_task] fatal error: {e}")
+        return jsonify({"error": "Internal server error"}), 500
 # -------- Subtasks --------
 
 @projects_bp.route("/<project_id>/tasks/<task_id>/subtasks", methods=["GET"])
@@ -844,7 +934,6 @@ def update_standalone_task_progress(task_id):
                 updates["status"] = "completed"
     
     task_ref.update(updates)
-
 @projects_bp.route("/<project_id>/tasks/<task_id>/subtasks/<subtask_id>", methods=["PUT"])
 @cross_origin()
 def update_subtask(project_id, task_id, subtask_id):

@@ -495,6 +495,7 @@ export function TaskDetailModal({
                   Edit
                 </Button>
                 <Button
+                  aria-label="Delete task"
                   size="sm"
                   variant="outline"
                   disabled={disableActions || typeof onDelete !== "function"}
@@ -792,10 +793,10 @@ export function TaskDetailModal({
                       </div>
                       {comment.user_id === currentUserId && editingCommentId !== comment.id && (
                         <div className="flex flex-col gap-1">
-                          <Button size="xs" variant="ghost" onClick={() => { setEditingCommentId(comment.id); setEditingText(comment.text); }}>
+                          <Button aria-label="Edit comment" size="xs" variant="ghost" onClick={() => { setEditingCommentId(comment.id); setEditingText(comment.text); }}>
                             <Edit className="h-4 w-4" />
                           </Button>
-                          <Button size="xs" variant="ghost" onClick={() => handleDeleteComment(comment.id)}>
+                          <Button aria-label="Delete comment" size="xs" variant="ghost" onClick={() => handleDeleteComment(comment.id)}>
                             <Trash2 className="h-4 w-4 text-destructive" />
                           </Button>
                         </div>

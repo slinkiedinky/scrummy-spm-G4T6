@@ -17,8 +17,14 @@ jest.mock('@/components/ui/badge', () => ({
 }))
 
 jest.mock('@/components/ui/button', () => ({
-  Button: ({ children, onClick, disabled, size, variant }) => (
-    <button onClick={onClick} disabled={disabled} data-size={size} data-variant={variant}>
+  Button: ({ children, onClick, disabled, size, variant, 'aria-label': ariaLabel }) => (
+    <button 
+      onClick={onClick} 
+      disabled={disabled} 
+      data-size={size} 
+      data-variant={variant}
+      aria-label={ariaLabel}
+    >
       {children}
     </button>
   ),
@@ -107,6 +113,7 @@ jest.mock('@/lib/api', () => ({
   addStandaloneComment: jest.fn(() => Promise.resolve({ id: 'new-standalone-comment' })),
   editStandaloneComment: jest.fn(() => Promise.resolve({})),
   deleteStandaloneComment: jest.fn(() => Promise.resolve({})),
+  listSubtaskComments: jest.fn(() => Promise.resolve([])), // ADD THIS LINE
 }))
 
 // Mock sonner
@@ -464,19 +471,26 @@ describe('TaskDetailModal Component', () => {
         expect(screen.getByText('Test comment')).toBeInTheDocument()
       })
 
-      // Click delete but don't confirm
+      // Click delete button to open confirmation dialog
       const deleteButton = screen.getByLabelText('Delete comment')
       await user.click(deleteButton)
 
-      // Should show confirmation state but not delete yet
-      expect(screen.getByText('Confirm Delete')).toBeInTheDocument()
+      // Should show confirmation dialog
+      await waitFor(() => {
+        expect(screen.getByText('Delete Comment')).toBeInTheDocument()
+        expect(screen.getByText('Are you sure you want to delete this comment? This action cannot be undone.')).toBeInTheDocument()
+      })
       
-      // Cancel deletion
-      await user.click(deleteButton) // Click again to cancel
+      // Click Cancel button to dismiss dialog
+      const cancelButton = screen.getByRole('button', { name: /cancel/i })
+      await user.click(cancelButton)
       
       // Should not call delete API
       const { deleteComment } = require('@/lib/api')
       expect(deleteComment).not.toHaveBeenCalled()
+      
+      // Comment should still be visible
+      expect(screen.getByText('Test comment')).toBeInTheDocument()
     })
   })
 

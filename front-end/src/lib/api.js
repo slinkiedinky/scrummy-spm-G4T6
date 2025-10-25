@@ -1,3 +1,5 @@
+import { auth } from "./firebase";
+
 // ---- Standalone Task Comments ----
 export async function listStandaloneComments(taskId) {
   const r = await fetch(`${API}/standalone-tasks/${taskId}/comments`, { cache: "no-store" });
@@ -238,13 +240,22 @@ export const createTask = async (projectId, payload) => {
 };
 
 export const updateTask = async (projectId, taskId, patch) => {
-  const r = await fetch(`${API}/projects/${projectId}/tasks/${taskId}`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(patch),
-  });
-  if (!r.ok) throw new Error("Update task failed");
-  return r.json();
+    try {
+        const user = auth?.currentUser;
+        if (user && !patch?.updatedBy && !patch?.userId && !patch?.currentUserId) {
+            patch = { ...patch, updatedBy: user.uid };
+        }
+    } catch (e) {
+        // best-effort
+    }
+
+    const r = await fetch(`${API}/projects/${projectId}/tasks/${taskId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+    });
+    if (!r.ok) throw new Error("Update task failed");
+    return r.json();
 };
 
 export const deleteTask = async (projectId, taskId) => {

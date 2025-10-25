@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { Bell, Calendar, Check, X, ClipboardList, UserPlus, MessageSquare } from "lucide-react";
+import { Trash } from "lucide-react";
 import {
   collection,
   query,
@@ -46,6 +47,7 @@ const NOTIF_TYPE_LABELS = {
   "add collaborator" : "Added as Collaborator",
   "add subtask collaborator": "Added as SubTask Collaborator",
   "task status update": "Task Status Update",
+  "task deleted": "Task Deleted",
   "add task": "New Task Assigned",
   "add sub task": "New SubTask Assigned",
   "deadline_overdue": "Deadline Overdue",
@@ -82,6 +84,7 @@ const TYPE_ICON_MAP = {
   "add subtask": { icon: ClipboardList, color: "text-teal-600" },
   "add subtask collaborator": { icon: UserPlus, color: "text-indigo-600" },
   "task status update": { icon: Check, color: "text-purple-600" },
+  "task deleted": { icon: Trash, color: "text-gray-700" },
   "default": { icon: Bell, color: "text-gray-700" },
 };
 
@@ -315,7 +318,23 @@ export default function NotificationsPage() {
                       })()}
 
                       <div className="flex-1">
-                        {notif.type === "task comment" ? (
+                        {/*
+                          Dedicated rendering for "task deleted" so header reads "Task deleted"
+                          and the card shows Task: {title} and Project: {projectName}
+                        */}
+                        {notif.type === "task deleted" ? (
+                          <>
+                            <h2 className="font-medium text-gray-900">Task deleted</h2>
+                            <div className="text-sm text-gray-700">
+                              <span className="font-semibold">Task:</span> {notif.title || notif.taskTitle || "-"}
+                            </div>
+                            <div className="text-sm text-gray-700">
+                              <span className="font-semibold">Project:</span> {notif.projectName || "-"}
+                            </div>
+                            {notif.message && <div className="text-sm text-gray-600 mt-1">{notif.message}</div>}
+                            <div className="text-xs text-gray-400 mt-1">{notif.createdAt ? formatTimeAgo(notif.createdAt) : ""}</div>
+                          </>
+                        ) : notif.type === "task comment" ? (
                           <>
                             <h2 className="font-medium text-gray-900">New Comment</h2>
                             <div className="text-sm text-gray-700">
@@ -349,9 +368,7 @@ export default function NotificationsPage() {
                             </div>
                             <div className="text-xs text-gray-400 mt-1">{notif.createdAt ? formatTimeAgo(notif.createdAt) : ""}</div>
                           </>
-                        ) :
-                        // ...existing notification rendering blocks...
-                        notif.type === "add task" ? (
+                        ) : notif.type === "add task" ? (
                           <>
                             <h2 className="font-medium text-gray-900">New Task Assigned</h2>
                             <div className="text-sm text-gray-700">

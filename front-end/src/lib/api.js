@@ -259,11 +259,22 @@ export const updateTask = async (projectId, taskId, patch) => {
 };
 
 export const deleteTask = async (projectId, taskId) => {
-  const r = await fetch(`${API}/projects/${projectId}/tasks/${taskId}`, {
-    method: "DELETE",
-  });
-  if (!r.ok) throw new Error("Delete task failed");
-  return r.json();
+    // include current user id so backend can personalize notifications
+    const payload = {};
+    try {
+        const user = auth?.currentUser;
+        if (user) payload.deletedBy = user.uid;
+    } catch (e) {
+        /* best-effort */
+    }
+
+    const r = await fetch(`${API}/projects/${projectId}/tasks/${taskId}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+    });
+    if (!r.ok) throw new Error("Delete task failed");
+    return r.json();
 };
 
 export const listAssignedTasks = async (params = {}) => {

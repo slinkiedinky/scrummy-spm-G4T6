@@ -136,6 +136,11 @@ export const ensureProjectPriority = (value) => {
 };
 
 export const getPriorityBadgeClass = (value) => {
+  // Check for null/undefined/empty first
+  if (value === null || value === undefined || value === "") {
+    return `${TAG_BASE} bg-muted text-muted-foreground border border-border/50`;
+  }
+  
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) {
     return `${TAG_BASE} bg-muted text-muted-foreground border border-border/50`;
@@ -176,13 +181,16 @@ export const createEmptyTaskForm = (uid = "") => ({
 
 export const toDateInputValue = (value) => {
   if (!value) return "";
-
   const date = toDate(value);
-  if (!date) return "";
+  
+  // Check if date is null OR invalid
+  if (!date || isNaN(date.getTime())) {
+    return "";
+  }
+  
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
-
   return `${year}-${month}-${day}`;
 };
 
@@ -1135,14 +1143,12 @@ export default function ProjectDetailPage() {
       setStatus("unauthorized");
       return;
     }
-
-    if (project && !project.teamIds.includes(user.uid)) {
+    if (project && !project.teamIds?.includes(user.uid) && project.ownerId !== user.uid) {
       setStatus("unauthorized");
       return;
     }
     setStatus("authorized");
   });
-
   return () => unsubscribe();
 }, [project]);
 

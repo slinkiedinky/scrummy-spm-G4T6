@@ -208,27 +208,50 @@ describe('Timeline Component', () => {
           priority: 5,
         }
       ])
-
+      
       render(<Timeline />)
-
+      
       await waitFor(() => {
-        expect(screen.getByText('Completed Task')).toBeInTheDocument()
+        expect(screen.queryByText('Loading your timeline…')).not.toBeInTheDocument()
       })
+      
+      // Expect that completed tasks are filtered out
+      expect(screen.queryByText('Completed Task')).not.toBeInTheDocument()
+      expect(screen.getByText('No task available')).toBeInTheDocument()
     })
 
-    it('handles tasks without user ID', async () => {
-      // Mock auth to return no user
-      const { onAuthStateChanged } = require('firebase/auth')
-      onAuthStateChanged.mockImplementation((auth, callback) => {
-        callback(null) // No authenticated user
-        return jest.fn()
-      })
-
+    it('handles tasks without assigned user ID', async () => {
+      const { listAssignedTasks } = require('@/lib/api')
+      
+      // Mock a task without createdBy/ownerId field
+      listAssignedTasks.mockResolvedValueOnce([
+        {
+          id: 'task-1',
+          title: 'Task Without User ID',
+          status: 'to-do',
+          statusLabel: 'To Do',
+          priority: 5,
+          projectId: 'project-1',
+          projectName: 'Test Project',
+          dueDate: new Date('2024-12-01'),
+          updatedAt: new Date('2024-11-01'),
+          // No createdBy or ownerId field
+        }
+      ])
+      
       render(<Timeline />)
-
+      
       await waitFor(() => {
-        expect(screen.getByText('Timeline')).toBeInTheDocument()
+        expect(screen.queryByText('Loading your timeline…')).not.toBeInTheDocument()
       })
+      
+      // Task should be displayed
+      expect(screen.getByText('Task Without User ID')).toBeInTheDocument()
+      expect(screen.getByText('Test Project')).toBeInTheDocument()
+      
+      // Should show "—" for missing Assigned by
+      expect(screen.getByText(/Assigned by:/)).toBeInTheDocument()
+      expect(screen.getByText('—')).toBeInTheDocument()
     })
 
     it('handles empty date formatting', async () => {

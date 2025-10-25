@@ -30,10 +30,21 @@ export function TeamCalendar({ teamMembers = [], currentUser, projectId }) {
 
   // Fetch user details
   useEffect(() => {
+    // Handle empty or missing teamMembers immediately
+    if (!teamMembers || teamMembers.length === 0) {
+      setLoading(false);
+      setUsers({});
+      return;
+    }
+
     const fetchUsers = async () => {
       setLoading(true);
       const userDetails = {};
-      for (const memberId of teamMembers) {
+      
+      // Filter out null, undefined, or empty string memberIds
+      const validMemberIds = teamMembers.filter(memberId => memberId);
+      
+      for (const memberId of validMemberIds) {
         try {
           const userDoc = await getDoc(doc(db, "users", memberId));
           if (userDoc.exists()) {
@@ -47,16 +58,23 @@ export function TeamCalendar({ teamMembers = [], currentUser, projectId }) {
       setLoading(false);
     };
 
-    if (teamMembers.length > 0) {
-      fetchUsers();
-    }
-  }, [teamMembers]);
+    fetchUsers();
+  }, [teamMembers.length]); // Only depend on length
 
   // Get user display name
   const getUserName = (userId) => {
-    const user = users[userId];
-    return user?.fullName || user?.name || user?.displayName || `User ${userId?.slice(0, 8)}`;
-  };
+  // Handle null, undefined, or empty string userId
+  if (!userId) {
+    return 'Unknown User';
+  }
+  
+  const user = users[userId];
+  
+  // If userId is not a string, convert it to string for the fallback
+  const userIdStr = typeof userId === 'string' ? userId : String(userId);
+  
+  return user?.fullName || user?.name || user?.displayName || `User ${userIdStr.slice(0, 8)}`;
+};
 
   // Get user email
   const getUserEmail = (userId) => {
@@ -106,6 +124,11 @@ export function TeamCalendar({ teamMembers = [], currentUser, projectId }) {
   // Show team members grid
   return (
     <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center gap-2">
+        <CalendarIcon className="h-6 w-6" />
+        <h2 className="text-2xl font-semibold">Team Calendar</h2>
+      </div>
       {/* Team Members Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {teamMembers.map((memberId) => {

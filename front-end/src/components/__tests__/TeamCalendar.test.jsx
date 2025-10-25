@@ -335,7 +335,9 @@ describe('TeamCalendar Component', () => {
         />
       )
 
-      expect(screen.getByText('Team Calendar')).toBeInTheDocument()
+      await waitFor(() => {
+        expect(screen.getByText('Team Calendar')).toBeInTheDocument()
+      })
     })
 
     it('handles tasks with Firestore timestamp dueDate', async () => {
@@ -495,7 +497,7 @@ describe('TeamCalendar Component', () => {
       })
     })
 
-    it('handles missing or null projectId', () => {
+    it('handles missing or null projectId', async () => {
       render(
         <TeamCalendar
           teamMembers={mockTeamMembers}
@@ -504,10 +506,13 @@ describe('TeamCalendar Component', () => {
         />
       )
 
-      expect(screen.getByText('Team Calendar')).toBeInTheDocument()
+      await waitFor(() => {
+        expect(screen.getByText('Team Calendar')).toBeInTheDocument()
+      })
     })
 
-    it('handles missing or null memberId in team members', () => {
+
+    it('handles missing or null memberId in team members', async () => {
       const teamMembersWithNullId = [
         { id: null, fullName: 'Member With Null ID' },
         { id: '', fullName: 'Member With Empty ID' },
@@ -522,7 +527,9 @@ describe('TeamCalendar Component', () => {
         />
       )
 
-      expect(screen.getByText('Team Calendar')).toBeInTheDocument()
+      await waitFor(() => {
+        expect(screen.getByText('Team Calendar')).toBeInTheDocument()
+      })
     })
   })
 })

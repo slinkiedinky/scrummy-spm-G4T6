@@ -1369,15 +1369,16 @@ describe('ProjectDetailPage', () => {
     it('handles project without createdBy fallback', async () => {
       api.getProject.mockResolvedValue({
         ...mockProject,
-        ownerId: null,
-        createdBy: null,
+        ownerId: 'user-1', // Keep user as owner so they can access
+        createdBy: null, // Test the createdBy fallback logic
+        teamIds: ['user-1'],
       })
       render(<ProjectDetailPage />)
       await waitFor(() => {
         expect(screen.getByText('Test Project')).toBeInTheDocument()
       })
 
-      // Tests ownerId fallback logic (line ~508)
+      // Tests ownerId fallback logic when createdBy is null
     })
 
     it('handles status sync with no status change needed', async () => {

@@ -114,25 +114,26 @@ def standalone_comment_item(task_id, comment_id):
         comment = doc.to_dict()
         comment['text'] = data.get('text', comment.get('text'))
         comment['edited'] = True
-    # Format edited_timestamp in SGT and ISO format
-    utc_now = datetime.utcnow()
-    sgt = pytz.timezone('Asia/Singapore')
-    comment['edited_timestamp'] = sgt_now.isoformat()
-    # Update author if user_id changes
-    user_id = comment.get('user_id')
-    author = comment.get('author')
-    if user_id:
-        user_doc = db.collection('users').document(user_id).get()
-        if user_doc.exists:
-            user_data = user_doc.to_dict()
-            author = user_data.get('fullName') or user_data.get('name')
-        else:
-            author = None
-    comment['author'] = author
-    comment_ref.set(comment)
-    comment['id'] = comment_id
-    return jsonify(comment)
-    
+        # Format edited_timestamp in SGT and ISO format
+        utc_now = datetime.utcnow()
+        sgt = pytz.timezone('Asia/Singapore')
+        sgt_now = pytz.utc.localize(utc_now).astimezone(sgt)
+        comment['edited_timestamp'] = sgt_now.isoformat()
+        # Update author if user_id changes
+        user_id = comment.get('user_id')
+        author = comment.get('author')
+        if user_id:
+            user_doc = db.collection('users').document(user_id).get()
+            if user_doc.exists:
+                user_data = user_doc.to_dict()
+                author = user_data.get('fullName') or user_data.get('name')
+            else:
+                author = None
+        comment['author'] = author
+        comment_ref.set(comment)
+        comment['id'] = comment_id
+        return jsonify(comment)
+
     if request.method == 'DELETE':
         doc = comment_ref.get()
         if not doc.exists:
@@ -275,6 +276,7 @@ def comment_item(task_id, comment_id):
         doc = comment_ref.get()
         if not doc.exists:
             return jsonify({'error': 'Comment not found'}), 404
+        comment = doc.to_dict()
         comment['text'] = data.get('text', comment.get('text'))
         comment['edited'] = True
         # Format edited_timestamp in SGT and ISO format

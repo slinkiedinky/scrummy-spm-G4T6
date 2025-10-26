@@ -653,4 +653,616 @@ describe('TaskDetailModal Component', () => {
       expect(screen.getByText('2')).toBeInTheDocument()
     })
   })
+
+  describe('getUserInfo utility function coverage', () => {
+    it('handles user with fullName', async () => {
+      const { getDoc } = require('firebase/firestore')
+      getDoc.mockResolvedValueOnce({
+        exists: () => true,
+        data: () => ({ fullName: 'John Doe', email: 'john@example.com' })
+      })
+
+      render(<TaskDetailModal {...defaultProps} />)
+      await waitFor(() => {
+        expect(screen.getByTestId('dialog')).toBeInTheDocument()
+      })
+    })
+
+    it('handles user with displayName fallback', async () => {
+      const { getDoc } = require('firebase/firestore')
+      getDoc.mockResolvedValueOnce({
+        exists: () => true,
+        data: () => ({ displayName: 'Jane Smith', email: 'jane@example.com' })
+      })
+
+      render(<TaskDetailModal {...defaultProps} />)
+      await waitFor(() => {
+        expect(screen.getByTestId('dialog')).toBeInTheDocument()
+      })
+    })
+
+    it('handles user with name fallback', async () => {
+      const { getDoc } = require('firebase/firestore')
+      getDoc.mockResolvedValueOnce({
+        exists: () => true,
+        data: () => ({ name: 'Bob Johnson', email: 'bob@example.com' })
+      })
+
+      render(<TaskDetailModal {...defaultProps} />)
+      await waitFor(() => {
+        expect(screen.getByTestId('dialog')).toBeInTheDocument()
+      })
+    })
+
+    it('handles user with email only fallback', async () => {
+      const { getDoc } = require('firebase/firestore')
+      getDoc.mockResolvedValueOnce({
+        exists: () => true,
+        data: () => ({ email: 'user@example.com' })
+      })
+
+      render(<TaskDetailModal {...defaultProps} />)
+      await waitFor(() => {
+        expect(screen.getByTestId('dialog')).toBeInTheDocument()
+      })
+    })
+
+    it('handles user with userId fallback when no name fields', async () => {
+      const { getDoc } = require('firebase/firestore')
+      getDoc.mockResolvedValueOnce({
+        exists: () => true,
+        data: () => ({})
+      })
+
+      render(<TaskDetailModal {...defaultProps} />)
+      await waitFor(() => {
+        expect(screen.getByTestId('dialog')).toBeInTheDocument()
+      })
+    })
+
+    it('handles user fetch error gracefully (line 136)', async () => {
+      const { getDoc } = require('firebase/firestore')
+      getDoc.mockRejectedValueOnce(new Error('Network error'))
+
+      render(<TaskDetailModal {...defaultProps} />)
+      await waitFor(() => {
+        expect(screen.getByTestId('dialog')).toBeInTheDocument()
+      })
+    })
+
+    it('handles null userId in getUserInfo (line 148)', () => {
+      const task = { ...mockTask, assigneeId: null, createdBy: null }
+      render(<TaskDetailModal {...defaultProps} task={task} />)
+      expect(screen.getByTestId('dialog')).toBeInTheDocument()
+    })
+
+    it('handles user with photoURL avatar', async () => {
+      const { getDoc } = require('firebase/firestore')
+      getDoc.mockResolvedValueOnce({
+        exists: () => true,
+        data: () => ({
+          fullName: 'Avatar User',
+          photoURL: 'https://example.com/photo.jpg'
+        })
+      })
+
+      render(<TaskDetailModal {...defaultProps} />)
+      await waitFor(() => {
+        expect(screen.getByTestId('dialog')).toBeInTheDocument()
+      })
+    })
+
+    it('handles user with avatar field', async () => {
+      const { getDoc } = require('firebase/firestore')
+      getDoc.mockResolvedValueOnce({
+        exists: () => true,
+        data: () => ({
+          fullName: 'Avatar User 2',
+          avatar: 'https://example.com/avatar.jpg'
+        })
+      })
+
+      render(<TaskDetailModal {...defaultProps} />)
+      await waitFor(() => {
+        expect(screen.getByTestId('dialog')).toBeInTheDocument()
+      })
+    })
+  })
+
+  describe('Comment submission and editing coverage', () => {
+    it('handles successful comment addition (lines 192-198)', async () => {
+      const user = userEvent.setup()
+      const { addComment } = require('@/lib/api')
+      const { toast } = require('sonner')
+
+      addComment.mockResolvedValueOnce({
+        id: 'new-comment',
+        text: 'Test comment',
+        user_id: 'current-user',
+        timestamp: new Date().toISOString()
+      })
+
+      render(<TaskDetailModal {...defaultProps} />)
+
+      const input = screen.getByPlaceholderText('Add a comment...')
+      await user.type(input, 'Test comment')
+
+      const addButton = screen.getByRole('button', { name: /post/i })
+      await user.click(addButton)
+
+      await waitFor(() => {
+        expect(toast.success).toHaveBeenCalledWith('Comment added!')
+        expect(addComment).toHaveBeenCalled()
+      })
+    })
+
+    it('handles successful comment edit (lines 206-218)', async () => {
+      const user = userEvent.setup()
+      const { listComments, editComment } = require('@/lib/api')
+      const { toast } = require('sonner')
+
+      listComments.mockResolvedValueOnce([
+        {
+          id: 'comment-1',
+          text: 'Original text',
+          user_id: 'current-user',
+          timestamp: new Date().toISOString()
+        }
+      ])
+
+      editComment.mockResolvedValueOnce({
+        id: 'comment-1',
+        text: 'Updated text',
+        edited: true
+      })
+
+      render(<TaskDetailModal {...defaultProps} />)
+
+      await waitFor(() => {
+        expect(screen.getByText('Original text')).toBeInTheDocument()
+      })
+
+      // Start editing
+      const editButton = screen.getByLabelText('Edit comment')
+      await user.click(editButton)
+
+      // Update text
+      const editInput = screen.getByDisplayValue('Original text')
+      await user.clear(editInput)
+      await user.type(editInput, 'Updated text')
+
+      const saveButton = screen.getByText('Save')
+      await user.click(saveButton)
+
+      await waitFor(() => {
+        expect(toast.success).toHaveBeenCalledWith('Comment updated!')
+        expect(editComment).toHaveBeenCalledWith(
+          expect.objectContaining({
+            commentId: 'comment-1',
+            text: 'Updated text'
+          })
+        )
+      })
+    })
+
+    it('handles successful comment deletion (lines 227-241)', async () => {
+      const user = userEvent.setup()
+      const { listComments, deleteComment } = require('@/lib/api')
+      const { toast } = require('sonner')
+
+      listComments.mockResolvedValueOnce([
+        {
+          id: 'comment-1',
+          text: 'Test comment',
+          user_id: 'current-user',
+          timestamp: new Date().toISOString()
+        }
+      ])
+
+      deleteComment.mockResolvedValueOnce({})
+
+      render(<TaskDetailModal {...defaultProps} />)
+
+      await waitFor(() => {
+        expect(screen.getByText('Test comment')).toBeInTheDocument()
+      })
+
+      // Click delete button
+      const deleteButton = screen.getByLabelText('Delete comment')
+      await user.click(deleteButton)
+
+      // Confirm deletion
+      await waitFor(() => {
+        expect(screen.getByText('Delete Comment')).toBeInTheDocument()
+      })
+
+      const confirmButton = screen.getByRole('button', { name: /delete/i })
+      await user.click(confirmButton)
+
+      await waitFor(() => {
+        expect(toast.success).toHaveBeenCalledWith('Comment deleted!')
+        expect(deleteComment).toHaveBeenCalled()
+      })
+    })
+  })
+
+  describe('Subtask operations coverage', () => {
+    it('handles subtask status toggle success (lines 255-259)', async () => {
+      const user = userEvent.setup()
+      const { listSubtasks, updateSubtask } = require('@/lib/api')
+      const { toast } = require('sonner')
+
+      listSubtasks.mockResolvedValueOnce([
+        {
+          id: 'subtask-1',
+          title: 'Test Subtask',
+          status: 'to-do',
+          assigneeId: 'user-1'
+        }
+      ])
+
+      updateSubtask.mockResolvedValueOnce({
+        id: 'subtask-1',
+        status: 'completed'
+      })
+
+      render(<TaskDetailModal {...defaultProps} />)
+
+      await waitFor(() => {
+        expect(screen.getByText('Test Subtask')).toBeInTheDocument()
+      })
+
+      // Find and click the status toggle checkbox
+      const checkbox = screen.getAllByRole('checkbox')[0] // First checkbox is the subtask toggle
+      await user.click(checkbox)
+
+      await waitFor(() => {
+        expect(toast.success).toHaveBeenCalledWith('Subtask updated!')
+        expect(updateSubtask).toHaveBeenCalled()
+      })
+    })
+
+    it('handles subtask click navigation (lines 271-272)', async () => {
+      const user = userEvent.setup()
+      const { listSubtasks } = require('@/lib/api')
+
+      listSubtasks.mockResolvedValueOnce([
+        {
+          id: 'subtask-1',
+          title: 'Clickable Subtask',
+          status: 'to-do'
+        }
+      ])
+
+      render(<TaskDetailModal {...defaultProps} />)
+
+      await waitFor(() => {
+        expect(screen.getByText('Clickable Subtask')).toBeInTheDocument()
+      })
+
+      // Click on the subtask title to trigger navigation
+      const subtaskTitle = screen.getByText('Clickable Subtask')
+      await user.click(subtaskTitle)
+
+      expect(defaultProps.onSubtaskClick).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'subtask-1' })
+      )
+    })
+  })
+
+  describe('Subtask creation form coverage', () => {
+    it('handles subtask creation form submission (lines 288-299)', async () => {
+      const user = userEvent.setup()
+      const { createSubtask } = require('@/lib/api')
+      const { toast } = require('sonner')
+
+      createSubtask.mockResolvedValueOnce({ id: 'new-subtask' })
+
+      render(<TaskDetailModal {...defaultProps} teamMembers={[
+        { id: 'user-1', name: 'Team Member 1', email: 'user1@example.com', role: 'Developer' }
+      ]} />)
+
+      await waitFor(() => {
+        const addButton = screen.getByRole('button', { name: /add subtask/i })
+        expect(addButton).toBeInTheDocument()
+      })
+
+      // Click Add Subtask button
+      const addButton = screen.getByRole('button', { name: /add subtask/i })
+      await user.click(addButton)
+
+      // Fill out the form
+      await waitFor(() => {
+        expect(screen.getByLabelText('Subtask Title')).toBeInTheDocument()
+      })
+
+      const titleInput = screen.getByLabelText('Subtask Title')
+      await user.type(titleInput, 'New Subtask')
+
+      const descInput = screen.getByLabelText('Description')
+      await user.type(descInput, 'Subtask description')
+
+      // Select a team member
+      const teamCheckbox = screen.getByRole('checkbox', { name: /Team Member 1/i })
+      await user.click(teamCheckbox)
+
+      // Submit the form
+      const createButton = screen.getByRole('button', { name: /create subtask/i })
+      await user.click(createButton)
+
+      await waitFor(() => {
+        expect(toast.success).toHaveBeenCalledWith('Subtask created successfully!')
+        expect(createSubtask).toHaveBeenCalled()
+      })
+    })
+
+    it('handles subtask creation form close (lines 307-318)', async () => {
+      const user = userEvent.setup()
+
+      render(<TaskDetailModal {...defaultProps} />)
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /add subtask/i })).toBeInTheDocument()
+      })
+
+      // Open the form
+      const addButton = screen.getByRole('button', { name: /add subtask/i })
+      await user.click(addButton)
+
+      await waitFor(() => {
+        expect(screen.getByText('Create New Subtask')).toBeInTheDocument()
+      })
+
+      // Click cancel
+      const cancelButton = screen.getByRole('button', { name: /cancel/i })
+      await user.click(cancelButton)
+
+      await waitFor(() => {
+        expect(screen.queryByText('Create New Subtask')).not.toBeInTheDocument()
+      })
+    })
+
+    it('validates subtask form requires team members (lines 329-333)', async () => {
+      const user = userEvent.setup()
+
+      render(<TaskDetailModal {...defaultProps} teamMembers={[
+        { id: 'user-1', name: 'Team Member 1' }
+      ]} />)
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /add subtask/i })).toBeInTheDocument()
+      })
+
+      // Open the form
+      const addButton = screen.getByRole('button', { name: /add subtask/i })
+      await user.click(addButton)
+
+      await waitFor(() => {
+        expect(screen.getByLabelText('Subtask Title')).toBeInTheDocument()
+      })
+
+      // Fill title but don't select team members
+      const titleInput = screen.getByLabelText('Subtask Title')
+      await user.type(titleInput, 'New Subtask')
+
+      // Try to submit - button should be disabled
+      const createButton = screen.getByRole('button', { name: /create subtask/i })
+      expect(createButton).toBeDisabled()
+    })
+
+    it('validates subtask form requires title (line 337)', async () => {
+      const user = userEvent.setup()
+
+      render(<TaskDetailModal {...defaultProps} teamMembers={[
+        { id: 'user-1', name: 'Team Member 1' }
+      ]} />)
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /add subtask/i })).toBeInTheDocument()
+      })
+
+      // Open the form
+      const addButton = screen.getByRole('button', { name: /add subtask/i })
+      await user.click(addButton)
+
+      // Select team member but don't enter title
+      const teamCheckbox = screen.getByRole('checkbox', { name: /Team Member 1/i })
+      await user.click(teamCheckbox)
+
+      // Submit button should be disabled
+      const createButton = screen.getByRole('button', { name: /create subtask/i })
+      expect(createButton).toBeDisabled()
+    })
+
+    it('handles API error during subtask creation (lines 342-346)', async () => {
+      const user = userEvent.setup()
+      const { createSubtask } = require('@/lib/api')
+      const { toast } = require('sonner')
+
+      createSubtask.mockRejectedValueOnce(new Error('API Error'))
+
+      render(<TaskDetailModal {...defaultProps} teamMembers={[
+        { id: 'user-1', name: 'Team Member 1' }
+      ]} />)
+
+      // Open form and fill it
+      const addButton = screen.getByRole('button', { name: /add subtask/i })
+      await user.click(addButton)
+
+      await waitFor(() => {
+        expect(screen.getByLabelText('Subtask Title')).toBeInTheDocument()
+      })
+
+      const titleInput = screen.getByLabelText('Subtask Title')
+      await user.type(titleInput, 'New Subtask')
+
+      const teamCheckbox = screen.getByRole('checkbox', { name: /Team Member 1/i })
+      await user.click(teamCheckbox)
+
+      const createButton = screen.getByRole('button', { name: /create subtask/i })
+      await user.click(createButton)
+
+      await waitFor(() => {
+        expect(toast.error).toHaveBeenCalledWith('Failed to create subtask. Please try again.')
+      })
+    })
+
+    it('displays custom error message on validation failure (line 349)', async () => {
+      const user = userEvent.setup()
+      const { createSubtask } = require('@/lib/api')
+
+      createSubtask.mockRejectedValueOnce({
+        response: { data: { error: 'Custom validation error' } }
+      })
+
+      render(<TaskDetailModal {...defaultProps} teamMembers={[
+        { id: 'user-1', name: 'Team Member 1' }
+      ]} />)
+
+      const addButton = screen.getByRole('button', { name: /add subtask/i })
+      await user.click(addButton)
+
+      await waitFor(() => {
+        expect(screen.getByLabelText('Subtask Title')).toBeInTheDocument()
+      })
+
+      const titleInput = screen.getByLabelText('Subtask Title')
+      await user.type(titleInput, 'New Subtask')
+
+      const teamCheckbox = screen.getByRole('checkbox')
+      await user.click(teamCheckbox)
+
+      const createButton = screen.getByRole('button', { name: /create subtask/i })
+      await user.click(createButton)
+
+      await waitFor(() => {
+        expect(screen.getByText('Custom validation error')).toBeInTheDocument()
+      })
+    })
+  })
+
+  describe('Additional error handling coverage', () => {
+    it('handles edit comment API error (line 358)', async () => {
+      const user = userEvent.setup()
+      const { listComments, editComment } = require('@/lib/api')
+      const { toast } = require('sonner')
+
+      listComments.mockResolvedValueOnce([
+        { id: 'comment-1', text: 'Original', user_id: 'current-user' }
+      ])
+
+      editComment.mockRejectedValueOnce(new Error('Edit failed'))
+
+      render(<TaskDetailModal {...defaultProps} />)
+
+      await waitFor(() => {
+        expect(screen.getByText('Original')).toBeInTheDocument()
+      })
+
+      const editButton = screen.getByLabelText('Edit comment')
+      await user.click(editButton)
+
+      const editInput = screen.getByDisplayValue('Original')
+      await user.clear(editInput)
+      await user.type(editInput, 'Updated')
+
+      const saveButton = screen.getByText('Save')
+      await user.click(saveButton)
+
+      await waitFor(() => {
+        expect(toast.error).toHaveBeenCalledWith('Failed to update comment')
+      })
+    })
+
+    it('handles delete comment API error (lines 365-367)', async () => {
+      const user = userEvent.setup()
+      const { listComments, deleteComment } = require('@/lib/api')
+      const { toast } = require('sonner')
+
+      listComments.mockResolvedValueOnce([
+        { id: 'comment-1', text: 'Test', user_id: 'current-user' }
+      ])
+
+      deleteComment.mockRejectedValueOnce(new Error('Delete failed'))
+
+      render(<TaskDetailModal {...defaultProps} />)
+
+      await waitFor(() => {
+        expect(screen.getByText('Test')).toBeInTheDocument()
+      })
+
+      const deleteButton = screen.getByLabelText('Delete comment')
+      await user.click(deleteButton)
+
+      await waitFor(() => {
+        expect(screen.getByText('Delete Comment')).toBeInTheDocument()
+      })
+
+      const confirmButton = screen.getByRole('button', { name: /delete/i })
+      await user.click(confirmButton)
+
+      await waitFor(() => {
+        expect(toast.error).toHaveBeenCalledWith('Failed to delete comment')
+      })
+    })
+
+    it('handles subtask status update error (lines 407-411)', async () => {
+      const user = userEvent.setup()
+      const { listSubtasks, updateSubtask } = require('@/lib/api')
+      const { toast } = require('sonner')
+
+      listSubtasks.mockResolvedValueOnce([
+        { id: 'subtask-1', title: 'Test', status: 'to-do' }
+      ])
+
+      updateSubtask.mockRejectedValueOnce(new Error('Update failed'))
+
+      render(<TaskDetailModal {...defaultProps} />)
+
+      await waitFor(() => {
+        expect(screen.getByText('Test')).toBeInTheDocument()
+      })
+
+      const checkbox = screen.getAllByRole('checkbox')[0]
+      await user.click(checkbox)
+
+      await waitFor(() => {
+        expect(toast.error).toHaveBeenCalledWith('Failed to update subtask')
+      })
+    })
+
+    it('handles subtask deletion error (line 490)', async () => {
+      const user = userEvent.setup()
+      const { listSubtasks, deleteSubtask } = require('@/lib/api')
+      const { toast } = require('sonner')
+
+      listSubtasks.mockResolvedValueOnce([
+        { id: 'subtask-1', title: 'Test Subtask', status: 'to-do' }
+      ])
+
+      deleteSubtask.mockRejectedValueOnce(new Error('Delete failed'))
+
+      render(<TaskDetailModal {...defaultProps} />)
+
+      await waitFor(() => {
+        expect(screen.getByText('Test Subtask')).toBeInTheDocument()
+      })
+
+      // Find and click delete button for subtask
+      const deleteButtons = screen.getAllByLabelText('Delete subtask')
+      await user.click(deleteButtons[0])
+
+      // Confirm deletion
+      await waitFor(() => {
+        expect(screen.getByText(/delete this subtask/i)).toBeInTheDocument()
+      })
+
+      const confirmButton = screen.getAllByRole('button', { name: /delete/i })[0]
+      await user.click(confirmButton)
+
+      await waitFor(() => {
+        expect(toast.error).toHaveBeenCalledWith('Failed to delete subtask')
+      })
+    })
+  })
 })

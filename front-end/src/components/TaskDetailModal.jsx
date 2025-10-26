@@ -1,5 +1,6 @@
 "use client";
 
+import PropTypes from "prop-types";
 import {
   Dialog,
   DialogContent,
@@ -1392,3 +1393,56 @@ function SubtaskDialog({
     </Dialog>
   );
 }
+
+TaskDetailModal.propTypes = {
+  task: PropTypes.shape({
+    id: PropTypes.string,
+    title: PropTypes.string,
+    description: PropTypes.string,
+    status: PropTypes.string,
+    priority: PropTypes.number,
+    dueDate: PropTypes.oneOfType([
+      PropTypes.string,
+      PropTypes.instanceOf(Date),
+      PropTypes.object,
+    ]),
+    createdAt: PropTypes.oneOfType([
+      PropTypes.string,
+      PropTypes.instanceOf(Date),
+      PropTypes.object,
+    ]),
+    updatedAt: PropTypes.oneOfType([
+      PropTypes.string,
+      PropTypes.instanceOf(Date),
+      PropTypes.object,
+    ]),
+    projectId: PropTypes.string,
+    projectName: PropTypes.string,
+    assigneeId: PropTypes.string,
+    createdBy: PropTypes.string,
+    ownerId: PropTypes.string,
+    collaboratorsIds: PropTypes.arrayOf(PropTypes.string),
+    collaboratorIds: PropTypes.arrayOf(PropTypes.string),
+    tags: PropTypes.arrayOf(PropTypes.string),
+    attachments: PropTypes.arrayOf(PropTypes.string),
+    isSubtask: PropTypes.bool,
+    parentTaskId: PropTypes.string,
+    isStandalone: PropTypes.bool,
+  }),
+  isOpen: PropTypes.bool.isRequired,
+  onClose: PropTypes.func.isRequired,
+  onEdit: PropTypes.func,
+  onDelete: PropTypes.func,
+  disableActions: PropTypes.bool,
+  teamMembers: PropTypes.arrayOf(
+    PropTypes.shape({
+      id: PropTypes.string,
+      name: PropTypes.string,
+      email: PropTypes.string,
+      role: PropTypes.string,
+    })
+  ),
+  currentUserId: PropTypes.string,
+  onSubtaskChange: PropTypes.func,
+  onSubtaskClick: PropTypes.func,
+};

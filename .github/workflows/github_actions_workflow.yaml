@@ -34,8 +34,14 @@ jobs:
       - name: Run backend tests with coverage
         working-directory: ./back-end
         run: |
-          pytest tests/ --cov=. --cov-report=xml --cov-report=term -v
+          pytest tests/ --cov=. --cov-report=xml:coverage.xml --cov-report=term -v
         continue-on-error: true
+
+      - name: Fix coverage report paths
+        working-directory: ./back-end
+        run: |
+          sed -i 's|<source>.*</source>|<source>.</source>|g' coverage.xml
+          sed -i 's|filename="|filename="back-end/|g' coverage.xml
 
       - name: Set up Node.js
         uses: actions/setup-node@v4

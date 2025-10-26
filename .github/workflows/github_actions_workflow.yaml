@@ -32,16 +32,38 @@ jobs:
           pip install pytest pytest-cov
 
       - name: Run backend tests with coverage
-        working-directory: ./back-end
         run: |
-          pytest tests/ --cov=. --cov-report=xml:coverage.xml --cov-report=term -v
+          cd back-end
+          pytest tests/ --cov=. --cov-report=xml:../coverage-backend.xml --cov-report=term -v
         continue-on-error: true
 
-      - name: Fix coverage report paths
-        working-directory: ./back-end
+      - name: Fix backend coverage report paths
         run: |
-          sed -i 's|<source>.*</source>|<source>.</source>|g' coverage.xml
-          sed -i 's|filename="|filename="back-end/|g' coverage.xml
+          python3 << 'EOF'
+          import xml.etree.ElementTree as ET
+          import os
+
+          tree = ET.parse('coverage-backend.xml')
+          root = tree.getroot()
+
+          # Fix source path to be relative to project root
+          for source in root.findall('.//source'):
+              source.text = '${{ github.workspace }}/back-end'
+
+          # Fix filename paths to be relative to project root
+          for cls in root.findall('.//class'):
+              filename = cls.get('filename')
+              if filename and not filename.startswith('back-end/'):
+                  cls.set('filename', f'back-end/{filename}')
+
+          tree.write('coverage-backend.xml', encoding='utf-8', xml_declaration=True)
+          print("Fixed coverage paths")
+
+          # Debug: print first few lines
+          with open('coverage-backend.xml', 'r') as f:
+              lines = f.readlines()[:20]
+              print(''.join(lines))
+          EOF
 
       - name: Set up Node.js
         uses: actions/setup-node@v4

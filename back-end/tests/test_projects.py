@@ -15,6 +15,7 @@ if ROOT_DIR not in sys.path:
 
 from app import app as flask_app  # noqa: E402
 import projects  # noqa: E402
+import status_notifications  # noqa: E402
 from fake_firestore import FakeFirestore, FakeCollection, FakeDocumentReference  # noqa: E402
 
 
@@ -23,6 +24,8 @@ def test_client(monkeypatch):
     """Create a test client with mocked Firestore database"""
     fake_db = FakeFirestore()
     monkeypatch.setattr(projects, "db", fake_db)
+    # Also patch status_notifications.db so _get_user_display_name works
+    monkeypatch.setattr(status_notifications, "db", fake_db)
 
     # Keep original function for coverage
     real_now = projects.now_utc
@@ -58,7 +61,7 @@ def _setup_project(fake_db, project_id, **data):
 def _setup_task(fake_db, project_id, task_id, **data):
     """Helper to set up a task with normalized data"""
     project_ref = fake_db.collection("projects").document(project_id)
-    project_ref.collection("tasks").document(task_id).set({
+    task_data = {
         "title": data.get("title", "Task"),
         "status": projects.canon_status(data.get("status", "to-do")),
         "priority": projects.canon_task_priority(data.get("priority", 5)),
@@ -69,8 +72,22 @@ def _setup_task(fake_db, project_id, task_id, **data):
         "subtaskCount": data.get("subtaskCount", 0),
         "subtaskCompletedCount": data.get("subtaskCompletedCount", 0),
         "subtaskProgress": data.get("subtaskProgress", 0),
-    })
+    }
+    if "description" in data:
+        task_data["description"] = data["description"]
+    project_ref.collection("tasks").document(task_id).set(task_data)
     return project_ref.collection("tasks").document(task_id)
+
+
+def _setup_user(fake_db, user_id, **data):
+    """Helper to create a user for testing"""
+    user_data = {}
+    if "fullName" in data:
+        user_data["fullName"] = data["fullName"]
+    if "name" in data:
+        user_data["name"] = data["name"]
+    fake_db.collection("users").document(user_id).set(user_data)
+    return fake_db.collection("users").document(user_id)
 
 
 # ============================================================================
@@ -594,12 +611,291 @@ class TestTaskEndpoints:
         _setup_project(fake_db, "proj-1")
         _setup_task(fake_db, "proj-1", "task-delete")
 
-        resp = client.delete("/api/projects/proj-1/tasks/task-delete")
+        # Send empty JSON to satisfy Content-Type requirement
+        resp = client.delete("/api/projects/proj-1/tasks/task-delete", json={})
         assert resp.status_code == 200
 
         # Verify deletion
         task = fake_db.collection("projects").document("proj-1").collection("tasks").document("task-delete").get()
         assert not task.exists
+
+    def test_delete_task_not_found(self, test_client):
+        """Test deleting non-existent task (line 425-427)"""
+        client, fake_db = test_client
+
+        _setup_project(fake_db, "proj-1")
+
+        resp = client.delete("/api/projects/proj-1/tasks/non-existent", json={})
+        assert resp.status_code == 404
+        assert "Task not found" in resp.get_json()["error"]
+
+    def test_delete_task_with_deletedby_in_json(self, test_client):
+        """Test deletedBy from JSON body (lines 413-420)"""
+        from unittest.mock import patch
+        client, fake_db = test_client
+
+        _setup_project(fake_db, "proj-1", name="Test Project", ownerId="owner-1")
+        _setup_task(fake_db, "proj-1", "task-1", title="Task to Delete", assigneeId="user-1")
+        _setup_user(fake_db, "user-2", fullName="Deleter User")
+
+        with patch('projects.add_notification') as mock_notif:
+            resp = client.delete(
+                "/api/projects/proj-1/tasks/task-1",
+                json={"deletedBy": "user-2"},
+                content_type="application/json"
+            )
+
+        assert resp.status_code == 200
+        # Should create notifications (lines 445-478)
+        assert mock_notif.call_count >= 2  # At least for assignee and owner
+
+    def test_delete_task_with_deletedby_in_query(self, test_client):
+        """Test deletedBy from query params (line 418)"""
+        from unittest.mock import patch
+        client, fake_db = test_client
+
+        _setup_project(fake_db, "proj-1", name="Project", ownerId="owner-1")
+        _setup_task(fake_db, "proj-1", "task-1", assigneeId="user-1")
+        _setup_user(fake_db, "user-2", fullName="Query User")
+
+        with patch('projects.add_notification') as mock_notif:
+            resp = client.delete("/api/projects/proj-1/tasks/task-1?deletedBy=user-2", json={})
+
+        assert resp.status_code == 200
+        assert mock_notif.called
+
+    def test_delete_task_with_deletedby_in_header(self, test_client):
+        """Test deletedBy from X-User-Id header (line 419)"""
+        from unittest.mock import patch
+        client, fake_db = test_client
+
+        _setup_project(fake_db, "proj-1", name="Project", ownerId="owner-1")
+        _setup_task(fake_db, "proj-1", "task-1", assigneeId="user-1")
+        _setup_user(fake_db, "user-3", fullName="Header User")
+
+        with patch('projects.add_notification') as mock_notif:
+            resp = client.delete(
+                "/api/projects/proj-1/tasks/task-1",
+                json={},
+                headers={"X-User-Id": "user-3"}
+            )
+
+        assert resp.status_code == 200
+        assert mock_notif.called
+
+    def test_delete_task_with_collaborators(self, test_client):
+        """Test notifications sent to collaborators (lines 436-439)"""
+        from unittest.mock import patch
+        client, fake_db = test_client
+
+        _setup_project(fake_db, "proj-1", name="Test Project", ownerId="owner-1")
+        _setup_task(
+            fake_db, "proj-1", "task-1",
+            title="Collaborative Task",
+            assigneeId="user-1",
+            collaboratorsIds=["user-2", "user-3"]
+        )
+        _setup_user(fake_db, "user-4", fullName="Task Deleter")
+
+        with patch('projects.add_notification') as mock_notif:
+            resp = client.delete(
+                "/api/projects/proj-1/tasks/task-1",
+                json={"deletedBy": "user-4"},
+                content_type="application/json"
+            )
+
+        assert resp.status_code == 200
+        # Should notify: assignee, owner, 2 collaborators, deleter = 5 total
+        assert mock_notif.call_count >= 4
+
+    def test_delete_task_notification_message_for_deleter(self, test_client):
+        """Test personalized message for the person who deleted (lines 448-451)"""
+        from unittest.mock import patch
+        client, fake_db = test_client
+
+        _setup_project(fake_db, "proj-1", name="Project", ownerId="owner-1")
+        _setup_task(fake_db, "proj-1", "task-1", title="My Task", assigneeId="user-1")
+        _setup_user(fake_db, "user-1", fullName="Task Owner")
+
+        with patch('projects.add_notification') as mock_notif:
+            resp = client.delete(
+                "/api/projects/proj-1/tasks/task-1",
+                json={"deletedBy": "user-1"},
+                content_type="application/json"
+            )
+
+        assert resp.status_code == 200
+        # Check that notification was called with the right message
+        calls = mock_notif.call_args_list
+        # Find the call for user-1 (deleter)
+        user1_calls = [call for call in calls if call[0][0].get("userId") == "user-1"]
+        assert len(user1_calls) > 0
+        assert "You deleted task" in user1_calls[0][0][0]["message"]
+
+    def test_delete_task_notification_message_for_others(self, test_client):
+        """Test message for other recipients (line 451)"""
+        from unittest.mock import patch
+        client, fake_db = test_client
+
+        _setup_project(fake_db, "proj-1", name="Project", ownerId="owner-1")
+        _setup_task(fake_db, "proj-1", "task-1", title="Task", assigneeId="user-2")
+        _setup_user(fake_db, "user-1", fullName="Admin User")
+        _setup_user(fake_db, "owner-1", fullName="Owner")
+        _setup_user(fake_db, "user-2", fullName="Assignee")
+
+        with patch('projects.add_notification') as mock_notif:
+            resp = client.delete(
+                "/api/projects/proj-1/tasks/task-1",
+                json={"deletedBy": "user-1"},
+                content_type="application/json"
+            )
+
+        assert resp.status_code == 200
+        # Check notification for owner (not the deleter)
+        calls = mock_notif.call_args_list
+        owner_calls = [call for call in calls if call[0][0].get("userId") == "owner-1"]
+        if owner_calls:
+            # Should contain the actor's name
+            assert "Admin User deleted task" in owner_calls[0][0][0]["message"]
+
+    def test_delete_task_notification_payload_structure(self, test_client):
+        """Test notification payload contains all required fields (lines 456-471)"""
+        from unittest.mock import patch
+        client, fake_db = test_client
+
+        _setup_project(fake_db, "proj-1", name="Test Project", ownerId="owner-1")
+        _setup_task(
+            fake_db, "proj-1", "task-1",
+            title="Important Task",
+            description="Task description",
+            assigneeId="user-1",
+            priority=8,
+            status="in progress"
+        )
+        _setup_user(fake_db, "owner-1", fullName="Owner")
+        _setup_user(fake_db, "user-1", fullName="Assignee")
+        _setup_user(fake_db, "user-2", fullName="Deleter")
+
+        with patch('projects.add_notification') as mock_notif:
+            resp = client.delete(
+                "/api/projects/proj-1/tasks/task-1",
+                json={"deletedBy": "user-2"},
+                content_type="application/json"
+            )
+
+        assert resp.status_code == 200
+        assert mock_notif.called
+
+        # Check first notification call structure
+        first_call = mock_notif.call_args_list[0]
+        notif_data = first_call[0][0]
+
+        # Verify all required fields (lines 456-471)
+        assert notif_data["projectId"] == "proj-1"
+        assert notif_data["projectName"] == "Test Project"
+        assert notif_data["taskId"] == "task-1"
+        assert notif_data["title"] == "Important Task"
+        assert notif_data["taskTitle"] == "Important Task"
+        assert notif_data["description"] == "Task description"
+        assert notif_data["type"] == "task deleted"
+        assert notif_data["icon"] == "trash"
+        assert notif_data["priority"] == 8
+        assert notif_data["status"] == "in progress"
+        assert "meta" in notif_data
+        assert notif_data["meta"]["deletedBy"] == "user-2"
+        assert notif_data["meta"]["deletedByName"] == "Deleter"
+
+    def test_delete_task_without_deletedby(self, test_client):
+        """Test deletion without deletedBy uses 'Someone' (line 441)"""
+        from unittest.mock import patch
+        client, fake_db = test_client
+
+        _setup_project(fake_db, "proj-1", name="Project", ownerId="owner-1")
+        _setup_task(fake_db, "proj-1", "task-1", title="Task", assigneeId="user-1")
+
+        with patch('projects.add_notification') as mock_notif:
+            resp = client.delete("/api/projects/proj-1/tasks/task-1", json={})
+
+        assert resp.status_code == 200
+        # Should still create notifications with "Someone" as actor
+        if mock_notif.called:
+            first_call = mock_notif.call_args_list[0]
+            notif_data = first_call[0][0]
+            assert "Someone deleted task" in notif_data["message"]
+
+    def test_delete_task_notification_error_handling(self, test_client):
+        """Test that task is still deleted even if notifications fail (lines 476-478)"""
+        from unittest.mock import patch
+        client, fake_db = test_client
+
+        _setup_project(fake_db, "proj-1", name="Project", ownerId="owner-1")
+        _setup_task(fake_db, "proj-1", "task-1", assigneeId="user-1")
+
+        # Mock add_notification to raise an exception
+        with patch('projects.add_notification', side_effect=Exception("Notification failed")):
+            resp = client.delete("/api/projects/proj-1/tasks/task-1", json={})
+
+        # Task should still be deleted despite notification failure
+        assert resp.status_code == 200
+        task = fake_db.collection("projects").document("proj-1").collection("tasks").document("task-1").get()
+        assert not task.exists
+
+    def test_delete_task_updatedby_fallback(self, test_client):
+        """Test deletedBy fallback to updatedBy (line 415)"""
+        from unittest.mock import patch
+        client, fake_db = test_client
+
+        _setup_project(fake_db, "proj-1", name="Project", ownerId="owner-1")
+        _setup_task(fake_db, "proj-1", "task-1", assigneeId="user-1")
+        _setup_user(fake_db, "user-2", fullName="Updater")
+
+        with patch('projects.add_notification') as mock_notif:
+            resp = client.delete(
+                "/api/projects/proj-1/tasks/task-1",
+                json={"updatedBy": "user-2"},
+                content_type="application/json"
+            )
+
+        assert resp.status_code == 200
+        assert mock_notif.called
+
+    def test_delete_task_userid_fallback(self, test_client):
+        """Test deletedBy fallback to userId (line 416)"""
+        from unittest.mock import patch
+        client, fake_db = test_client
+
+        _setup_project(fake_db, "proj-1", name="Project", ownerId="owner-1")
+        _setup_task(fake_db, "proj-1", "task-1", assigneeId="user-1")
+        _setup_user(fake_db, "user-3", fullName="User")
+
+        with patch('projects.add_notification') as mock_notif:
+            resp = client.delete(
+                "/api/projects/proj-1/tasks/task-1",
+                json={"userId": "user-3"},
+                content_type="application/json"
+            )
+
+        assert resp.status_code == 200
+        assert mock_notif.called
+
+    def test_delete_task_currentuserid_fallback(self, test_client):
+        """Test deletedBy fallback to currentUserId (line 417)"""
+        from unittest.mock import patch
+        client, fake_db = test_client
+
+        _setup_project(fake_db, "proj-1", name="Project", ownerId="owner-1")
+        _setup_task(fake_db, "proj-1", "task-1", assigneeId="user-1")
+        _setup_user(fake_db, "user-4", fullName="Current User")
+
+        with patch('projects.add_notification') as mock_notif:
+            resp = client.delete(
+                "/api/projects/proj-1/tasks/task-1",
+                json={"currentUserId": "user-4"},
+                content_type="application/json"
+            )
+
+        assert resp.status_code == 200
+        assert mock_notif.called
 
     def test_list_tasks_across_projects(self, test_client):
         """Test listing tasks across all projects for a user"""

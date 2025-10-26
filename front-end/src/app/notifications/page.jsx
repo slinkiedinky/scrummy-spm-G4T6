@@ -3,7 +3,6 @@
 import React, { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { Bell, Calendar, Check, X, ClipboardList, UserPlus, MessageSquare } from "lucide-react";
-import { Trash } from "lucide-react";
 import {
   collection,
   query,
@@ -47,12 +46,12 @@ const NOTIF_TYPE_LABELS = {
   "add collaborator" : "Added as Collaborator",
   "add subtask collaborator": "Added as SubTask Collaborator",
   "task status update": "Task Status Update",
-  "task deleted": "Task Deleted",
   "add task": "New Task Assigned",
   "add sub task": "New SubTask Assigned",
   "deadline_overdue": "Deadline Overdue",
   "task comment": "Task Comment",
   "subtask comment": "SubTask Comment",
+  "comment mention": "Mentioned in Comment",
 };
 
 // formatTypeLabel: friendly label for types (fallback to Title Case)
@@ -79,12 +78,12 @@ const TYPE_ICON_MAP = {
   "deadline_overdue": { icon: Calendar, color: "text-red-500" },
   "task comment": { icon: MessageSquare, color: "text-teal-600" },
   "subtask comment": { icon: MessageSquare, color: "text-teal-600" },
+  "comment mention": { icon: MessageSquare, color: "text-purple-600" },
   "add task": { icon: ClipboardList, color: "text-teal-600" },
   "add collaborator": { icon: UserPlus, color: "text-indigo-600" },
   "add subtask": { icon: ClipboardList, color: "text-teal-600" },
   "add subtask collaborator": { icon: UserPlus, color: "text-indigo-600" },
   "task status update": { icon: Check, color: "text-purple-600" },
-  "task deleted": { icon: Trash, color: "text-gray-700" },
   "default": { icon: Bell, color: "text-gray-700" },
 };
 
@@ -145,8 +144,24 @@ export default function NotificationsPage() {
 
   const handleNotificationClick = async (notif) => {
     await markAsRead(notif.id);
+    
+    // Navigate to the project/task and store intent to scroll to comments
     if (notif.projectId && notif.taskId) {
-      router.push(`/projects/${notif.projectId}?task=${notif.taskId}`);
+      const isCommentNotif = notif.type === 'task comment' || notif.type === 'subtask comment' || notif.type === 'comment mention';
+      
+      if (isCommentNotif) {
+        // Store scroll intent in sessionStorage for the target page to pick up
+        sessionStorage.setItem('scrollToComments', 'true');
+        if (notif.subtaskId) {
+          sessionStorage.setItem('openSubtaskId', notif.subtaskId);
+          sessionStorage.setItem('openTaskId', notif.taskId);
+        } else {
+          sessionStorage.setItem('openTaskId', notif.taskId);
+        }
+      }
+      
+      // Navigate to project page
+      router.push(`/projects/${notif.projectId}`);
     } else if (notif.projectId) {
       router.push(`/projects/${notif.projectId}`);
     }
@@ -318,23 +333,7 @@ export default function NotificationsPage() {
                       })()}
 
                       <div className="flex-1">
-                        {/*
-                          Dedicated rendering for "task deleted" so header reads "Task deleted"
-                          and the card shows Task: {title} and Project: {projectName}
-                        */}
-                        {notif.type === "task deleted" ? (
-                          <>
-                            <h2 className="font-medium text-gray-900">Task deleted</h2>
-                            <div className="text-sm text-gray-700">
-                              <span className="font-semibold">Task:</span> {notif.title || notif.taskTitle || "-"}
-                            </div>
-                            <div className="text-sm text-gray-700">
-                              <span className="font-semibold">Project:</span> {notif.projectName || "-"}
-                            </div>
-                            {notif.message && <div className="text-sm text-gray-600 mt-1">{notif.message}</div>}
-                            <div className="text-xs text-gray-400 mt-1">{notif.createdAt ? formatTimeAgo(notif.createdAt) : ""}</div>
-                          </>
-                        ) : notif.type === "task comment" ? (
+                        {notif.type === "task comment" ? (
                           <>
                             <h2 className="font-medium text-gray-900">New Comment</h2>
                             <div className="text-sm text-gray-700">
@@ -368,7 +367,26 @@ export default function NotificationsPage() {
                             </div>
                             <div className="text-xs text-gray-400 mt-1">{notif.createdAt ? formatTimeAgo(notif.createdAt) : ""}</div>
                           </>
-                        ) : notif.type === "add task" ? (
+                        ) : notif.type === "comment mention" ? (
+                          <>
+                            <h2 className="font-medium text-gray-900">You were mentioned</h2>
+                            <div className="text-sm text-gray-700">
+                              <span className="font-semibold">Task:</span> {notif.title || notif.taskTitle || "-"}
+                            </div>
+                            <div className="text-sm text-gray-700">
+                              <span className="font-semibold">Project:</span> {notif.projectName || "-"}
+                            </div>
+                            <div className="text-sm text-gray-700">
+                              <span className="font-semibold">Mentioned by:</span> {notif.author || notif.createdBy || "-"}
+                            </div>
+                            <div className="text-sm text-gray-700">
+                              <span className="font-semibold">Comment:</span> {notif.text || notif.message || "-"}
+                            </div>
+                            <div className="text-xs text-gray-400 mt-1">{notif.createdAt ? formatTimeAgo(notif.createdAt) : ""}</div>
+                          </>
+                        ) :
+                        // ...existing notification rendering blocks...
+                        notif.type === "add task" ? (
                           <>
                             <h2 className="font-medium text-gray-900">New Task Assigned</h2>
                             <div className="text-sm text-gray-700">

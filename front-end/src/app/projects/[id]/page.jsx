@@ -136,11 +136,6 @@ export const ensureProjectPriority = (value) => {
 };
 
 export const getPriorityBadgeClass = (value) => {
-  // Check for null/undefined/empty first
-  if (value === null || value === undefined || value === "") {
-    return `${TAG_BASE} bg-muted text-muted-foreground border border-border/50`;
-  }
-  
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) {
     return `${TAG_BASE} bg-muted text-muted-foreground border border-border/50`;
@@ -181,16 +176,13 @@ export const createEmptyTaskForm = (uid = "") => ({
 
 export const toDateInputValue = (value) => {
   if (!value) return "";
+
   const date = toDate(value);
-  
-  // Check if date is null OR invalid
-  if (!date || isNaN(date.getTime())) {
-    return "";
-  }
-  
+  if (!date) return "";
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
+
   return `${year}-${month}-${day}`;
 };
 
@@ -423,6 +415,59 @@ export default function ProjectDetailPage() {
   useEffect(() => {
     resetTaskForm();
   }, [resetTaskForm]);
+
+  // Handle URL parameters and sessionStorage to open task/subtask modal
+  useEffect(() => {
+    if (typeof window === 'undefined' || !tasks.length) return;
+    
+    // Check sessionStorage for task/subtask to open (from notification click)
+    const taskIdFromStorage = sessionStorage.getItem('openTaskId');
+    const subtaskIdFromStorage = sessionStorage.getItem('openSubtaskId');
+    const shouldScrollToComments = sessionStorage.getItem('scrollToComments') === 'true';
+    
+    if (taskIdFromStorage) {
+      const task = tasks.find(t => t.id === taskIdFromStorage);
+      
+      if (task && subtaskIdFromStorage) {
+        // Open subtask
+        getSubtask(id, taskIdFromStorage, subtaskIdFromStorage)
+          .then(subtask => {
+            setSelectedTask({
+              ...subtask,
+              projectId: id,
+              parentTaskId: taskIdFromStorage,
+              isSubtask: true,
+              scrollToComments: shouldScrollToComments,
+            });
+            // Clear sessionStorage after use
+            sessionStorage.removeItem('openTaskId');
+            sessionStorage.removeItem('openSubtaskId');
+            sessionStorage.removeItem('scrollToComments');
+          })
+          .catch(err => {
+            console.error('Failed to load subtask:', err);
+            toast.error('Failed to load subtask');
+            sessionStorage.removeItem('openTaskId');
+            sessionStorage.removeItem('openSubtaskId');
+            sessionStorage.removeItem('scrollToComments');
+          });
+      } else if (task) {
+        // Open task
+        setSelectedTask({
+          ...task,
+          scrollToComments: shouldScrollToComments,
+        });
+        // Clear sessionStorage after use
+        sessionStorage.removeItem('openTaskId');
+        sessionStorage.removeItem('scrollToComments');
+      } else {
+        // Clear if task not found
+        sessionStorage.removeItem('openTaskId');
+        sessionStorage.removeItem('openSubtaskId');
+        sessionStorage.removeItem('scrollToComments');
+      }
+    }
+  }, [tasks, id]);
 
   const handleTaskDialogChange = useCallback(
     (open) => {
@@ -1143,12 +1188,14 @@ export default function ProjectDetailPage() {
       setStatus("unauthorized");
       return;
     }
-    if (project && !project.teamIds?.includes(user.uid) && project.ownerId !== user.uid) {
+
+    if (project && !project.teamIds.includes(user.uid)) {
       setStatus("unauthorized");
       return;
     }
     setStatus("authorized");
   });
+
   return () => unsubscribe();
 }, [project]);
 

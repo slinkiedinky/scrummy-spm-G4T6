@@ -26,7 +26,7 @@ import {
 } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { CheckCircle2, Circle, Plus } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import {
   listSubtasks,
   createSubtask,
@@ -97,12 +97,14 @@ export function TaskDetailModal({
   currentUserId,
   onSubtaskChange,
   onSubtaskClick,
+  scrollToComments = false,
 }) {
   const [showSubtaskDialog, setShowSubtaskDialog] = useState(false);
   const [subtaskRefreshKey, setSubtaskRefreshKey] = useState(0);
   const [selectedSubtask, setSelectedSubtask] = useState(null);
   const [userDetails, setUserDetails] = useState({});
   const [loadingUsers, setLoadingUsers] = useState(true);
+  const commentsRef = useRef(null);
 
   const isSubtask = task.isSubtask || task.parentTaskId;
 
@@ -165,6 +167,13 @@ export function TaskDetailModal({
   const [newComment, setNewComment] = useState("");
   const [editingCommentId, setEditingCommentId] = useState(null);
   const [editingText, setEditingText] = useState("");
+  
+  // Mention autocomplete state
+  const [showMentions, setShowMentions] = useState(false);
+  const [mentionSearch, setMentionSearch] = useState("");
+  const [mentionPosition, setMentionPosition] = useState(0);
+  const [selectedMentionIndex, setSelectedMentionIndex] = useState(0);
+  const commentInputRef = useRef(null);
 
   // Load comments when modal opens or task changes
   useEffect(() => {
@@ -182,12 +191,29 @@ export function TaskDetailModal({
       .finally(() => setLoadingComments(false));
   }, [isOpen, task.id, task.projectId, task.isStandalone, isSubtask, task.parentTaskId]);
 
+  // Auto-scroll to comments if requested
+  useEffect(() => {
+    if (isOpen && scrollToComments && commentsRef.current) {
+      setTimeout(() => {
+        commentsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 300); // Small delay to ensure modal is fully rendered
+    }
+  }, [isOpen, scrollToComments]);
+
   const handleAddComment = async () => {
     if (!newComment.trim()) return;
     try {
+      // Convert @Name mentions to @[userId][Name] format using our mappings
+      let commentText = newComment.trim();
+      Object.entries(mentionMappings).forEach(([name, userId]) => {
+        // Replace @name with @[userId][name] - use word boundary to match whole names
+        const regex = new RegExp(`@${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'g');
+        commentText = commentText.replace(regex, `@[${userId}][${name}]`);
+      });
+      
       const payload = {
         user_id: currentUserId,
-        text: newComment.trim(),
+        text: commentText,
       };
       const isStandalone = task.projectId === "standalone" || task.isStandalone;
       const comment = isStandalone
@@ -197,6 +223,7 @@ export function TaskDetailModal({
         : await addComment(task.projectId, task.id, payload);
       setComments((prev) => [...prev, comment]);
       setNewComment("");
+      setMentionMappings({}); // Clear mappings after posting
     } catch (err) {
       toast.error("Failed to add comment");
     }
@@ -243,6 +270,146 @@ export function TaskDetailModal({
     }
   };
   const cancelDeleteComment = () => setDeleteConfirmId(null);
+
+  // Get mentionable users (assignee + collaborators, excluding current user)
+  const mentionableUsers = useMemo(() => {
+    const users = [];
+    if (task.assigneeId && task.assigneeId !== currentUserId) {
+      const assigneeInfo = getUserInfo(task.assigneeId);
+      users.push({ id: task.assigneeId, name: assigneeInfo.name, email: assigneeInfo.email });
+    }
+    const collaboratorIds = task.collaboratorsIds || task.collaboratorIds || [];
+    collaboratorIds.forEach(id => {
+      if (id && id !== task.assigneeId && id !== currentUserId) {
+        const collabInfo = getUserInfo(id);
+        users.push({ id, name: collabInfo.name, email: collabInfo.email });
+      }
+    });
+    return users;
+  }, [task.assigneeId, task.collaboratorsIds, task.collaboratorIds, userDetails, currentUserId]);
+
+  // Filter mentionable users based on search
+  const filteredMentions = useMemo(() => {
+    if (!mentionSearch) return mentionableUsers;
+    const search = mentionSearch.toLowerCase();
+    return mentionableUsers.filter(u => 
+      u.name.toLowerCase().includes(search) || u.email.toLowerCase().includes(search)
+    );
+  }, [mentionableUsers, mentionSearch]);
+
+  // State to track mention mappings (name -> id)
+  const [mentionMappings, setMentionMappings] = useState({});
+
+  // Handle comment input change with @ mention detection
+  const handleCommentChange = (e) => {
+    const value = e.target.value;
+    setNewComment(value);
+    
+    // Detect @ mention
+    const cursorPosition = e.target.selectionStart;
+    const textBeforeCursor = value.substring(0, cursorPosition);
+    const mentionMatch = textBeforeCursor.match(/@(\w*)$/);
+    
+    if (mentionMatch) {
+      setShowMentions(true);
+      setMentionSearch(mentionMatch[1]);
+      setMentionPosition(mentionMatch.index);
+      setSelectedMentionIndex(0);
+    } else {
+      setShowMentions(false);
+      setMentionSearch("");
+    }
+  };
+
+  // Insert mention into comment  
+  const insertMention = (user) => {
+    const beforeMention = newComment.substring(0, mentionPosition);
+    const afterMention = newComment.substring(commentInputRef.current.selectionStart);
+    // Insert @Name with 2 spaces after to separate from text
+    const mentionText = `@${user.name}`;
+    const newText = `${beforeMention}${mentionText}  ${afterMention}`;
+    setNewComment(newText);
+    
+    // Store mapping of name to ID for when we post
+    setMentionMappings(prev => ({
+      ...prev,
+      [user.name]: user.id
+    }));
+    
+    setShowMentions(false);
+    setMentionSearch("");
+    
+    // Set cursor position after the mention and 2 spaces
+    setTimeout(() => {
+      if (commentInputRef.current) {
+        const newPosition = beforeMention.length + mentionText.length + 2;
+        commentInputRef.current.setSelectionRange(newPosition, newPosition);
+        commentInputRef.current.focus();
+      }
+    }, 0);
+  };
+
+  // Handle keyboard navigation in mentions dropdown
+  const handleCommentKeyDown = (e) => {
+    if (showMentions && filteredMentions.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSelectedMentionIndex((prev) => 
+          prev < filteredMentions.length - 1 ? prev + 1 : 0
+        );
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSelectedMentionIndex((prev) => 
+          prev > 0 ? prev - 1 : filteredMentions.length - 1
+        );
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        insertMention(filteredMentions[selectedMentionIndex]);
+      } else if (e.key === 'Escape') {
+        setShowMentions(false);
+      }
+    } else if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleAddComment();
+    }
+  };
+
+  // Render comment text with mentions highlighted
+  const renderCommentText = (text) => {
+    if (!text) return text;
+    
+    // Match @Name pattern - captures multi-word names properly
+    // Matches @Word or @Word Word or @Word Word Word etc.
+    // Stops when it hits double space, punctuation, or end
+    const mentionPattern = /@([A-Za-z]+(?:\s[A-Za-z]+)*)(?=\s\s|\s[^A-Za-z]|$|[.,!?;:])/g;
+    const parts = [];
+    let lastIndex = 0;
+    let match;
+
+    while ((match = mentionPattern.exec(text)) !== null) {
+      // Add text before mention
+      if (match.index > lastIndex) {
+        parts.push(text.substring(lastIndex, match.index));
+      }
+      
+      // Add mention with blue background AND blue text
+      const userName = match[1];
+      parts.push(
+        <span key={match.index} className="bg-blue-100 text-blue-700 px-1 py-0.5 rounded font-medium mx-0.5">
+          @{userName}
+        </span>
+      );
+      
+      lastIndex = match.index + match[0].length;
+    }
+    
+    // Add remaining text
+    if (lastIndex < text.length) {
+      parts.push(text.substring(lastIndex));
+    }
+    
+    return parts.length > 0 ? parts : text;
+  };
 
   console.log("Task in modal:", {
     projectId: task.projectId,
@@ -496,7 +663,6 @@ export function TaskDetailModal({
                   Edit
                 </Button>
                 <Button
-                  aria-label="Delete task"
                   size="sm"
                   variant="outline"
                   disabled={disableActions || typeof onDelete !== "function"}
@@ -748,7 +914,7 @@ export function TaskDetailModal({
             )}
 
             <Separator />
-            <div>
+            <div ref={commentsRef}>
               <div className="flex items-center gap-2 mb-3">
                 <MessageSquare className="h-4 w-4 text-muted-foreground" />
                 <h3 className="font-semibold text-foreground">Comments</h3>
@@ -789,15 +955,15 @@ export function TaskDetailModal({
                             </Button>
                           </div>
                         ) : (
-                          <p className="text-sm text-muted-foreground">{comment.text}</p>
+                          <p className="text-sm text-foreground">{renderCommentText(comment.text)}</p>
                         )}
                       </div>
                       {comment.user_id === currentUserId && editingCommentId !== comment.id && (
                         <div className="flex flex-col gap-1">
-                          <Button aria-label="Edit comment" size="xs" variant="ghost" onClick={() => { setEditingCommentId(comment.id); setEditingText(comment.text); }}>
+                          <Button size="xs" variant="ghost" onClick={() => { setEditingCommentId(comment.id); setEditingText(comment.text); }}>
                             <Edit className="h-4 w-4" />
                           </Button>
-                          <Button aria-label="Delete comment" size="xs" variant="ghost" onClick={() => handleDeleteComment(comment.id)}>
+                          <Button size="xs" variant="ghost" onClick={() => handleDeleteComment(comment.id)}>
                             <Trash2 className="h-4 w-4 text-destructive" />
                           </Button>
                         </div>
@@ -821,14 +987,34 @@ export function TaskDetailModal({
                   ))}
                 </div>
               )}
-              <div className="flex gap-2 mt-4">
-                <Input
-                  value={newComment}
-                  onChange={(e) => setNewComment(e.target.value)}
-                  placeholder="Add a comment..."
-                  className="flex-1"
-                  onKeyDown={(e) => { if (e.key === "Enter") handleAddComment(); }}
-                />
+              <div className="flex gap-2 mt-4 relative">
+                <div className="flex-1 relative">
+                  <Input
+                    ref={commentInputRef}
+                    value={newComment}
+                    onChange={handleCommentChange}
+                    onKeyDown={handleCommentKeyDown}
+                    placeholder="Add a comment... (Type @ to mention someone)"
+                    className="flex-1"
+                  />
+                  {showMentions && filteredMentions.length > 0 && (
+                    <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-48 overflow-y-auto">
+                      {filteredMentions.map((user, index) => (
+                        <div
+                          key={user.id}
+                          className={`px-4 py-2 cursor-pointer hover:bg-gray-100 ${
+                            index === selectedMentionIndex ? 'bg-blue-50' : ''
+                          }`}
+                          onClick={() => insertMention(user)}
+                          onMouseEnter={() => setSelectedMentionIndex(index)}
+                        >
+                          <div className="font-medium text-sm">{user.name}</div>
+                          <div className="text-xs text-gray-500">{user.email}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
                 <Button size="sm" onClick={handleAddComment} disabled={!newComment.trim()}>
                   Post
                 </Button>

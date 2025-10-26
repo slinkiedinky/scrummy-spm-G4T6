@@ -3,9 +3,30 @@ from flask import Blueprint, request, jsonify
 from datetime import datetime
 import pytz
 import uuid
+import re
 from firebase import db
 
 comments_bp = Blueprint('comments', __name__)
+
+def extract_mentions(text):
+    """Extract user IDs from @mentions in text (format: @[userId][Name])"""
+    if not text:
+        return []
+    # Match @[userId][Name] pattern - extracts userId only
+    pattern = r'@\[([^\]]+)\]\[([^\]]+)\]'
+    mentions = re.findall(pattern, text)
+    # Extract just the user IDs (first capture group)
+    user_ids = [match[0] for match in mentions]
+    return list(set(user_ids))  # Remove duplicates
+
+def clean_mention_format(text):
+    """Convert @[userId][Name] format to just @Name for storage"""
+    if not text:
+        return text
+    # Replace @[userId][Name] with just @Name
+    pattern = r'@\[([^\]]+)\]\[([^\]]+)\]'
+    cleaned_text = re.sub(pattern, r'@\2', text)
+    return cleaned_text
 
 @comments_bp.route('/standalone-tasks/<task_id>/comments', methods=['GET', 'POST', 'OPTIONS'])
 def standalone_comments_collection(task_id):
@@ -47,10 +68,16 @@ def standalone_comments_collection(task_id):
         utc_now = datetime.utcnow()
         sgt = pytz.timezone('Asia/Singapore')
         sgt_now = pytz.utc.localize(utc_now).astimezone(sgt)
+        
+        # Extract original text for mention extraction (before cleaning)
+        original_text = data.get('text', '')
+        # Clean the mention format for storage (remove user IDs)
+        cleaned_text = clean_mention_format(original_text)
+        
         comment = {
             'user_id': user_id,
             'author': author,
-            'text': data.get('text'),
+            'text': cleaned_text,
             'timestamp': sgt_now.isoformat(),
             'edited': False
         }
@@ -67,29 +94,52 @@ def standalone_comments_collection(task_id):
             project_doc = db.collection('projects').document(task_doc.get('projectId')).get().to_dict() if task_doc.get('projectId') else None
             notif_author = comment.get('author', author) or 'Unknown'
             notif_project_name = project_doc['name'] if project_doc and 'name' in project_doc else 'Standalone'
-            notif = {
-                'userId': None,
-                'taskId': task_id,
-                'commentId': comment_id,
-                'type': 'task comment',
-                'icon': 'messageSquare',
-                'title': task_doc.get('title', '-') if task_doc else '-',
-                'projectName': notif_project_name,
-                'author': notif_author,
-                'message': f"{notif_author} has posted a new comment \"{comment.get('text', '-')}\"",
-                'text': comment.get('text', '-'),
-                'timestamp': comment.get('timestamp', '-')
-            }
-            print('DEBUG NOTIF PAYLOAD:', notif)
-            if assignee_id:
-                notif['userId'] = assignee_id
-                add_notification(notif, None)
-                notified.add(assignee_id)
-            for collab_id in collaborators:
-                if collab_id and collab_id not in notified:
-                    notif['userId'] = collab_id
+            
+            # Extract mentions from ORIGINAL comment text (before cleaning)
+            mentioned_user_ids = extract_mentions(original_text)
+            
+            # If there are mentions, only notify mentioned users
+            if mentioned_user_ids:
+                # Send mention notifications only
+                for mentioned_id in mentioned_user_ids:
+                    if mentioned_id and mentioned_id != user_id:
+                        mention_notif = {
+                            'userId': mentioned_id,
+                            'taskId': task_id,
+                            'commentId': comment_id,
+                            'type': 'comment mention',
+                            'icon': 'messageSquare',
+                            'title': task_doc.get('title', '-') if task_doc else '-',
+                            'projectName': notif_project_name,
+                            'author': notif_author,
+                            'message': cleaned_text,
+                            'timestamp': comment.get('timestamp', '-')
+                        }
+                        add_notification(mention_notif, notif_project_name)
+                        notified.add(mentioned_id)
+            else:
+                # No mentions - send regular comment notifications to assignee and collaborators
+                notif = {
+                    'userId': None,
+                    'taskId': task_id,
+                    'commentId': comment_id,
+                    'type': 'task comment',
+                    'icon': 'messageSquare',
+                    'title': task_doc.get('title', '-') if task_doc else '-',
+                    'projectName': notif_project_name,
+                    'author': notif_author,
+                    'message': cleaned_text,
+                    'timestamp': comment.get('timestamp', '-')
+                }
+                if assignee_id and assignee_id != user_id:
+                    notif['userId'] = assignee_id
                     add_notification(notif, None)
-                    notified.add(collab_id)
+                    notified.add(assignee_id)
+                for collab_id in collaborators:
+                    if collab_id and collab_id != user_id and collab_id not in notified:
+                        notif['userId'] = collab_id
+                        add_notification(notif, None)
+                        notified.add(collab_id)
         except Exception as e:
             print(f"Comment notification error: {e}")
 
@@ -207,10 +257,16 @@ def comments_collection(task_id):
         utc_now = datetime.utcnow()
         sgt = pytz.timezone('Asia/Singapore')
         sgt_now = pytz.utc.localize(utc_now).astimezone(sgt)
+        
+        # Extract original text for mention extraction (before cleaning)
+        original_text = data.get('text', '')
+        # Clean the mention format for storage (remove user IDs)
+        cleaned_text = clean_mention_format(original_text)
+        
         comment = {
             'user_id': user_id,
             'author': author,
-            'text': data.get('text'),
+            'text': cleaned_text,
             'timestamp': sgt_now.isoformat(),
             'edited': False
         }
@@ -227,30 +283,54 @@ def comments_collection(task_id):
             project_doc = db.collection('projects').document(project_id).get().to_dict() if project_id else None
             notif_author = author or 'Unknown'
             notif_project_name = project_doc['name'] if project_doc and 'name' in project_doc else 'Unknown Project'
-            notif = {
-                'userId': None,
-                'projectId': project_id,
-                'taskId': task_id,
-                'commentId': comment_id,
-                'type': 'task comment',
-                'icon': 'messageSquare',
-                'title': task_doc.get('title', '-') if task_doc else '-',
-                'projectName': notif_project_name,
-                'author': notif_author,
-                'message': comment.get('text', '-'),
-                'text': comment.get('text', '-'),
-                'timestamp': comment.get('timestamp', '-')
-            }
-            # print('DEBUG NOTIF PAYLOAD:', notif)
-            if assignee_id:
-                notif['userId'] = assignee_id
-                add_notification(notif, notif_project_name)
-                notified.add(assignee_id)
-            for collab_id in collaborators:
-                if collab_id and collab_id not in notified:
-                    notif['userId'] = collab_id
+            
+            # Extract mentions from ORIGINAL comment text (before cleaning)
+            mentioned_user_ids = extract_mentions(original_text)
+            
+            # If there are mentions, only notify mentioned users
+            if mentioned_user_ids:
+                # Send mention notifications only
+                for mentioned_id in mentioned_user_ids:
+                    if mentioned_id and mentioned_id != user_id:  # Don't notify if user mentions themselves
+                        mention_notif = {
+                            'userId': mentioned_id,
+                            'projectId': project_id,
+                            'taskId': task_id,
+                            'commentId': comment_id,
+                            'type': 'comment mention',
+                            'icon': 'messageSquare',
+                            'title': task_doc.get('title', '-') if task_doc else '-',
+                            'projectName': notif_project_name,
+                            'author': notif_author,
+                            'message': cleaned_text,
+                            'timestamp': comment.get('timestamp', '-')
+                        }
+                        add_notification(mention_notif, notif_project_name)
+                        notified.add(mentioned_id)
+            else:
+                # No mentions - send regular comment notifications to assignee and collaborators
+                notif = {
+                    'userId': None,
+                    'projectId': project_id,
+                    'taskId': task_id,
+                    'commentId': comment_id,
+                    'type': 'task comment',
+                    'icon': 'messageSquare',
+                    'title': task_doc.get('title', '-') if task_doc else '-',
+                    'projectName': notif_project_name,
+                    'author': notif_author,
+                    'message': comment.get('text', '-'),
+                    'timestamp': comment.get('timestamp', '-')
+                }
+                if assignee_id and assignee_id != user_id:
+                    notif['userId'] = assignee_id
                     add_notification(notif, notif_project_name)
-                    notified.add(collab_id)
+                    notified.add(assignee_id)
+                for collab_id in collaborators:
+                    if collab_id and collab_id != user_id and collab_id not in notified:
+                        notif['userId'] = collab_id
+                        add_notification(notif, notif_project_name)
+                        notified.add(collab_id)
         except Exception as e:
             print(f"Comment notification error: {e}")
 
@@ -356,10 +436,16 @@ def subtask_comments_collection(task_id, subtask_id):
         utc_now = datetime.utcnow()
         sgt = pytz.timezone('Asia/Singapore')
         sgt_now = pytz.utc.localize(utc_now).astimezone(sgt)
+        
+        # Extract original text for mention extraction (before cleaning)
+        original_text = data.get('text', '')
+        # Clean the mention format for storage (remove user IDs)
+        cleaned_text = clean_mention_format(original_text)
+        
         comment = {
             'user_id': user_id,
             'author': author or 'Unknown',
-            'text': data.get('text'),
+            'text': cleaned_text,
             'timestamp': sgt_now.isoformat(),
             'edited': False
         }
@@ -376,31 +462,58 @@ def subtask_comments_collection(task_id, subtask_id):
             project_doc = db.collection('projects').document(project_id).get().to_dict() if project_id else None
             notif_author = comment['author']
             notif_project_name = project_doc['name'] if project_doc and 'name' in project_doc else 'Unknown Project'
-            notif = {
-                'userId': None,
-                'projectId': project_id,
-                'taskId': task_id,
-                'subtaskId': subtask_id,
-                'commentId': comment_id,
-                'type': 'subtask comment',
-                'icon': 'messageSquare',
-                'title': subtask_doc.get('title', '-') if subtask_doc else '-',
-                'projectName': notif_project_name,
-                'author': notif_author,
-                'message': comment.get('text', '-'),
-                'text': comment.get('text', '-') ,
-                'timestamp': comment.get('timestamp', '-')
-            }
-            print('DEBUG SUBTASK COMMENT NOTIF:', notif)
-            if assignee_id:
-                notif['userId'] = assignee_id
-                add_notification(notif, notif_project_name)
-                notified.add(assignee_id)
-            for collab_id in collaborators:
-                if collab_id and collab_id not in notified:
-                    notif['userId'] = collab_id
+            
+            # Extract mentions from ORIGINAL comment text (before cleaning)
+            mentioned_user_ids = extract_mentions(original_text)
+            
+            # If there are mentions, only notify mentioned users
+            if mentioned_user_ids:
+                # Send mention notifications only
+                for mentioned_id in mentioned_user_ids:
+                    if mentioned_id and mentioned_id != user_id:
+                        mention_notif = {
+                            'userId': mentioned_id,
+                            'projectId': project_id,
+                            'taskId': task_id,
+                            'subtaskId': subtask_id,
+                            'commentId': comment_id,
+                            'type': 'comment mention',
+                            'icon': 'messageSquare',
+                            'title': subtask_doc.get('title', '-') if subtask_doc else '-',
+                            'projectName': notif_project_name,
+                            'author': notif_author,
+                            'message': cleaned_text,
+                            'timestamp': comment.get('timestamp', '-')
+                        }
+                        add_notification(mention_notif, notif_project_name)
+                        notified.add(mentioned_id)
+            else:
+                # No mentions - send regular comment notifications to assignee and collaborators
+                notif = {
+                    'userId': None,
+                    'projectId': project_id,
+                    'taskId': task_id,
+                    'subtaskId': subtask_id,
+                    'commentId': comment_id,
+                    'type': 'subtask comment',
+                    'icon': 'messageSquare',
+                    'title': subtask_doc.get('title', '-') if subtask_doc else '-',
+                    'projectName': notif_project_name,
+                    'author': notif_author,
+                    'message': comment.get('text', '-'),
+                    'timestamp': comment.get('timestamp', '-')
+                }
+                if assignee_id and assignee_id != user_id:
+                    notif['userId'] = assignee_id
                     add_notification(notif, notif_project_name)
-                    notified.add(collab_id)
+                    notified.add(assignee_id)
+                for collab_id in collaborators:
+                    if collab_id and collab_id != user_id and collab_id not in notified:
+                        notif['userId'] = collab_id
+                        add_notification(notif, notif_project_name)
+                        notified.add(collab_id)
+        except Exception as e:
+            print(f"Subtask comment notification error: {e}")
         except Exception as e:
             print(f"Subtask comment notification error: {e}")
 

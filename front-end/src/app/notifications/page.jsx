@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { Bell, Calendar, Check, X, ClipboardList, UserPlus, MessageSquare } from "lucide-react";
+import { Bell, Calendar, Check, X, ClipboardList, UserPlus, MessageSquare, Trash } from "lucide-react";
 import {
   collection,
   query,
@@ -43,6 +43,7 @@ function parseOldNewFromMessage(msg = "") {
 const NOTIF_TYPE_LABELS = {
   "deadline_today": "Deadline Today",
   "deadline_reminder": "Upcoming Deadline",
+  "task deleted": "Task Deleted",
   "add collaborator" : "Added as Collaborator",
   "add subtask collaborator": "Added as SubTask Collaborator",
   "task status update": "Task Status Update",
@@ -84,6 +85,7 @@ const TYPE_ICON_MAP = {
   "add subtask": { icon: ClipboardList, color: "text-teal-600" },
   "add subtask collaborator": { icon: UserPlus, color: "text-indigo-600" },
   "task status update": { icon: Check, color: "text-purple-600" },
+  "task deleted": { icon: Trash, color: "text-gray-700" },
   "default": { icon: Bell, color: "text-gray-700" },
 };
 
@@ -384,9 +386,19 @@ export default function NotificationsPage() {
                             </div>
                             <div className="text-xs text-gray-400 mt-1">{notif.createdAt ? formatTimeAgo(notif.createdAt) : ""}</div>
                           </>
-                        ) :
-                        // ...existing notification rendering blocks...
-                        notif.type === "add task" ? (
+                        ) : notif.type === "task deleted" ? (
+                          <>
+                            <h2 className="font-medium text-gray-900">Task deleted</h2>
+                            <div className="text-sm text-gray-700">
+                              <span className="font-semibold">Task:</span> {notif.title || notif.taskTitle || "-"}
+                            </div>
+                            <div className="text-sm text-gray-700">
+                              <span className="font-semibold">Project:</span> {notif.projectName || "-"}
+                            </div>
+                            {notif.message && <div className="text-sm text-gray-600 mt-1">{notif.message}</div>}
+                            <div className="text-xs text-gray-400 mt-1">{notif.createdAt ? formatTimeAgo(notif.createdAt) : ""}</div>
+                          </>
+                        ) : notif.type === "add task" ? (
                           <>
                             <h2 className="font-medium text-gray-900">New Task Assigned</h2>
                             <div className="text-sm text-gray-700">

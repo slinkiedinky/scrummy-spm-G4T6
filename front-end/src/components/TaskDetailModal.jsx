@@ -44,6 +44,10 @@ import {
   addSubtaskComment,
   editSubtaskComment,
   deleteSubtaskComment,
+  createStandaloneSubtask,
+  listStandaloneSubtasks,
+  updateStandaloneSubtask,
+  deleteStandaloneSubtask,
 } from "@/lib/api";
 import { Input } from "@/components/ui/input";
 import {
@@ -702,7 +706,10 @@ export function TaskDetailModal({
                 </div>
                 {task.projectName && (
                   <p className="text-xs text-muted-foreground mt-2 truncate">
-                    Project: {task.projectName}
+                    Project:{" "}
+                    {task.projectName === "Standalone"
+                      ? "N/A"
+                      : task.projectName}
                   </p>
                 )}
               </div>
@@ -970,7 +977,85 @@ export function TaskDetailModal({
                 </div>
               </>
             )}
+            {tags.length > 0 && (
+              <>
+                <Separator />
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <Tag className="h-4 w-4 text-muted-foreground" />
+                    <h3 className="font-semibold text-foreground">Tags</h3>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {tags.map((tag) => (
+                      <Badge key={tag} variant="outline">
+                        {tag}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
 
+            {task.isRecurring && task.recurrencePattern && (
+              <>
+                <Separator />
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <Repeat className="h-4 w-4 text-muted-foreground" />
+                    <h3 className="font-semibold text-foreground">
+                      Recurrence
+                    </h3>
+                  </div>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex items-start gap-2">
+                      <span className="text-muted-foreground min-w-[80px]">
+                        Pattern:
+                      </span>
+                      <span className="text-foreground">
+                        {(() => {
+                          const pattern = task.recurrencePattern;
+                          const frequency = pattern.frequency || "daily";
+                          const interval = pattern.interval || 1;
+                          return `Every ${
+                            interval > 1 ? `${interval} ` : ""
+                          }${frequency}${interval > 1 ? "s" : ""}`;
+                        })()}
+                      </span>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <span className="text-muted-foreground min-w-[80px]">
+                        Ends:
+                      </span>
+                      <span className="text-foreground">
+                        {(() => {
+                          const pattern = task.recurrencePattern;
+                          const endCondition = pattern.endCondition || "never";
+                          if (endCondition === "never") return "Never";
+                          if (endCondition === "after_count")
+                            return `After ${pattern.maxCount} occurrences`;
+                          if (endCondition === "on_date")
+                            return `On ${
+                              toDate(pattern.endDate)?.toLocaleDateString() ||
+                              "—"
+                            }`;
+                          return "—";
+                        })()}
+                      </span>
+                    </div>
+                    {task.recurringInstanceCount > 0 && (
+                      <div className="flex items-start gap-2">
+                        <span className="text-muted-foreground min-w-[80px]">
+                          Instance:
+                        </span>
+                        <span className="text-foreground">
+                          #{task.recurringInstanceCount}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
             <Separator />
             <div ref={commentsRef}>
               <div className="flex items-center gap-2 mb-3">
@@ -1175,6 +1260,7 @@ export function TaskDetailModal({
         taskId={task.id}
         teamMembers={teamMembers}
         currentUserId={currentUserId}
+        isStandalone={task.isStandalone || task.projectId === "standalone"}
         onSubtaskCreated={async () => {
           setShowSubtaskDialog(false);
           setSubtaskRefreshKey((prev) => prev + 1);
@@ -1202,7 +1288,11 @@ function SubtasksList({
       if (subtasks.length === 0) {
         setLoading(true);
       }
-      const data = await listSubtasks(projectId, taskId);
+      const isStandalone =
+        parentTask?.isStandalone || projectId === "standalone";
+      const data = isStandalone
+        ? await listStandaloneSubtasks(taskId)
+        : await listSubtasks(projectId, taskId);
       setSubtasks(data || []);
     } catch (err) {
       console.error("Failed to load subtasks:", err);
@@ -1230,7 +1320,17 @@ function SubtasksList({
         return updated;
       });
 
-      await updateSubtask(projectId, taskId, subtask.id, { status: newStatus });
+      const isStandalone =
+        parentTask?.isStandalone || projectId === "standalone";
+      if (isStandalone) {
+        await updateStandaloneSubtask(taskId, subtask.id, {
+          status: newStatus,
+        });
+      } else {
+        await updateSubtask(projectId, taskId, subtask.id, {
+          status: newStatus,
+        });
+      }
 
       if (onSubtaskChange) {
         await onSubtaskChange();
@@ -1255,7 +1355,13 @@ function SubtasksList({
       // Optimistic removal
       setSubtasks((prev) => prev.filter((s) => s.id !== subtask.id));
 
-      await deleteSubtask(projectId, taskId, subtask.id);
+      const isStandalone =
+        parentTask?.isStandalone || projectId === "standalone";
+      if (isStandalone) {
+        await deleteStandaloneSubtask(taskId, subtask.id);
+      } else {
+        await deleteSubtask(projectId, taskId, subtask.id);
+      }
 
       if (onSubtaskChange) await onSubtaskChange();
       await loadSubtasks();
@@ -1340,6 +1446,7 @@ function SubtaskDialog({
   taskId,
   teamMembers = [],
   currentUserId,
+  isStandalone = false, // ADD THIS
   onSubtaskCreated,
 }) {
   const [form, setForm] = useState({
@@ -1353,6 +1460,7 @@ function SubtaskDialog({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [selectedCollaborators, setSelectedCollaborators] = useState([]);
+
   useEffect(() => {
     if (isOpen) {
       setForm({
@@ -1399,6 +1507,12 @@ function SubtaskDialog({
       return;
     }
 
+    // For standalone subtasks, only allow current user
+    if (isStandalone && selectedCollaborators.length > 1) {
+      setError("Standalone subtasks can only be assigned to you.");
+      return;
+    }
+
     if (selectedCollaborators.length > 5) {
       setError("Maximum 5 assignees allowed per subtask.");
       return;
@@ -1436,7 +1550,13 @@ function SubtaskDialog({
       }
       payload.dueDate = due.toISOString();
 
-      await createSubtask(projectId, taskId, payload);
+      // USE CORRECT API BASED ON isStandalone
+      if (isStandalone) {
+        await createStandaloneSubtask(taskId, payload);
+      } else {
+        await createSubtask(projectId, taskId, payload);
+      }
+
       toast.success("Subtask created successfully!");
       if (onSubtaskCreated) await onSubtaskCreated();
       onClose();
@@ -1455,7 +1575,14 @@ function SubtaskDialog({
 
   const PRIORITY_VALUES = Array.from({ length: 10 }, (_, i) => String(i + 1));
 
-  const collaboratorOptions = teamMembers.map((member) => ({
+  // FILTER TEAM MEMBERS FOR STANDALONE
+  const availableTeamMembers = isStandalone
+    ? teamMembers.filter(
+        (member) => (member.id || member.uid) === currentUserId
+      )
+    : teamMembers;
+
+  const collaboratorOptions = availableTeamMembers.map((member) => ({
     id: member.id || member.uid,
     label:
       member.fullName ||
@@ -1604,6 +1731,7 @@ function SubtaskDialog({
                         ? "border-destructive"
                         : ""
                     }`}
+                    disabled={isStandalone} // Disable for standalone
                   >
                     <span className="truncate text-left">
                       {collaboratorButtonLabel}
@@ -1624,7 +1752,9 @@ function SubtaskDialog({
                   <DropdownMenuSeparator />
                   {collaboratorOptions.length === 0 ? (
                     <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                      Add team members to this project first.
+                      {isStandalone
+                        ? "Only you can be assigned to standalone subtasks"
+                        : "Add team members to this project first."}
                     </div>
                   ) : (
                     collaboratorOptions.map((option) => (
@@ -1649,7 +1779,9 @@ function SubtaskDialog({
                 </DropdownMenuContent>
               </DropdownMenu>
               <p className="text-xs text-muted-foreground">
-                Required: Select 1-5 team members to assign this subtask to.
+                {isStandalone
+                  ? "Standalone subtasks can only be assigned to you."
+                  : "Required: Select 1-5 team members to assign this subtask to."}
               </p>
             </div>
 

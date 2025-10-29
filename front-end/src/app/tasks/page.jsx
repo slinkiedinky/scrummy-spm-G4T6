@@ -283,6 +283,21 @@ function TaskCardWithSubtasks({
               subtasks
             </Badge>
           )}
+          {task.isStandalone && (
+            <Badge
+              className={`${TAG_BASE} bg-purple-100 text-purple-700 border border-purple-200`}
+            >
+              Standalone
+            </Badge>
+          )}
+
+          {task.isRecurring && (
+            <Badge
+              className={`${TAG_BASE} bg-indigo-100 text-indigo-700 border border-indigo-200`}
+            >
+              Recurring
+            </Badge>
+          )}
 
           <span
             className={`text-xs text-muted-foreground ${
@@ -680,13 +695,26 @@ export default function TasksPage() {
     const map = new Map();
 
     filteredTasks.forEach((task) => {
-      const id = task.projectId || "unassigned";
+      // Determine the grouping ID
+      let id;
+      if (task.isStandalone) {
+        id = "standalone";
+      } else if (
+        !task.projectId ||
+        task.projectId === "unassigned" ||
+        task.projectId === "standalone"
+      ) {
+        // Skip tasks without proper project IDs (they shouldn't be in project tasks)
+        return;
+      } else {
+        id = task.projectId;
+      }
+
       if (!map.has(id)) {
         map.set(id, {
           projectId: id,
           projectName:
-            task.projectName ||
-            (id === "unassigned" ? "Unassigned Project" : id),
+            id === "standalone" ? "Standalone" : task.projectName || id,
           tasks: [],
         });
       }
@@ -713,7 +741,6 @@ export default function TasksPage() {
       })
       .sort((a, b) => a.projectName.localeCompare(b.projectName));
   }, [filteredTasks, statusOrder]);
-
   const totalTasks = tasks.length;
   const overdueTasks = tasks.filter((task) => {
     const due = toDate(task.dueDate);
@@ -1672,17 +1699,17 @@ export default function TasksPage() {
               onSubtaskClick={handleSubtaskClick}
               onSubtaskChange={async () => {
                 try {
+                  // Reload all tasks to ensure consistency
+                  await loadTasks(currentUser.uid);
+
+                  // Refresh the selected task details
                   await new Promise((resolve) => setTimeout(resolve, 300));
 
-                  // Determine if viewing a subtask or parent task
                   const isViewingSubtask =
                     selectedTask.isSubtask || selectedTask.parentTaskId;
 
                   if (isViewingSubtask) {
-                    // Refresh the subtask itself
                     const parentTaskId = selectedTask.parentTaskId;
-
-                    // Check if this is a standalone task's subtask
                     const isStandaloneSubtask =
                       selectedTask.isStandalone || !selectedTask.projectId;
 
@@ -1715,10 +1742,10 @@ export default function TasksPage() {
                       creatorSummary,
                     });
                   } else {
-                    // Refresh the parent task with updated subtask info
-                    // Check if this is a standalone task
+                    // Refresh the parent task
                     const isStandaloneTask =
-                      selectedTask.isStandalone || !selectedTask.projectId;
+                      selectedTask.isStandalone ||
+                      selectedTask.projectId === "standalone";
 
                     const updatedTask = isStandaloneTask
                       ? await getStandaloneTask(selectedTask.id)
@@ -1729,7 +1756,7 @@ export default function TasksPage() {
                     );
                     const creatorSummary = summarizeUser(updatedTask.createdBy);
 
-                    const refreshedTask = {
+                    setSelectedTask({
                       ...updatedTask,
                       assigneeSummary,
                       creatorSummary,
@@ -1740,16 +1767,7 @@ export default function TasksPage() {
                       projectName: isStandaloneTask
                         ? "Standalone"
                         : updatedTask.projectName,
-                    };
-
-                    setSelectedTask(refreshedTask);
-
-                    // Update the task in the tasks list
-                    setTasks((prevTasks) =>
-                      prevTasks.map((t) =>
-                        t.id === refreshedTask.id ? refreshedTask : t
-                      )
-                    );
+                    });
                   }
                 } catch (err) {
                   console.error(

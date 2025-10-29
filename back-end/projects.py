@@ -4,11 +4,11 @@ from flask_cors import cross_origin
 from firebase_admin import firestore
 from datetime import datetime, timezone
 
-# ✅ Use the SAME db client everywhere
 from firebase import db
 from google.cloud import firestore  # for FieldFilter, ArrayUnion
 from status_notifications import create_status_change_notifications, _get_user_display_name, _unique_non_null
 from notifications import add_notification
+from recurring_tasks import create_next_recurring_instance, create_next_standalone_recurring_instance
 
 projects_bp = Blueprint("projects", __name__)
 
@@ -275,6 +275,10 @@ def create_task(project_id):
         "title": title,
         "updatedAt": now,
         "tags": ensure_list(data.get("tags")),
+        "isRecurring": data.get("isRecurring", False),
+        "recurrencePattern": data.get("recurrencePattern"),
+        "recurringInstanceCount": data.get("recurringInstanceCount", 0),
+        "createdBy": data.get("createdBy"),
     }
 
     task_ref = db.collection("projects").document(project_id).collection("tasks").add(doc_data)
@@ -352,15 +356,28 @@ def update_task_endpoint(project_id, task_id):
     if "ownerId" in updates and "assigneeId" not in updates:
         updates["assigneeId"] = updates.get("ownerId")
 
-    # perform update (existing logic may be different; keep your existing update calls)
     try:
-        # If your code uses .update or .set, keep that instead of this line
         task_ref.update(updates)
+
+        # === RECURRING TASK LOGIC ===
+        new_status = updates.get("status")
+        old_status = canon_status(prev_task.get("status"))
+        if new_status == "completed" and old_status != "completed":
+            is_recurring = prev_task.get("isRecurring", False)
+            if is_recurring:
+                try:
+                    updated_task_data = {**prev_task, **updates}
+                    new_task_id, error = create_next_recurring_instance(project_id, task_id, updated_task_data)
+                    if new_task_id:
+                        print(f"✅ [RECURRING] Created next instance: {new_task_id}")
+                    elif error:
+                        print(f"ℹ️ [RECURRING] Task ended: {error}")
+                except Exception as e:
+                    print(f"❌ [RECURRING] Failed to create instance: {e}")
+
     except Exception as e:
         print(f"[projects:update_task] failed to update task {task_id}: {e}")
         return jsonify({"error": "failed to update task"}), 500
-
-    # call notifications (best-effort, non-blocking)
     try:
         new_status = updates.get("status")
         if new_status is not None:
@@ -656,6 +673,9 @@ def create_standalone_task():
         "subtaskCount": 0,
         "subtaskCompletedCount": 0,
         "subtaskProgress": 0,
+        "isRecurring": data.get("isRecurring", False),
+        "recurrencePattern": data.get("recurrencePattern"),
+        "recurringInstanceCount": data.get("recurringInstanceCount", 0),
     }
 
     if not task_data["title"]:
@@ -742,11 +762,26 @@ def update_standalone_task(task_id):
         updates["tags"] = data["tags"]
     
     task_ref.update(updates)
-    
+    # === RECURRING TASK LOGIC ===
+    old_status = canon_status(task_data.get("status"))
+    new_status = updates.get("status")
+    if new_status == "completed" and old_status != "completed":
+        is_recurring = task_data.get("isRecurring", False)
+        if is_recurring:
+            try:
+                updated_task_data = {**task_data, **updates}
+                new_task_id, error = create_next_standalone_recurring_instance(task_id, updated_task_data)
+                if new_task_id:
+                    print(f"✅ [RECURRING STANDALONE] Created next instance: {new_task_id}")
+                elif error:
+                    print(f"ℹ️ [RECURRING STANDALONE] Task ended: {error}")
+            except Exception as e:
+                print(f"❌ [RECURRING STANDALONE] Failed: {e}")
+
     updated_doc = task_ref.get()
     result = updated_doc.to_dict()
     result["id"] = task_id
-    
+
     return jsonify(normalize_task_out(result)), 200
 
 

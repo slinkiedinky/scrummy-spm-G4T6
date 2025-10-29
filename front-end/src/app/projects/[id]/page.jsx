@@ -68,9 +68,10 @@ import { TeamTimeline } from "@/components/TeamTimeline";
 import { toast } from "sonner";
 import { TaskDetailModal } from "@/components/TaskDetailModal";
 import { getTask } from "@/lib/api";
-import TeamCalendar from '@/components/TeamCalendar';
+import TeamCalendar from "@/components/TeamCalendar";
 import { Users } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { RecurringTaskForm } from "@/components/RecurringTaskForm";
 
 const TAG_BASE =
   "rounded-full px-2.5 py-1 text-xs font-medium inline-flex items-center gap-1";
@@ -172,6 +173,8 @@ export const createEmptyTaskForm = (uid = "") => ({
   status: "to-do",
   tags: "",
   collaboratorsIds: [],
+  isRecurring: false,
+  recurrencePattern: null,
 });
 
 export const toDateInputValue = (value) => {
@@ -208,6 +211,10 @@ export default function ProjectDetailPage() {
 
   const [isTaskDialogOpen, setIsTaskDialogOpen] = useState(false);
   const [taskForm, setTaskForm] = useState(() => createEmptyTaskForm());
+  const [recurringData, setRecurringData] = useState({
+    isRecurring: false,
+    recurrencePattern: null,
+  });
   const [savingTask, setSavingTask] = useState(false);
   const [taskError, setTaskError] = useState("");
   const [editingTaskId, setEditingTaskId] = useState(null);
@@ -418,20 +425,21 @@ export default function ProjectDetailPage() {
 
   // Handle URL parameters and sessionStorage to open task/subtask modal
   useEffect(() => {
-    if (typeof window === 'undefined' || !tasks.length) return;
-    
+    if (typeof window === "undefined" || !tasks.length) return;
+
     // Check sessionStorage for task/subtask to open (from notification click)
-    const taskIdFromStorage = sessionStorage.getItem('openTaskId');
-    const subtaskIdFromStorage = sessionStorage.getItem('openSubtaskId');
-    const shouldScrollToComments = sessionStorage.getItem('scrollToComments') === 'true';
-    
+    const taskIdFromStorage = sessionStorage.getItem("openTaskId");
+    const subtaskIdFromStorage = sessionStorage.getItem("openSubtaskId");
+    const shouldScrollToComments =
+      sessionStorage.getItem("scrollToComments") === "true";
+
     if (taskIdFromStorage) {
-      const task = tasks.find(t => t.id === taskIdFromStorage);
-      
+      const task = tasks.find((t) => t.id === taskIdFromStorage);
+
       if (task && subtaskIdFromStorage) {
         // Open subtask
         getSubtask(id, taskIdFromStorage, subtaskIdFromStorage)
-          .then(subtask => {
+          .then((subtask) => {
             setSelectedTask({
               ...subtask,
               projectId: id,
@@ -440,16 +448,16 @@ export default function ProjectDetailPage() {
               scrollToComments: shouldScrollToComments,
             });
             // Clear sessionStorage after use
-            sessionStorage.removeItem('openTaskId');
-            sessionStorage.removeItem('openSubtaskId');
-            sessionStorage.removeItem('scrollToComments');
+            sessionStorage.removeItem("openTaskId");
+            sessionStorage.removeItem("openSubtaskId");
+            sessionStorage.removeItem("scrollToComments");
           })
-          .catch(err => {
-            console.error('Failed to load subtask:', err);
-            toast.error('Failed to load subtask');
-            sessionStorage.removeItem('openTaskId');
-            sessionStorage.removeItem('openSubtaskId');
-            sessionStorage.removeItem('scrollToComments');
+          .catch((err) => {
+            console.error("Failed to load subtask:", err);
+            toast.error("Failed to load subtask");
+            sessionStorage.removeItem("openTaskId");
+            sessionStorage.removeItem("openSubtaskId");
+            sessionStorage.removeItem("scrollToComments");
           });
       } else if (task) {
         // Open task
@@ -458,13 +466,13 @@ export default function ProjectDetailPage() {
           scrollToComments: shouldScrollToComments,
         });
         // Clear sessionStorage after use
-        sessionStorage.removeItem('openTaskId');
-        sessionStorage.removeItem('scrollToComments');
+        sessionStorage.removeItem("openTaskId");
+        sessionStorage.removeItem("scrollToComments");
       } else {
         // Clear if task not found
-        sessionStorage.removeItem('openTaskId');
-        sessionStorage.removeItem('openSubtaskId');
-        sessionStorage.removeItem('scrollToComments');
+        sessionStorage.removeItem("openTaskId");
+        sessionStorage.removeItem("openSubtaskId");
+        sessionStorage.removeItem("scrollToComments");
       }
     }
   }, [tasks, id]);
@@ -477,6 +485,7 @@ export default function ProjectDetailPage() {
         setSavingTask(false);
         setEditingTaskId(null);
         resetTaskForm();
+        setRecurringData({ isRecurring: false, recurrencePattern: null });
       }
     },
     [resetTaskForm]
@@ -838,6 +847,11 @@ export default function ProjectDetailPage() {
         collaboratorsIds: otherAssignees.length > 0 ? otherAssignees : [],
         tags,
         createdBy: currentUser?.uid,
+        ...(recurringData.isRecurring && {
+          isRecurring: true,
+          recurrencePattern: recurringData.recurrencePattern,
+          recurringInstanceCount: 0,
+        }),
       };
 
       // Due date is required now
@@ -967,19 +981,23 @@ export default function ProjectDetailPage() {
   }
   async function handleTaskStatus(taskId, status) {
     if (isEditingTask && editingTaskId) {
-      payload.updatedBy = auth.currentUser?.uid || "";   // ← add this
+      payload.updatedBy = auth.currentUser?.uid || ""; // ← add this
       await updateTask(id, editingTaskId, payload);
     }
 
-    await updateTask(id, taskId, { status, updatedBy: auth.currentUser?.uid || "" });
+    await updateTask(id, taskId, {
+      status,
+      updatedBy: auth.currentUser?.uid || "",
+    });
 
-    setTasks(prev => prev.map(t => (t.id === taskId ? { ...t, status } : t)));
+    setTasks((prev) =>
+      prev.map((t) => (t.id === taskId ? { ...t, status } : t))
+    );
     // TODO: Auto-sync disabled - causes filter confusion
     // When re-enabling, separate project status from task filter state
     // to avoid unexpected filter changes when updating task status
     // await syncProjectStatusWithTasks(updated);
   }
-
 
   const requestDeleteTask = (task) => {
     if (!task) return;
@@ -1183,22 +1201,21 @@ export default function ProjectDetailPage() {
   };
 
   useEffect(() => {
-  const unsubscribe = onAuthStateChanged(auth, (user) => {
-    if (!user) {
-      setStatus("unauthorized");
-      return;
-    }
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (!user) {
+        setStatus("unauthorized");
+        return;
+      }
 
-    if (project && !project.teamIds.includes(user.uid)) {
-      setStatus("unauthorized");
-      return;
-    }
-    setStatus("authorized");
-  });
+      if (project && !project.teamIds.includes(user.uid)) {
+        setStatus("unauthorized");
+        return;
+      }
+      setStatus("authorized");
+    });
 
-  return () => unsubscribe();
-}, [project]);
-
+    return () => unsubscribe();
+  }, [project]);
 
   if (userLoading) {
     return (
@@ -1237,7 +1254,7 @@ export default function ProjectDetailPage() {
           Back to Projects
         </button>
       </div>
-    )
+    );
   }
 
   return (
@@ -1398,6 +1415,9 @@ export default function ProjectDetailPage() {
                       ))}
                     </SelectContent>
                   </Select>
+                  <p className="text-xs text-muted-foreground">
+                    10 = Most Urgent, 1 = Least Urgent
+                  </p>{" "}
                 </div>
               </div>
 
@@ -1417,7 +1437,14 @@ export default function ProjectDetailPage() {
                 />
                 <p className="text-xs text-muted-foreground">Required field</p>
               </div>
-
+              {/* RECURRING TASK SECTION */}
+              {!isEditingTask && (
+                <RecurringTaskForm
+                  value={recurringData}
+                  onChange={setRecurringData}
+                  currentDueDate={taskForm.dueDate}
+                />
+              )}
               <div className="space-y-2">
                 <label className="text-sm font-medium text-foreground">
                   Assignees <span className="text-destructive">*</span>
@@ -1427,8 +1454,10 @@ export default function ProjectDetailPage() {
                     <Button
                       type="button"
                       variant="outline"
-                      disabled={users.find((u) => u?.id === currentUser.uid)?.role !== "Manager"  &&
-                        currentUser.uid !== taskForm.assigneeId} // disable if not Manager and not owner
+                      disabled={
+                        users.find((u) => u?.id === currentUser.uid)?.role !==
+                          "Manager" && currentUser.uid !== taskForm.assigneeId
+                      } // disable if not Manager and not owner
                       className={`w-full justify-between ${
                         selectedCollaborators.length > 5
                           ? "border-destructive"
@@ -1438,10 +1467,9 @@ export default function ProjectDetailPage() {
                       <span className="truncate text-left">
                         {collaboratorButtonLabel}
                       </span>
-                      {(
-                        users.find((u) => u?.id === currentUser.uid)?.role === "Manager" ||
-                        currentUser.uid === taskForm.assigneeId
-                      ) && (
+                      {(users.find((u) => u?.id === currentUser.uid)?.role ===
+                        "Manager" ||
+                        currentUser.uid === taskForm.assigneeId) && (
                         <span
                           className={`text-xs ${
                             selectedCollaborators.length > 5
@@ -1454,41 +1482,40 @@ export default function ProjectDetailPage() {
                       )}
                     </Button>
                   </DropdownMenuTrigger>
-                    <DropdownMenuContent className="w-64">
-                      <DropdownMenuLabel>Select assignees</DropdownMenuLabel>
-                      <DropdownMenuSeparator />
-                      {collaboratorOptions.length === 0 ? (
-                        <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                          Add team members to this project first.
-                        </div>
-                      ) : (
-                        collaboratorOptions.map((option) => (
-                          <DropdownMenuCheckboxItem
-                            key={option.id}
-                            checked={selectedCollaborators.includes(option.id)}
-                            onCheckedChange={(checked) =>
-                              handleCollaboratorToggle(option.id, checked)
-                            }
-                          >
-                            <div className="flex flex-col">
-                              <span className="leading-tight">
-                                {option.label}
+                  <DropdownMenuContent className="w-64">
+                    <DropdownMenuLabel>Select assignees</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    {collaboratorOptions.length === 0 ? (
+                      <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                        Add team members to this project first.
+                      </div>
+                    ) : (
+                      collaboratorOptions.map((option) => (
+                        <DropdownMenuCheckboxItem
+                          key={option.id}
+                          checked={selectedCollaborators.includes(option.id)}
+                          onCheckedChange={(checked) =>
+                            handleCollaboratorToggle(option.id, checked)
+                          }
+                        >
+                          <div className="flex flex-col">
+                            <span className="leading-tight">
+                              {option.label}
+                            </span>
+                            {option.email && option.email !== option.label && (
+                              <span className="text-xs text-muted-foreground leading-tight">
+                                {option.email}
                               </span>
-                              {option.email && option.email !== option.label && (
-                                <span className="text-xs text-muted-foreground leading-tight">
-                                  {option.email}
-                                </span>
-                              )}
-                            </div>
-                          </DropdownMenuCheckboxItem>
-                        ))
-                      )}
-                    </DropdownMenuContent>
+                            )}
+                          </div>
+                        </DropdownMenuCheckboxItem>
+                      ))
+                    )}
+                  </DropdownMenuContent>
                 </DropdownMenu>
-                 {(
-                  users.find((u) => u?.id === currentUser.uid)?.role === "Manager" ||
-                  currentUser.uid === taskForm.assigneeId) && 
-                  (
+                {(users.find((u) => u?.id === currentUser.uid)?.role ===
+                  "Manager" ||
+                  currentUser.uid === taskForm.assigneeId) && (
                   <p className="text-xs text-muted-foreground">
                     Required: Select 1–5 team members to assign this task to.
                   </p>
@@ -1793,7 +1820,8 @@ export default function ProjectDetailPage() {
                   <div>
                     <h2 className="text-xl font-semibold">Team Calendar</h2>
                     <p className="text-sm text-muted-foreground">
-                      View schedules for {teamMembers.length} team member{teamMembers.length !== 1 ? 's' : ''}
+                      View schedules for {teamMembers.length} team member
+                      {teamMembers.length !== 1 ? "s" : ""}
                     </p>
                   </div>
                   <Button
@@ -1824,7 +1852,9 @@ export default function ProjectDetailPage() {
                           <div className="w-2 h-2 rounded-full bg-primary"></div>
                           <span>{displayName}</span>
                           {member.isCurrentUser && (
-                            <span className="text-xs text-muted-foreground">(You)</span>
+                            <span className="text-xs text-muted-foreground">
+                              (You)
+                            </span>
                           )}
                         </div>
                       );
@@ -1833,12 +1863,11 @@ export default function ProjectDetailPage() {
                 )}
 
                 {/* Team Calendar - Full Height */}
-                    <TeamCalendar 
-                      teamMembers={teamMembers?.map(member => member.id) || []} 
-                      currentUser={currentUser}
-                      projectId={id} // Pass the project ID from the URL params
-                    />
-                  
+                <TeamCalendar
+                  teamMembers={teamMembers?.map((member) => member.id) || []}
+                  currentUser={currentUser}
+                  projectId={id} // Pass the project ID from the URL params
+                />
 
                 {/* Team Management Modal */}
                 <TeamManagementModal
@@ -1910,7 +1939,8 @@ export default function ProjectDetailPage() {
                         assigneeId,
                       email: assigneeInfo.email || "",
                       role: assigneeInfo.role || "",
-                      avatar: assigneeInfo.avatar || assigneeInfo.photoURL || "",
+                      avatar:
+                        assigneeInfo.avatar || assigneeInfo.photoURL || "",
                     };
                   }
                   setSelectedTask(updatedSubtask);
@@ -1924,10 +1954,14 @@ export default function ProjectDetailPage() {
                     )
                   );
                 } else {
-                  const updatedTask = await getTask(project.id, selectedTask.id);
+                  const updatedTask = await getTask(
+                    project.id,
+                    selectedTask.id
+                  );
                   updatedTask.projectId = project.id;
 
-                  const assigneeId = updatedTask.assigneeId || updatedTask.ownerId;
+                  const assigneeId =
+                    updatedTask.assigneeId || updatedTask.ownerId;
                   const assigneeInfo = users.find((u) => u?.id === assigneeId);
                   if (assigneeInfo) {
                     updatedTask.assigneeSummary = {
@@ -1939,7 +1973,8 @@ export default function ProjectDetailPage() {
                         assigneeId,
                       email: assigneeInfo.email || "",
                       role: assigneeInfo.role || "",
-                      avatar: assigneeInfo.avatar || assigneeInfo.photoURL || "",
+                      avatar:
+                        assigneeInfo.avatar || assigneeInfo.photoURL || "",
                     };
                   } else if (assigneeId) {
                     updatedTask.assigneeSummary = {
@@ -2332,7 +2367,7 @@ function ReportPanel({ project, tasks, onClose, resolveUserLabel }) {
           </section>
 
           <section>
-                       <h4 className="mb-2 font-semibold">Summary</h4>
+            <h4 className="mb-2 font-semibold">Summary</h4>
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               <Card className="p-4">
                 <div className="text-sm text-muted-foreground">Total tasks</div>
@@ -2489,28 +2524,30 @@ function toLocalDate(v) {
   return null;
 }
 
-function TeamManagementModal({ 
-  isOpen, 
-  onClose, 
-  teamMembers, 
-  availableUsers, 
+function TeamManagementModal({
+  isOpen,
+  onClose,
+  teamMembers,
+  availableUsers,
   selectedMember,
   onMemberSelect,
-  onAddMember, 
-  onRemoveMember, 
-  addingMember, 
-  removingMemberId, 
-  memberError 
+  onAddMember,
+  onRemoveMember,
+  addingMember,
+  removingMemberId,
+  memberError,
 }) {
   const [searchTerm, setSearchTerm] = useState("");
 
-  const filteredUsers = availableUsers.filter(user =>
-    user.label.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (user.email && user.email.toLowerCase().includes(searchTerm.toLowerCase()))
+  const filteredUsers = availableUsers.filter(
+    (user) =>
+      user.label.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (user.email &&
+        user.email.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   const handleUserSelect = (userId) => {
-    const user = availableUsers.find(u => u.id === userId);
+    const user = availableUsers.find((u) => u.id === userId);
     if (user) {
       onMemberSelect(userId);
       // Clear search term immediately after selection
@@ -2551,7 +2588,7 @@ function TeamManagementModal({
           {/* Add New Member Section */}
           <div className="space-y-3">
             <h4 className="font-medium">Add Team Member</h4>
-            
+
             {/* Search Input with Autocomplete */}
             <div className="relative">
               <input
@@ -2567,7 +2604,7 @@ function TeamManagementModal({
                 }}
                 className="w-full h-9 px-3 rounded-md border bg-background text-sm"
               />
-              
+
               {/* Autocomplete Dropdown */}
               {searchTerm && filteredUsers.length > 0 && (
                 <div className="absolute top-full left-0 right-0 mt-1 bg-background border rounded-md shadow-lg max-h-40 overflow-y-auto z-50">
@@ -2594,7 +2631,9 @@ function TeamManagementModal({
               <div className="p-2 bg-muted/50 rounded-md border">
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium">
-                    Selected: {availableUsers.find(u => u.id === selectedMember)?.label || selectedMember}
+                    Selected:{" "}
+                    {availableUsers.find((u) => u.id === selectedMember)
+                      ?.label || selectedMember}
                   </span>
                   <Button
                     variant="ghost"
@@ -2637,7 +2676,7 @@ function TeamManagementModal({
                     member.email ||
                     member.id;
                   const isRemoving = removingMemberId === member.id;
-                  
+
                   return (
                     <div
                       key={member.id}
@@ -2648,11 +2687,13 @@ function TeamManagementModal({
                         <div>
                           <p className="text-sm font-medium">{displayName}</p>
                           {member.email && member.email !== displayName && (
-                            <p className="text-xs text-muted-foreground">{member.email}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {member.email}
+                            </p>
                           )}
                         </div>
                       </div>
-                      
+
                       <div className="flex items-center gap-1">
                         {member.isOwner && (
                           <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded-full">

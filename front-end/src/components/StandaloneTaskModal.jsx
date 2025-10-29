@@ -18,6 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { RecurringTaskForm } from "@/components/RecurringTaskForm";
 
 const STATUS = ["to-do", "in progress", "completed", "blocked"];
 const STATUS_LABELS = {
@@ -43,10 +44,15 @@ export function StandaloneTaskModal({
     priority: "5",
     dueDate: "",
     tags: "",
+    isRecurring: false,
+    recurrencePattern: null,
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-
+  const [recurringData, setRecurringData] = useState({
+    isRecurring: false,
+    recurrencePattern: null,
+  });
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -80,6 +86,13 @@ export function StandaloneTaskModal({
           .map((t) => t.trim())
           .filter(Boolean),
         ownerId: currentUser.uid,
+        assigneeId: currentUser.uid,
+        createdBy: currentUser.uid,
+        ...(recurringData.isRecurring && {
+          isRecurring: true,
+          recurrencePattern: recurringData.recurrencePattern,
+          recurringInstanceCount: 0,
+        }),
       };
 
       await onSubmit(payload);
@@ -93,6 +106,7 @@ export function StandaloneTaskModal({
         dueDate: "",
         tags: "",
       });
+      setRecurringData({ isRecurring: false, recurrencePattern: null });
       setError("");
     } catch (err) {
       setError(err?.message || "Failed to create task");
@@ -111,6 +125,7 @@ export function StandaloneTaskModal({
         dueDate: "",
         tags: "",
       });
+      setRecurringData({ isRecurring: false, recurrencePattern: null });
       setError("");
       onClose();
     }
@@ -217,6 +232,9 @@ export function StandaloneTaskModal({
                     ))}
                   </SelectContent>
                 </Select>
+                <p className="text-xs text-muted-foreground">
+                  10 = Most Urgent, 1 = Least Urgent
+                </p>
               </div>
             </div>
 
@@ -236,7 +254,11 @@ export function StandaloneTaskModal({
               />
               <p className="text-xs text-muted-foreground">Required field</p>
             </div>
-
+            <RecurringTaskForm
+              value={recurringData}
+              onChange={setRecurringData}
+              currentDueDate={form.dueDate}
+            />
             <div className="space-y-2">
               <label
                 htmlFor="task-tags"

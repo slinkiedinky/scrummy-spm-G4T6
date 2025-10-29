@@ -5,6 +5,7 @@ import datetime as dt
 from users import users_bp
 from projects import projects_bp
 from comments import comments_bp
+from recurring_tasks import recurring_bp
 import threading
 import time
 import os
@@ -21,6 +22,7 @@ CORS(app, resources={r"/api/*": {"origins": "*"}})
 app.register_blueprint(users_bp, url_prefix="/api/users")
 app.register_blueprint(projects_bp, url_prefix="/api/projects")
 app.register_blueprint(comments_bp, url_prefix="/api")
+app.register_blueprint(recurring_bp, url_prefix="/api/recurring")
 
 # Debug endpoint to manually trigger deadline check
 @app.route("/api/notifications/check-deadlines", methods=["POST"])

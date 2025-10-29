@@ -1282,7 +1282,7 @@ export default function TasksPage() {
                     htmlFor="edit-priority"
                     className="text-sm font-medium text-foreground"
                   >
-                    Priority (1 = least urgent, 10 = most urgent)
+                    Priority
                   </label>
                   <Select
                     value={editForm.priority}
@@ -1296,11 +1296,14 @@ export default function TasksPage() {
                     <SelectContent>
                       {PRIORITY_VALUES.map((value) => (
                         <SelectItem key={value} value={value}>
-                          {`Priority ${value}`}
+                          {value}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
+                  <p className="text-xs text-muted-foreground">
+                    10 = Most Urgent, 1 = Least Urgent
+                  </p>
                 </div>
               </div>
 
@@ -1320,7 +1323,7 @@ export default function TasksPage() {
                   }
                 />
               </div>
-              {/* NEW: Assignees field */}
+              {/* Assignees field */}
               <div className="space-y-2">
                 <label
                   htmlFor="edit-assignees"
@@ -1358,43 +1361,66 @@ export default function TasksPage() {
                   <DropdownMenuContent className="w-64">
                     <DropdownMenuLabel>Select assignees</DropdownMenuLabel>
                     <DropdownMenuSeparator />
-                    {users.length === 0 ? (
-                      <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                        No users available
-                      </div>
-                    ) : (
-                      users.map((user) => (
-                        <DropdownMenuCheckboxItem
-                          key={user.id}
-                          checked={editForm.collaboratorsIds.includes(user.id)}
-                          onCheckedChange={(checked) => {
-                            const current = editForm.collaboratorsIds;
-                            const updated = checked
-                              ? [...current, user.id]
-                              : current.filter((id) => id !== user.id);
-                            handleEditFieldChange("collaboratorsIds", updated);
-                          }}
-                        >
-                          <div className="flex flex-col">
-                            <span className="leading-tight">
-                              {user.fullName ||
-                                user.displayName ||
-                                user.name ||
-                                user.email}
-                            </span>
-                            {user.email && (
-                              <span className="text-xs text-muted-foreground leading-tight">
-                                {user.email}
-                              </span>
+                    {(() => {
+                      // For standalone tasks, only show current user
+                      const isStandalone =
+                        editingTask?.isStandalone ||
+                        editingTask?.projectId === "standalone";
+                      const availableUsers = isStandalone
+                        ? users.filter((u) => u.id === currentUser?.uid)
+                        : users;
+
+                      return availableUsers.length === 0 ? (
+                        <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                          {isStandalone
+                            ? "Only you can be assigned to standalone tasks"
+                            : "No users available"}
+                        </div>
+                      ) : (
+                        availableUsers.map((user) => (
+                          <DropdownMenuCheckboxItem
+                            key={user.id}
+                            checked={editForm.collaboratorsIds.includes(
+                              user.id
                             )}
-                          </div>
-                        </DropdownMenuCheckboxItem>
-                      ))
-                    )}
+                            onCheckedChange={(checked) => {
+                              const current = editForm.collaboratorsIds;
+                              const updated = checked
+                                ? [...current, user.id]
+                                : current.filter((id) => id !== user.id);
+                              handleEditFieldChange(
+                                "collaboratorsIds",
+                                updated
+                              );
+                            }}
+                            disabled={
+                              isStandalone && user.id !== currentUser?.uid
+                            }
+                          >
+                            <div className="flex flex-col">
+                              <span className="leading-tight">
+                                {user.fullName ||
+                                  user.displayName ||
+                                  user.name ||
+                                  user.email}
+                              </span>
+                              {user.email && (
+                                <span className="text-xs text-muted-foreground leading-tight">
+                                  {user.email}
+                                </span>
+                              )}
+                            </div>
+                          </DropdownMenuCheckboxItem>
+                        ))
+                      );
+                    })()}
                   </DropdownMenuContent>
                 </DropdownMenu>
                 <p className="text-xs text-muted-foreground">
-                  Required: Select 1-5 team members to assign this task to.
+                  {editingTask?.isStandalone ||
+                  editingTask?.projectId === "standalone"
+                    ? "Standalone tasks can only be assigned to you."
+                    : "Required: Select 1-5 team members to assign this task to."}
                 </p>
               </div>
               <div className="space-y-2">

@@ -1146,7 +1146,7 @@ export default function TasksPage() {
 
   if (userLoading) {
     return (
-      <div className="flex-1 overflow-auto p-6">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden p-6">
         <div className="h-64 grid place-items-center text-muted-foreground">
           Validating session…
         </div>
@@ -1156,7 +1156,7 @@ export default function TasksPage() {
 
   if (loading) {
     return (
-      <div className="flex-1 overflow-auto p-6">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden p-6">
         <div className="h-64 grid place-items-center text-muted-foreground">
           Loading your tasks…
         </div>
@@ -1610,7 +1610,7 @@ export default function TasksPage() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-auto p-6">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden p-6">
         {tasksByProject.length === 0 ? (
           <div className="h-full grid place-items-center text-center text-muted-foreground">
             <div>

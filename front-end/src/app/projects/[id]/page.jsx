@@ -1911,6 +1911,11 @@ export default function ProjectDetailPage() {
             onSubtaskChange={async () => {
               try {
                 await new Promise((resolve) => setTimeout(resolve, 300));
+
+                if (currentUser?.uid) {
+                  await load(currentUser.uid);
+                }
+
                 const isViewingSubtask =
                   selectedTask.isSubtask || selectedTask.parentTaskId;
 
@@ -1944,15 +1949,6 @@ export default function ProjectDetailPage() {
                     };
                   }
                   setSelectedTask(updatedSubtask);
-                  const updatedParentTask = await getTask(
-                    project.id,
-                    parentTaskId
-                  );
-                  setTasks((prevTasks) =>
-                    prevTasks.map((t) =>
-                      t.id === parentTaskId ? { ...t, ...updatedParentTask } : t
-                    )
-                  );
                 } else {
                   const updatedTask = await getTask(
                     project.id,
@@ -1987,11 +1983,6 @@ export default function ProjectDetailPage() {
                   }
 
                   setSelectedTask(updatedTask);
-                  setTasks((prevTasks) =>
-                    prevTasks.map((t) =>
-                      t.id === updatedTask.id ? { ...t, ...updatedTask } : t
-                    )
-                  );
                 }
               } catch (err) {
                 console.error("Failed to refresh task:", err);

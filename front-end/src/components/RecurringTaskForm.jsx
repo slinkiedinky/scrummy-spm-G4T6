@@ -83,9 +83,21 @@ export function RecurringTaskForm({
   const getRecurrenceSummary = () => {
     if (!isRecurring) return null;
 
-    let summary = `Repeats every ${
-      interval > 1 ? interval + " " : ""
-    }${frequency}`;
+    // Map frequency to proper unit names
+    const frequencyMap = {
+      daily: { singular: "day", plural: "days" },
+      weekly: { singular: "week", plural: "weeks" },
+      monthly: { singular: "month", plural: "months" },
+      yearly: { singular: "year", plural: "years" },
+    };
+
+    const freqWord = frequencyMap[frequency];
+    const unit = interval === 1 ? freqWord.singular : freqWord.plural;
+
+    let summary =
+      interval === 1
+        ? `Repeats every ${unit}`
+        : `Repeats every ${interval} ${unit}`;
 
     if (endCondition === "after_count") {
       summary += ` • ${maxCount} times`;

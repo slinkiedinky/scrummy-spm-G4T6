@@ -945,6 +945,13 @@ def delete_standalone_subtask(task_id, subtask_id):
 def update_standalone_task_progress(task_id):
     """Calculate and update standalone task's subtask completion progress"""
     task_ref = db.collection("tasks").document(task_id)
+    task_doc = task_ref.get()
+    if not task_doc.exists:
+        return
+    
+    task_data = task_doc.to_dict()
+    old_status = canon_status(task_data.get("status"))
+    
     subtasks_query = task_ref.collection("subtasks").stream()
     subtasks = list(subtasks_query)
     
@@ -958,25 +965,45 @@ def update_standalone_task_progress(task_id):
             "updatedAt": now_utc(),
         })
         return
+    
     completed_subtasks = sum(
         1 for subtask in subtasks
         if canon_status(subtask.to_dict().get("status")) == "completed"
     )
+    
     progress = int((completed_subtasks / total_subtasks) * 100)
+    
     updates = {
         "subtaskCount": total_subtasks,
         "subtaskCompletedCount": completed_subtasks,
         "subtaskProgress": progress,
         "updatedAt": now_utc(),
     }
+    
     if progress == 100:
-        task_doc = task_ref.get()
-        if task_doc.exists:
-            current_status = canon_status(task_doc.to_dict().get("status"))
-            if current_status != "completed":
-                updates["status"] = "completed"
+        if old_status != "completed":
+            updates["status"] = "completed"
+    elif progress < 100 and old_status == "completed":
+        updates["status"] = "in progress"
+        print(f"ℹ️ [AUTO-UNCOMPLETE STANDALONE] Moving task {task_id} back to in-progress (progress: {progress}%)")
     
     task_ref.update(updates)
+    
+    # === TRIGGER RECURRING TASK CREATION IF AUTO-COMPLETED ===
+    new_status = updates.get("status")
+    if new_status == "completed" and old_status != "completed":
+        is_recurring = task_data.get("isRecurring", False)
+        if is_recurring:
+            try:
+                updated_task_data = {**task_data, **updates}
+                new_task_id, error = create_next_standalone_recurring_instance(task_id, updated_task_data)
+                if new_task_id:
+                    print(f"✅ [RECURRING STANDALONE] Auto-completed task created next instance: {new_task_id}")
+                elif error:
+                    print(f"ℹ️ [RECURRING STANDALONE] Task ended: {error}")
+            except Exception as e:
+                print(f"❌ [RECURRING STANDALONE] Failed: {e}")
+     
 @projects_bp.route("/<project_id>/tasks/<task_id>/subtasks/<subtask_id>", methods=["PUT"])
 @cross_origin()
 def update_subtask(project_id, task_id, subtask_id):
@@ -1026,19 +1053,23 @@ def delete_subtask(project_id, task_id, subtask_id):
 
 
 # -------- Helper function to update parent task progress --------
-
 def update_parent_task_progress(project_id, task_id):
     """Calculate and update parent task's subtask completion progress"""
     parent_task_ref = db.collection("projects").document(project_id).collection("tasks").document(task_id)
+    parent_doc = parent_task_ref.get()
+    if not parent_doc.exists:
+        return
     
-    # Get all subtasks
+    parent_task_data = parent_doc.to_dict()
+    old_status = canon_status(parent_task_data.get("status"))
+    print(f"🔍 [DEBUG] Task {task_id}: old_status={old_status}, isRecurring={parent_task_data.get('isRecurring', False)}")
+    
     subtasks_query = parent_task_ref.collection("subtasks").stream()
     subtasks = list(subtasks_query)
     
     total_subtasks = len(subtasks)
     
     if total_subtasks == 0:
-        # No subtasks, clear progress
         parent_task_ref.update({
             "subtaskCount": 0,
             "subtaskCompletedCount": 0,
@@ -1047,16 +1078,14 @@ def update_parent_task_progress(project_id, task_id):
         })
         return
     
-    # Count completed subtasks
     completed_subtasks = sum(
-        1 for subtask in subtasks 
+        1 for subtask in subtasks
         if canon_status(subtask.to_dict().get("status")) == "completed"
     )
-    
-    # Calculate progress percentage
     progress = int((completed_subtasks / total_subtasks) * 100)
     
-    # Update parent task
+    print(f"🔍 [DEBUG] Task {task_id}: progress={progress}%, completed={completed_subtasks}/{total_subtasks}")
+    
     updates = {
         "subtaskCount": total_subtasks,
         "subtaskCompletedCount": completed_subtasks,
@@ -1064,15 +1093,33 @@ def update_parent_task_progress(project_id, task_id):
         "updatedAt": now_utc(),
     }
     
-    # Optional: Auto-complete parent task when all subtasks are done
     if progress == 100:
-        parent_doc = parent_task_ref.get()
-        if parent_doc.exists:
-            current_status = canon_status(parent_doc.to_dict().get("status"))
-            # Only auto-complete if not already completed
-            if current_status != "completed":
-                updates["status"] = "completed"
+        if old_status != "completed":
+            updates["status"] = "completed"
+            print(f"🔍 [DEBUG] Task {task_id}: Setting status to completed")
+    elif progress < 100 and old_status == "completed":
+        updates["status"] = "in progress"
+        print(f"ℹ️ [AUTO-UNCOMPLETE] Moving task {task_id} back to in-progress (progress: {progress}%)")
     
     parent_task_ref.update(updates)
-    new_status = "completed" if progress == 100 else "to-do"
-    parent_task_ref.update({"status": new_status})
+    
+    new_status = updates.get("status")
+    print(f"🔍 [DEBUG] Task {task_id}: new_status={new_status}, checking recurring...")
+    
+    if new_status == "completed" and old_status != "completed":
+        is_recurring = parent_task_data.get("isRecurring", False)
+        print(f"🔍 [DEBUG] Task {task_id}: Triggering recurring check. isRecurring={is_recurring}")
+        if is_recurring:
+            try:
+                updated_task_data = {**parent_task_data, **updates}
+                print(f"🔍 [DEBUG] Task {task_id}: Calling create_next_recurring_instance...")
+                new_task_id, error = create_next_recurring_instance(project_id, task_id, updated_task_data)
+                if new_task_id:
+                    print(f"✅ [RECURRING] Auto-completed task created next instance: {new_task_id}")
+                elif error:
+                    print(f"ℹ️ [RECURRING] Task ended: {error}")
+            except Exception as e:
+                print(f"❌ [RECURRING] Failed to create instance: {e}")
+                import traceback
+                traceback.print_exc()
+        

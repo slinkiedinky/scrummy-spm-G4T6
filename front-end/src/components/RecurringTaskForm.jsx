@@ -35,22 +35,30 @@ const END_CONDITIONS = [
   { value: "on_date", label: "On specific date" },
 ];
 
-export function RecurringTaskForm({ 
-  value, 
-  onChange, 
+export function RecurringTaskForm({
+  value,
+  onChange,
   disabled = false,
-  currentDueDate = null
+  currentDueDate = null,
 }) {
   const [isRecurring, setIsRecurring] = useState(value?.isRecurring || false);
-  const [frequency, setFrequency] = useState(value?.recurrencePattern?.frequency || "daily");
-  const [interval, setInterval] = useState(value?.recurrencePattern?.interval || 1);
-  const [endCondition, setEndCondition] = useState(value?.recurrencePattern?.endCondition || "never");
-  const [maxCount, setMaxCount] = useState(value?.recurrencePattern?.maxCount || 5);
-  const [endDate, setEndDate] = useState(
-    value?.recurrencePattern?.endDate ? new Date(value.recurrencePattern.endDate) : null
+  const [frequency, setFrequency] = useState(
+    value?.recurrencePattern?.frequency || "daily"
   );
-
-  // Update parent whenever values change
+  const [interval, setInterval] = useState(
+    value?.recurrencePattern?.interval || 1
+  );
+  const [endCondition, setEndCondition] = useState(
+    value?.recurrencePattern?.endCondition || "never"
+  );
+  const [maxCount, setMaxCount] = useState(
+    value?.recurrencePattern?.maxCount || 5
+  );
+  const [endDate, setEndDate] = useState(
+    value?.recurrencePattern?.endDate
+      ? new Date(value.recurrencePattern.endDate)
+      : null
+  );
   useEffect(() => {
     if (!isRecurring) {
       onChange({ isRecurring: false, recurrencePattern: null });
@@ -62,19 +70,22 @@ export function RecurringTaskForm({
       interval,
       endCondition,
       ...(endCondition === "after_count" && { maxCount }),
-      ...(endCondition === "on_date" && endDate && { endDate: endDate.toISOString() }),
+      ...(endCondition === "on_date" &&
+        endDate && { endDate: endDate.toISOString() }),
     };
 
     onChange({
       isRecurring: true,
       recurrencePattern: pattern,
     });
-  }, [isRecurring, frequency, interval, endCondition, maxCount, endDate, onChange]);
+  }, [isRecurring, frequency, interval, endCondition, maxCount, endDate]);
 
   const getRecurrenceSummary = () => {
     if (!isRecurring) return null;
 
-    let summary = `Repeats every ${interval > 1 ? interval + " " : ""}${frequency}`;
+    let summary = `Repeats every ${
+      interval > 1 ? interval + " " : ""
+    }${frequency}`;
 
     if (endCondition === "after_count") {
       summary += ` • ${maxCount} times`;
@@ -93,7 +104,10 @@ export function RecurringTaskForm({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Repeat className="h-4 w-4 text-purple-600" />
-          <Label htmlFor="recurring-toggle" className="font-medium cursor-pointer">
+          <Label
+            htmlFor="recurring-toggle"
+            className="font-medium cursor-pointer"
+          >
             Make this a recurring task
           </Label>
         </div>
@@ -111,7 +125,11 @@ export function RecurringTaskForm({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label className="text-sm">Repeat</Label>
-              <Select value={frequency} onValueChange={setFrequency} disabled={disabled}>
+              <Select
+                value={frequency}
+                onValueChange={setFrequency}
+                disabled={disabled}
+              >
                 <SelectTrigger className="mt-1 bg-white">
                   <SelectValue />
                 </SelectTrigger>
@@ -131,7 +149,9 @@ export function RecurringTaskForm({
                 type="number"
                 min="1"
                 value={interval}
-                onChange={(e) => setInterval(Math.max(1, parseInt(e.target.value) || 1))}
+                onChange={(e) =>
+                  setInterval(Math.max(1, parseInt(e.target.value) || 1))
+                }
                 className="mt-1 bg-white"
                 disabled={disabled}
               />
@@ -141,7 +161,11 @@ export function RecurringTaskForm({
           {/* End Condition */}
           <div>
             <Label className="text-sm">Ends</Label>
-            <Select value={endCondition} onValueChange={setEndCondition} disabled={disabled}>
+            <Select
+              value={endCondition}
+              onValueChange={setEndCondition}
+              disabled={disabled}
+            >
               <SelectTrigger className="mt-1 bg-white">
                 <SelectValue />
               </SelectTrigger>
@@ -164,7 +188,11 @@ export function RecurringTaskForm({
                 min="1"
                 max="100"
                 value={maxCount}
-                onChange={(e) => setMaxCount(Math.max(1, Math.min(100, parseInt(e.target.value) || 1)))}
+                onChange={(e) =>
+                  setMaxCount(
+                    Math.max(1, Math.min(100, parseInt(e.target.value) || 1))
+                  )
+                }
                 className="mt-1 bg-white"
                 disabled={disabled}
               />
@@ -193,7 +221,9 @@ export function RecurringTaskForm({
                     onSelect={setEndDate}
                     initialFocus
                     disabled={(date) => {
-                      const minDate = currentDueDate ? new Date(currentDueDate) : new Date();
+                      const minDate = currentDueDate
+                        ? new Date(currentDueDate)
+                        : new Date();
                       return date < minDate;
                     }}
                   />
@@ -207,9 +237,12 @@ export function RecurringTaskForm({
             <div className="flex items-start gap-2 text-sm">
               <Info className="h-4 w-4 text-purple-600 mt-0.5 flex-shrink-0" />
               <div>
-                <div className="font-medium text-purple-900">{getRecurrenceSummary()}</div>
+                <div className="font-medium text-purple-900">
+                  {getRecurrenceSummary()}
+                </div>
                 <div className="text-gray-600 text-xs mt-1">
-                  When you complete this task, a new instance will be automatically created with an updated due date.
+                  When you complete this task, a new instance will be
+                  automatically created with an updated due date.
                 </div>
               </div>
             </div>
@@ -227,5 +260,8 @@ RecurringTaskForm.propTypes = {
   }),
   onChange: PropTypes.func.isRequired,
   disabled: PropTypes.bool,
-  currentDueDate: PropTypes.oneOfType([PropTypes.string, PropTypes.instanceOf(Date)]),
+  currentDueDate: PropTypes.oneOfType([
+    PropTypes.string,
+    PropTypes.instanceOf(Date),
+  ]),
 };

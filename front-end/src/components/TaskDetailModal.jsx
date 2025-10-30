@@ -23,6 +23,8 @@ import {
   Paperclip,
   Edit,
   Trash2,
+  Repeat,
+  Star,
 } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { CheckCircle2, Circle, Plus } from "lucide-react";
@@ -48,6 +50,8 @@ import {
   listStandaloneSubtasks,
   updateStandaloneSubtask,
   deleteStandaloneSubtask,
+  updateTask,
+  updateStandaloneTask,
 } from "@/lib/api";
 import { Input } from "@/components/ui/input";
 import {
@@ -703,6 +707,20 @@ export function TaskDetailModal({
                       Subtask
                     </Badge>
                   )}
+                  {task.isRecurring && (
+                    <Badge
+                      className={`${TAG_BASE} bg-indigo-100 text-indigo-700 border border-indigo-200`}
+                    >
+                      Recurring
+                    </Badge>
+                  )}
+                  {(task.isStandalone || task.projectId === "standalone") && (
+                    <Badge
+                      className={`${TAG_BASE} bg-purple-100 text-purple-700 border border-purple-200`}
+                    >
+                      Standalone
+                    </Badge>
+                  )}
                 </div>
                 {task.projectName && (
                   <p className="text-xs text-muted-foreground mt-2 truncate">
@@ -995,12 +1013,12 @@ export function TaskDetailModal({
                 </div>
               </>
             )}
-
             {task.isRecurring && task.recurrencePattern && (
               <>
                 <Separator />
                 <div>
                   <div className="flex items-center gap-2 mb-3">
+                    {" "}
                     <Repeat className="h-4 w-4 text-muted-foreground" />
                     <h3 className="font-semibold text-foreground">
                       Recurrence
@@ -1016,9 +1034,22 @@ export function TaskDetailModal({
                           const pattern = task.recurrencePattern;
                           const frequency = pattern.frequency || "daily";
                           const interval = pattern.interval || 1;
-                          return `Every ${
-                            interval > 1 ? `${interval} ` : ""
-                          }${frequency}${interval > 1 ? "s" : ""}`;
+                          const frequencyMap = {
+                            daily: { singular: "day", plural: "days" },
+                            weekly: { singular: "week", plural: "weeks" },
+                            monthly: { singular: "month", plural: "months" },
+                            yearly: { singular: "year", plural: "years" },
+                          };
+
+                          const freqWord = frequencyMap[frequency];
+                          const unit =
+                            interval === 1
+                              ? freqWord.singular
+                              : freqWord.plural;
+
+                          return interval === 1
+                            ? `Every ${unit}`
+                            : `Every ${interval} ${unit}`;
                         })()}
                       </span>
                     </div>
@@ -1052,6 +1083,13 @@ export function TaskDetailModal({
                         </span>
                       </div>
                     )}
+                    <div className="mt-3 p-3 bg-muted/50 rounded-md border border-border">
+                      <p className="text-xs text-muted-foreground">
+                        <strong>Note:</strong> To change recurrence settings,
+                        delete this task and create a new one with updated
+                        settings.
+                      </p>
+                    </div>
                   </div>
                 </div>
               </>

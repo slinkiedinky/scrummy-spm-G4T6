@@ -2,7 +2,9 @@ import { auth } from "./firebase";
 
 // ---- Standalone Task Comments ----
 export async function listStandaloneComments(taskId) {
-  const r = await fetch(`${API}/standalone-tasks/${taskId}/comments`, { cache: "no-store" });
+  const r = await fetch(`${API}/standalone-tasks/${taskId}/comments`, {
+    cache: "no-store",
+  });
   if (!r.ok) throw new Error(`Failed to load comments (${r.status})`);
   return r.json();
 }
@@ -18,85 +20,129 @@ export async function addStandaloneComment(taskId, payload) {
 }
 
 export async function editStandaloneComment(taskId, commentId, payload) {
-  const r = await fetch(`${API}/standalone-tasks/${taskId}/comments/${commentId}`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
+  const r = await fetch(
+    `${API}/standalone-tasks/${taskId}/comments/${commentId}`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }
+  );
   if (!r.ok) throw new Error(`Failed to edit comment (${r.status})`);
   return r.json();
 }
 
 export async function deleteStandaloneComment(taskId, commentId) {
-  const r = await fetch(`${API}/standalone-tasks/${taskId}/comments/${commentId}`, {
-    method: "DELETE" });
+  const r = await fetch(
+    `${API}/standalone-tasks/${taskId}/comments/${commentId}`,
+    {
+      method: "DELETE",
+    }
+  );
   if (!r.ok) throw new Error(`Failed to delete comment (${r.status})`);
   return r.json();
 }
 // ---- Comments ----
 export async function listComments(projectId, taskId) {
-  const r = await fetch(`${API}/tasks/${taskId}/comments?project_id=${projectId}`, { cache: "no-store" });
+  const r = await fetch(
+    `${API}/tasks/${taskId}/comments?project_id=${projectId}`,
+    { cache: "no-store" }
+  );
   if (!r.ok) throw new Error(`Failed to load comments (${r.status})`);
   return r.json();
 }
 
 export async function addComment(projectId, taskId, payload) {
-  const r = await fetch(`${API}/tasks/${taskId}/comments?project_id=${projectId}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
+  const r = await fetch(
+    `${API}/tasks/${taskId}/comments?project_id=${projectId}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }
+  );
   if (!r.ok) throw new Error(`Failed to add comment (${r.status})`);
   return r.json();
 }
 
 export async function editComment(projectId, taskId, commentId, payload) {
-  const r = await fetch(`${API}/tasks/${taskId}/comments/${commentId}?project_id=${projectId}`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
+  const r = await fetch(
+    `${API}/tasks/${taskId}/comments/${commentId}?project_id=${projectId}`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }
+  );
   if (!r.ok) throw new Error(`Failed to edit comment (${r.status})`);
   return r.json();
 }
 
 export async function deleteComment(projectId, taskId, commentId) {
-  const r = await fetch(`${API}/tasks/${taskId}/comments/${commentId}?project_id=${projectId}`, {
-    method: "DELETE" });
+  const r = await fetch(
+    `${API}/tasks/${taskId}/comments/${commentId}?project_id=${projectId}`,
+    {
+      method: "DELETE",
+    }
+  );
   if (!r.ok) throw new Error(`Failed to delete comment (${r.status})`);
   return r.json();
 }
 
 // ---- Subtask Comments ----
 export async function listSubtaskComments(projectId, taskId, subtaskId) {
-  const r = await fetch(`${API}/tasks/${taskId}/subtasks/${subtaskId}/comments?project_id=${projectId}`, { cache: "no-store" });
+  const r = await fetch(
+    `${API}/tasks/${taskId}/subtasks/${subtaskId}/comments?project_id=${projectId}`,
+    { cache: "no-store" }
+  );
   if (!r.ok) throw new Error(`Failed to load subtask comments (${r.status})`);
   return r.json();
 }
 
 export async function addSubtaskComment(projectId, taskId, subtaskId, payload) {
-  const r = await fetch(`${API}/tasks/${taskId}/subtasks/${subtaskId}/comments?project_id=${projectId}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
+  const r = await fetch(
+    `${API}/tasks/${taskId}/subtasks/${subtaskId}/comments?project_id=${projectId}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }
+  );
   if (!r.ok) throw new Error(`Failed to add subtask comment (${r.status})`);
   return r.json();
 }
 
-export async function editSubtaskComment(projectId, taskId, subtaskId, commentId, payload) {
-  const r = await fetch(`${API}/tasks/${taskId}/subtasks/${subtaskId}/comments/${commentId}?project_id=${projectId}`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
+export async function editSubtaskComment(
+  projectId,
+  taskId,
+  subtaskId,
+  commentId,
+  payload
+) {
+  const r = await fetch(
+    `${API}/tasks/${taskId}/subtasks/${subtaskId}/comments/${commentId}?project_id=${projectId}`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }
+  );
   if (!r.ok) throw new Error(`Failed to edit subtask comment (${r.status})`);
   return r.json();
 }
 
-export async function deleteSubtaskComment(projectId, taskId, subtaskId, commentId) {
-  const r = await fetch(`${API}/tasks/${taskId}/subtasks/${subtaskId}/comments/${commentId}?project_id=${projectId}`, {
-    method: "DELETE" });
+export async function deleteSubtaskComment(
+  projectId,
+  taskId,
+  subtaskId,
+  commentId
+) {
+  const r = await fetch(
+    `${API}/tasks/${taskId}/subtasks/${subtaskId}/comments/${commentId}?project_id=${projectId}`,
+    {
+      method: "DELETE",
+    }
+  );
   if (!r.ok) throw new Error(`Failed to delete subtask comment (${r.status})`);
   return r.json();
 }
@@ -240,41 +286,41 @@ export const createTask = async (projectId, payload) => {
 };
 
 export const updateTask = async (projectId, taskId, patch) => {
-    try {
-        const user = auth?.currentUser;
-        if (user && !patch?.updatedBy && !patch?.userId && !patch?.currentUserId) {
-            patch = { ...patch, updatedBy: user.uid };
-        }
-    } catch (e) {
-        // best-effort
+  try {
+    const user = auth?.currentUser;
+    if (user && !patch?.updatedBy && !patch?.userId && !patch?.currentUserId) {
+      patch = { ...patch, updatedBy: user.uid };
     }
+  } catch (e) {
+    // best-effort
+  }
 
-    const r = await fetch(`${API}/projects/${projectId}/tasks/${taskId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(patch),
-    });
-    if (!r.ok) throw new Error("Update task failed");
-    return r.json();
+  const r = await fetch(`${API}/projects/${projectId}/tasks/${taskId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(patch),
+  });
+  if (!r.ok) throw new Error("Update task failed");
+  return r.json();
 };
 
 export const deleteTask = async (projectId, taskId) => {
-    // include current user id so backend can personalize notifications
-    const payload = {};
-    try {
-        const user = auth?.currentUser;
-        if (user) payload.deletedBy = user.uid;
-    } catch (e) {
-        /* best-effort */
-    }
+  // include current user id so backend can personalize notifications
+  const payload = {};
+  try {
+    const user = auth?.currentUser;
+    if (user) payload.deletedBy = user.uid;
+  } catch (e) {
+    /* best-effort */
+  }
 
-    const r = await fetch(`${API}/projects/${projectId}/tasks/${taskId}`, {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-    });
-    if (!r.ok) throw new Error("Delete task failed");
-    return r.json();
+  const r = await fetch(`${API}/projects/${projectId}/tasks/${taskId}`, {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!r.ok) throw new Error("Delete task failed");
+  return r.json();
 };
 
 export const listAssignedTasks = async (params = {}) => {

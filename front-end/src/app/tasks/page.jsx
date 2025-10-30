@@ -5,6 +5,7 @@ import { onAuthStateChanged } from "firebase/auth";
 
 import { TaskDetailModal } from "@/components/TaskDetailModal";
 import { StandaloneTaskModal } from "@/components/StandaloneTaskModal";
+import { RecurringTaskForm } from "@/components/RecurringTaskForm";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -1230,7 +1231,7 @@ export default function TasksPage() {
           }
         }}
       >
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <form onSubmit={handleEditSubmit} className="space-y-6">
             <DialogHeader>
               <DialogTitle>Edit Task</DialogTitle>
@@ -1742,7 +1743,6 @@ export default function TasksPage() {
                       creatorSummary,
                     });
                   } else {
-                    // Refresh the parent task
                     const isStandaloneTask =
                       selectedTask.isStandalone ||
                       selectedTask.projectId === "standalone";

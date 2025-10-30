@@ -355,6 +355,10 @@ def update_task_endpoint(project_id, task_id):
         updates["ownerId"] = updates.get("assigneeId")
     if "ownerId" in updates and "assigneeId" not in updates:
         updates["assigneeId"] = updates.get("ownerId")
+    if "tags" in updates:
+        updates["tags"] = ensure_list(updates.get("tags"))
+    if "collaboratorsIds" in updates:
+        updates["collaboratorsIds"] = ensure_list(updates.get("collaboratorsIds"))
 
     try:
         task_ref.update(updates)
@@ -760,6 +764,10 @@ def update_standalone_task(task_id):
         updates["dueDate"] = data["dueDate"]
     if "tags" in data:
         updates["tags"] = data["tags"]
+    if "isRecurring" in data:
+        updates["isRecurring"] = data["isRecurring"]
+    if "recurrencePattern" in data:
+        updates["recurrencePattern"] = data["recurrencePattern"]
     
     task_ref.update(updates)
     # === RECURRING TASK LOGIC ===

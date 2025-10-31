@@ -231,12 +231,12 @@ def list_tasks_across_projects():
         data = normalize_task_out({**docu.to_dict(), "id": docu.id})
         if status_filter and data.get("status") != canon_status(status_filter): continue
         if priority_filter and data.get("priority") != canon_task_priority(priority_filter): continue
-
+        project_doc = None
         project_ref = docu.reference.parent.parent
         if project_ref:
             data["projectId"] = project_ref.id
             project_doc = project_ref.get()
-        if project_doc.exists:
+        if project_doc and project_doc.exists:
             project_data = normalize_project_out({**project_doc.to_dict(), "id": project_doc.id})
             data["projectName"] = project_data.get("name")
             data["projectPriority"] = project_data.get("priority")

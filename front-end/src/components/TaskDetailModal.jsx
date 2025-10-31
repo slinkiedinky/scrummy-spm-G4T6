@@ -686,7 +686,7 @@ export function TaskDetailModal({
                 <DialogTitle className="text-xl font-bold text-foreground pr-4">
                   {task.title}
                 </DialogTitle>
-                <div className="flex items-center gap-2 mt-2">
+                <div className="flex flex-wrap items-center gap-2 mt-2">
                   <Badge className={getStatusColor(task.status)}>
                     {getStatusLabel(task.status)}
                   </Badge>

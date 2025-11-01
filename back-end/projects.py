@@ -22,11 +22,13 @@ def now_utc():
   return datetime.now(timezone.utc)
 
 def canon_status(s: str | None) -> str:
-  if not s: return "to-do"
-  v = s.strip().lower()
-  if v == "doing": v = "in progress"
-  if v == "done": v = "completed"
-  return v if v in ALLOWED_STATUSES else "to-do"
+    if not s: return "to-do"
+    v = s.strip().lower()
+    # Handle both hyphenated and spaced versions
+    v = v.replace("-", " ")  # Convert hyphens to spaces
+    if v == "doing": v = "in progress"
+    if v == "done": v = "completed"
+    return v if v in ALLOWED_STATUSES else "to-do"
 
 def _priority_number_to_bucket(n: int) -> str:
   if n >= 8: return "high"
@@ -60,6 +62,30 @@ def ensure_list(x):
   if x is None: return []
   if isinstance(x, (set, tuple)): return list(x)
   return [x]
+
+def normalize_status(value: str) -> str:
+    if not value:
+        return "to-do"
+    s = value.strip().lower()
+    s = s.replace("_", " ").replace("-", " ")  # treat "_" and "-" as spaces
+    if s in {"to do", "todo"}:
+        return "to-do"
+    if s == "in progress":
+        return "in-progress"
+    if s == "completed":
+        return "completed"
+    if s == "blocked":
+        return "blocked"
+    return "to-do"
+
+def status_to_color(status: str) -> str:
+    s = normalize_status(status)
+    return {
+        "to-do": "grey",
+        "in-progress": "yellow",  
+        "completed": "green",
+        "blocked": "red",
+    }.get(s, "grey")
 
 def normalize_project_out(doc):
   d = {**doc}
@@ -271,7 +297,7 @@ def create_task(project_id):
         "description": description,
         "dueDate": due_date,
         "priority": canon_task_priority(data.get("priority")),
-        "status": canon_status(data.get("status")),
+        "status": canon_status(data.get("status")),  # Use only canon_status
         "title": title,
         "updatedAt": now,
         "tags": ensure_list(data.get("tags")),
@@ -1122,4 +1148,3 @@ def update_parent_task_progress(project_id, task_id):
                 print(f"❌ [RECURRING] Failed to create instance: {e}")
                 import traceback
                 traceback.print_exc()
-        

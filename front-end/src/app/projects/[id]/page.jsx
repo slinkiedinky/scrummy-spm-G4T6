@@ -1786,7 +1786,7 @@ export default function ProjectDetailPage() {
 
                     const colorMap = {
                       "to-do": "bg-gray-400",
-                      "in progress": "bg-blue-500",
+                      "in progress": "bg-yellow-500",
                       completed: "bg-emerald-500",
                       blocked: "bg-red-500",
                     };

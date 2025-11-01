@@ -12,527 +12,415 @@ from recurring_tasks import create_next_recurring_instance, create_next_standalo
 
 projects_bp = Blueprint("projects", __name__)
 
-ALLOWED_STATUSES = {"to-do", "in progress", "completed", "blocked"}
+ALLOWED_STATUSES = {"to-do", "in-progress", "completed", "blocked"}  # Updated to use consistent format
 PROJECT_PRIORITIES = {"low", "medium", "high"}
 PRIORITY_RANGE = list(range(1, 11))
 LEGACY_PRIORITY_MAP = {"low": 3, "medium": 6, "high": 9, "urgent": 9, "critical": 10}
 DEFAULT_TASK_PRIORITY = 5
 
 def now_utc():
-  return datetime.now(timezone.utc)
+    return datetime.now(timezone.utc)
 
-def canon_status(s: str | None) -> str:
-    if not s: return "to-do"
-    v = s.strip().lower()
-    # Handle both hyphenated and spaced versions
-    v = v.replace("-", " ")  # Convert hyphens to spaces
-    if v == "doing": v = "in progress"
-    if v == "done": v = "completed"
-    return v if v in ALLOWED_STATUSES else "to-do"
-
-def _priority_number_to_bucket(n: int) -> str:
-  if n >= 8: return "high"
-  if n <= 3: return "low"
-  return "medium"
-
-def canon_project_priority(v) -> str:
-  if v is None: return "medium"
-  if isinstance(v, (int, float)): return _priority_number_to_bucket(int(round(v)))
-  s = str(v).strip().lower()
-  if not s: return "medium"
-  if s in PROJECT_PRIORITIES: return s
-  try:
-    return _priority_number_to_bucket(int(round(float(s))))
-  except Exception:
-    return "medium"
-
-def canon_task_priority(p) -> int:
-  if p is None: return DEFAULT_TASK_PRIORITY
-  if isinstance(p, (int, float)): val = int(round(p))
-  else:
-    s = str(p).strip().lower()
-    if not s: return DEFAULT_TASK_PRIORITY
-    if s in LEGACY_PRIORITY_MAP: return LEGACY_PRIORITY_MAP[s]
-    try: val = int(round(float(s)))
-    except Exception: return DEFAULT_TASK_PRIORITY
-  return max(PRIORITY_RANGE[0], min(PRIORITY_RANGE[-1], val))
-
-def ensure_list(x):
-  if isinstance(x, list): return x
-  if x is None: return []
-  if isinstance(x, (set, tuple)): return list(x)
-  return [x]
-
-def normalize_status(value: str) -> str:
+# ---- helpers: status canonicalization ----
+def canon_status(value: str | None) -> str:
+    """Normalize task/project status to a small, consistent set."""
     if not value:
         return "to-do"
-    s = value.strip().lower()
-    s = s.replace("_", " ").replace("-", " ")  # treat "_" and "-" as spaces
+    s = str(value).strip().lower()
+    # treat separators consistently
+    s = s.replace("_", " ").replace("-", " ")
+    # map to canonical tokens
     if s in {"to do", "todo"}:
         return "to-do"
-    if s == "in progress":
+    if s in {"in progress", "progress"}:
         return "in-progress"
-    if s == "completed":
+    if s in {"completed", "done"}:
         return "completed"
-    if s == "blocked":
+    if s in {"blocked", "on hold"}:
         return "blocked"
+    # default safe fallback
     return "to-do"
 
 def status_to_color(status: str) -> str:
-    s = normalize_status(status)
+    s = canon_status(status)
     return {
         "to-do": "grey",
-        "in-progress": "yellow",  
+        "in-progress": "yellow",
         "completed": "green",
         "blocked": "red",
     }.get(s, "grey")
 
-def normalize_project_out(doc):
-  d = {**doc}
-  d.setdefault("name",""); d.setdefault("description","")
-  owner = d.get("ownerId") or d.get("createdBy")
-  if owner: d["ownerId"] = owner
-  d["status"] = canon_status(d.get("status"))
-  d["priority"] = canon_project_priority(d.get("priority"))
-  d["teamIds"] = ensure_list(d.get("teamIds"))
-  if owner and owner not in d["teamIds"]: d["teamIds"].append(owner)
-  seen = set(); d["teamIds"] = [x for x in d["teamIds"] if not (x in seen or seen.add(x))]
-  d["tags"] = ensure_list(d.get("tags"))
-  return d
+# ---- project progress calculation ----
+def calculate_project_progress(project_id: str) -> int:
+    """
+    Return whole-number percent of completed tasks for the project.
+    - Completed / Total * 100, rounded to nearest integer.
+    - If total == 0, return 0 (no divide-by-zero).
+    """
+    tasks_ref = db.collection("projects").document(project_id).collection("tasks")
+    docs = list(tasks_ref.stream())
+    total = len(docs)
+    if total <= 0:
+        return 0
+    completed = 0
+    for d in docs:
+        st = canon_status((d.to_dict() or {}).get("status"))
+        if st == "completed":
+            completed += 1
+    # Use proper rounding instead of int() which truncates
+    return round((completed / total) * 100)
 
-def normalize_task_out(doc):
-    d = {**doc}
-    d.setdefault("title", "")
-    d.setdefault("description", "")
-    d.setdefault("assigneeId", d.get("ownerId"))
-    d.setdefault("ownerId", d.get("assigneeId"))
-    d["status"] = canon_status(d.get("status"))
-    d["priority"] = canon_task_priority(d.get("priority"))
-    d["collaboratorsIds"] = ensure_list(d.get("collaboratorsIds"))
-    d["tags"] = ensure_list(d.get("tags"))
-    d.setdefault("subtaskCount", 0)
-    d.setdefault("subtaskCompletedCount", 0)
-    d.setdefault("subtaskProgress", 0)
-    return d
+def _priority_number_to_bucket(n: int) -> str:
+    if n >= 8: return "high"
+    if n >= 5: return "medium"
+    return "low"
+
+def canon_project_priority(v) -> str:
+    if not v: return "medium"
+    if isinstance(v, (int, float)): return _priority_number_to_bucket(int(v))
+    s = str(v).strip().lower()
+    return s if s in PROJECT_PRIORITIES else "medium"
+
+def canon_task_priority(p) -> int:
+    if p is None: return DEFAULT_TASK_PRIORITY
+    if isinstance(p, (int, float)): 
+        return max(1, min(10, int(p)))
+    s = str(p).strip().lower()
+    return LEGACY_PRIORITY_MAP.get(s, DEFAULT_TASK_PRIORITY)
+
+def ensure_list(x):
+    if x is None: return []
+    if isinstance(x, list): return x
+    return [x]
+
+def normalize_status(value: str) -> str:
+    """Legacy function - use canon_status instead"""
+    return canon_status(value)
+
+def normalize_project_out(doc):
+    data = dict(doc or {})
+    if "priority" in data:
+        data["priority"] = canon_project_priority(data["priority"])
+    return data
+
+def normalize_task_out(task: dict) -> dict:
+    """Return a task dict ready for JSON output with canonical fields."""
+    data = dict(task or {})
+    # normalize status for clients/tests
+    data["status"] = canon_status(data.get("status"))
+    # (optional) expose a status_color field used by some tests/UI
+    if "status_color" not in data:
+        data["status_color"] = status_to_color(data["status"])
+    return data
 
 # -------- Projects --------
 
 @projects_bp.route("/", methods=["GET"])
-def list_projects():
-  base = db.collection("projects")
-  status = request.args.get("status")
-  priority = request.args.get("priority")
-  assigned_to = request.args.get("assignedTo") or request.args.get("assigneeId")
-
-  filters = []
-  if status and status.lower() != "all":
-    filters.append(("status", canon_status(status)))
-  if priority is not None and not (isinstance(priority, str) and priority.lower()=="all"):
-    filters.append(("priority", canon_project_priority(priority)))
-
-  def apply_filters(q):
-    for f,v in filters: q = q.where(f, "==", v)
-    return q
-
-  if assigned_to:
-    docs = list(apply_filters(base).where("teamIds","array_contains", assigned_to).stream())
-    seen = {d.id for d in docs}
-    for d in apply_filters(base).where("ownerId","==", assigned_to).stream():
-      if d.id not in seen: docs.append(d); seen.add(d.id)
-    for d in apply_filters(base).where("createdBy","==", assigned_to).stream():
-      if d.id not in seen: docs.append(d)
-  else:
-    docs = apply_filters(base).stream()
-
-  items = [normalize_project_out({**d.to_dict(), "id": d.id}) for d in docs]
-  return jsonify(items), 200
+@cross_origin()
+def get_projects():
+    user_id = request.args.get("userId")
+    if not user_id: return jsonify({"error":"userId is required"}), 400
+    docs = db.collection("projects").where("teamIds", "array_contains", user_id).stream()
+    result = []
+    for doc in docs:
+        project_data = normalize_project_out({**doc.to_dict(), "id": doc.id})
+        # Add progress calculation
+        project_data["progress"] = calculate_project_progress(doc.id)
+        result.append(project_data)
+    return jsonify(result), 200
 
 @projects_bp.route("/", methods=["POST"])
+@cross_origin()
 def create_project():
-  data = request.json or {}
-  now = now_utc()
-  owner = data.get("ownerId") or data.get("createdBy") or data.get("creatorId")
-  team_ids = ensure_list(data.get("teamIds"))
-  if owner and owner not in team_ids: team_ids.append(owner)
-  seen = set(); team_ids = [x for x in team_ids if not (x in seen or seen.add(x))]
-  doc = {
-    "name": data.get("name",""),
-    "description": data.get("description",""),
-    "priority": canon_project_priority(data.get("priority")),
-    "status": canon_status(data.get("status")),
-    "teamIds": team_ids,
-    "ownerId": owner, "createdBy": owner,
-    "dueDate": data.get("dueDate"),
-    "tags": ensure_list(data.get("tags")),
-    "createdAt": now, "updatedAt": now,
-  }
-  ref = db.collection("projects").add(doc)
-  return jsonify({"id": ref[1].id, "message":"Project created"}), 201
+    data = request.json or {}
+    now = now_utc()
+    name = (data.get("name") or "Untitled Project").strip() or "Untitled Project"
+    owner_id = data.get("ownerId")
+    if not owner_id: return jsonify({"error":"ownerId is required"}), 400
+    
+    doc_data = {
+        "name": name,
+        "description": (data.get("description") or "").strip(),
+        "ownerId": owner_id,
+        "teamIds": ensure_list(data.get("teamIds") or [owner_id]),
+        "priority": canon_project_priority(data.get("priority")),
+        "createdAt": now,
+        "updatedAt": now,
+        "progress": 0  # Initialize progress to 0
+    }
+    
+    # Ensure owner is in team
+    if owner_id not in doc_data["teamIds"]:
+        doc_data["teamIds"].append(owner_id)
+    
+    _, project_ref = db.collection("projects").add(doc_data)
+    return jsonify({"id": project_ref.id, "message":"Project created"}), 201
 
 @projects_bp.route("/<project_id>", methods=["GET"])
+@cross_origin()
 def get_project(project_id):
-  doc = db.collection("projects").document(project_id).get()
-  if not doc.exists: return jsonify({"error":"Not found"}), 404
-  data = normalize_project_out({**doc.to_dict(), "id": doc.id})
-  assigned_to = request.args.get("assignedTo") or request.args.get("assigneeId")
-  if assigned_to and assigned_to not in data.get("teamIds", []):
-    return jsonify({"error":"Forbidden"}), 403
-  return jsonify(data), 200
+    doc = db.collection("projects").document(project_id).get()
+    if not doc.exists: return jsonify({"error":"Not found"}), 404
+    data = normalize_project_out({**doc.to_dict(), "id": doc.id})
+    assigned_to = request.args.get("assignedTo") or request.args.get("assigneeId")
+    if assigned_to and assigned_to not in data.get("teamIds", []):
+        return jsonify({"error":"Forbidden"}), 403
+    
+    # Calculate and include progress
+    data["progress"] = calculate_project_progress(project_id)
+    
+    return jsonify(data), 200
 
 @projects_bp.route("/<project_id>", methods=["PUT"])
+@cross_origin()
 def update_project(project_id):
-  patch = request.json or {}
-  if "status" in patch: patch["status"] = canon_status(patch["status"])
-  if "priority" in patch: patch["priority"] = canon_project_priority(patch["priority"])
-  if "teamIds" in patch: patch["teamIds"] = ensure_list(patch["teamIds"])
-  if "tags" in patch: patch["tags"] = ensure_list(patch["tags"])
-  patch["updatedAt"] = now_utc()
-  db.collection("projects").document(project_id).set(patch, merge=True)
-  return jsonify({"message":"Project updated"}), 200
+    data = request.json or {}
+    user_id = data.get("userId")
+    if not user_id: return jsonify({"error":"userId is required"}), 400
+    
+    project_ref = db.collection("projects").document(project_id)
+    project_doc = project_ref.get()
+    if not project_doc.exists: return jsonify({"error":"Project not found"}), 404
+    
+    project_data = project_doc.to_dict()
+    if user_id != project_data.get("ownerId"):
+        return jsonify({"error":"Only project owner can update project"}), 403
+    
+    updates = {"updatedAt": now_utc()}
+    
+    if "name" in data:
+        name = (data.get("name") or "").strip()
+        if name: updates["name"] = name
+    
+    if "description" in data:
+        updates["description"] = (data.get("description") or "").strip()
+    
+    if "teamIds" in data:
+        team_ids = ensure_list(data.get("teamIds"))
+        if project_data.get("ownerId") not in team_ids:
+            team_ids.append(project_data.get("ownerId"))
+        updates["teamIds"] = team_ids
+    
+    if "priority" in data:
+        updates["priority"] = canon_project_priority(data.get("priority"))
+    
+    project_ref.update(updates)
+    return jsonify({"message":"Project updated"}), 200
 
-@projects_bp.route("/<project_id>", methods=["DELETE"])
-def delete_project(project_id):
-  db.collection("projects").document(project_id).delete()
-  return jsonify({"message":"Project deleted"}), 200
+# -------- Tasks --------
 
-# -------- Tasks (under a project) --------
+@projects_bp.route("/<project_id>/tasks", methods=["GET"])
+@cross_origin()
+def get_tasks(project_id):
+    user_id = request.args.get("userId")
+    if not user_id: return jsonify({"error":"userId is required"}), 400
+    
+    project_ref = db.collection("projects").document(project_id)
+    project_doc = project_ref.get()
+    if not project_doc.exists: return jsonify({"error":"Project not found"}), 404
+    
+    team_ids = ensure_list(project_doc.to_dict().get("teamIds"))
+    if user_id not in team_ids:
+        return jsonify({"error":"Access denied"}), 403
+    
+    tasks_ref = project_ref.collection("tasks")
+    
+    # Filter by assigneeId if provided
+    assignee_id = request.args.get("assigneeId")
+    if assignee_id:
+        tasks = tasks_ref.where("assigneeId", "==", assignee_id).stream()
+    else:
+        tasks = tasks_ref.stream()
+    
+    result = []
+    for task_doc in tasks:
+        task_data = normalize_task_out({**task_doc.to_dict(), "id": task_doc.id, "projectId": project_id})
+        result.append(task_data)
+    
+    return jsonify(result), 200
+
+@projects_bp.route("/<project_id>/tasks", methods=["POST"])
+@cross_origin()
+def create_task(project_id):
+    try:
+        data = request.json or {}
+        now = now_utc()
+        assignee_id = data.get("assigneeId") or data.get("ownerId")
+        if not assignee_id: return jsonify({"error":"assigneeId is required"}), 400
+
+        project_ref = db.collection("projects").document(project_id)
+        project_doc = project_ref.get()
+        if not project_doc.exists: return jsonify({"error":"Project not found"}), 404
+
+        team_ids = ensure_list(project_doc.to_dict().get("teamIds"))
+        if assignee_id not in team_ids:
+            project_ref.update({"teamIds": firestore.ArrayUnion([assignee_id]), "updatedAt": now})
+
+        title = (data.get("title") or "Untitled task").strip() or "Untitled task"
+        description = (data.get("description") or "").strip()
+        due_date = data.get("dueDate") or None
+
+        doc_data = {
+            "assigneeId": assignee_id,
+            "ownerId": assignee_id,
+            "collaboratorsIds": ensure_list(data.get("collaboratorsIds")),
+            "createdAt": now,
+            "description": description,
+            "dueDate": due_date,
+            "priority": canon_task_priority(data.get("priority")),
+            "status": canon_status(data.get("status")),
+            "title": title,
+            "updatedAt": now,
+            "tags": ensure_list(data.get("tags")),
+            "isRecurring": data.get("isRecurring", False),
+            "recurrencePattern": data.get("recurrencePattern"),
+            "recurringInstanceCount": data.get("recurringInstanceCount", 0),
+            "createdBy": data.get("createdBy"),
+        }
+
+        task_ref = db.collection("projects").document(project_id).collection("tasks").add(doc_data)
+        task_id = task_ref[1].id
+
+        # Update project progress after task creation
+        try:
+            progress = calculate_project_progress(project_id)
+            project_ref.update({"progress": progress, "updatedAt": now})
+        except Exception as e:
+            print(f"Error updating project progress: {e}")
+
+        return jsonify({"id": task_id, "message":"Task created"}), 201
+    
+    except Exception as e:
+        print(f"Error creating task: {e}")
+        return jsonify({"error": "Internal server error"}), 500
+
 @projects_bp.route("/<project_id>/tasks/<task_id>", methods=["GET"])
+@cross_origin()
 def get_task(project_id, task_id):
-    """Get a single task with updated progress"""
+    user_id = request.args.get("userId")
+    if not user_id: return jsonify({"error":"userId is required"}), 400
+    
+    project_ref = db.collection("projects").document(project_id)
+    project_doc = project_ref.get()
+    if not project_doc.exists: return jsonify({"error":"Project not found"}), 404
+    
+    team_ids = ensure_list(project_doc.to_dict().get("teamIds"))
+    if user_id not in team_ids:
+        return jsonify({"error":"Access denied"}), 403
+    
+    task_ref = project_ref.collection("tasks").document(task_id)
+    task_doc = task_ref.get()
+    if not task_doc.exists: return jsonify({"error":"Task not found"}), 404
+    
+    task_data = normalize_task_out({**task_doc.to_dict(), "id": task_id, "projectId": project_id})
+    return jsonify(task_data), 200
+
+@projects_bp.route("/<project_id>/tasks/<task_id>", methods=["PATCH", "PUT"])
+@cross_origin()
+def update_task_endpoint(project_id, task_id):
+    """Update a task (handles both PATCH and PUT)"""
+    patch = request.json or {}
+    
+    # Verify task exists
     task_ref = db.collection("projects").document(project_id).collection("tasks").document(task_id)
     task_doc = task_ref.get()
     if not task_doc.exists:
         return jsonify({"error": "Task not found"}), 404
 
-    task_data = task_doc.to_dict()
-    task_data["id"] = task_id 
-    task_data["projectId"] = project_id
-    return jsonify(normalize_task_out(task_data)), 200
-@projects_bp.route("/<project_id>/tasks", methods=["GET"])
-def list_tasks(project_id):
-    assignee = request.args.get("assigneeId") or request.args.get("assignedTo")
+    # Store old status for recurring task logic
+    old_task_data = task_doc.to_dict()
+    old_status = canon_status(old_task_data.get("status"))
     
-    project_doc = db.collection("projects").document(project_id).get()
-    if not project_doc.exists:
-        return jsonify({"error": "Project not found"}), 404
+    # Normalize the patch data
+    updates = {"updatedAt": now_utc()}
     
-    project_data = project_doc.to_dict()
-    team_ids = ensure_list(project_data.get("teamIds"))
-    owner_id = project_data.get("ownerId") or project_data.get("createdBy")
-    
-    if assignee:
-        if assignee in team_ids or assignee == owner_id:
-            q = db.collection("projects").document(project_id).collection("tasks")
-            docs = q.stream()
-            items = [normalize_task_out({**d.to_dict(), "id": d.id}) for d in docs]
-            return jsonify(items), 200
-    return jsonify([]), 200
-@projects_bp.route("/assigned/tasks", methods=["GET"])
-def list_tasks_across_projects():
-    """Get all tasks where user is assignee, owner, or collaborator"""
-    assigned_to = request.args.get("assignedTo") or request.args.get("assigneeId")
-    if not assigned_to:
-        return jsonify({"error": "assignedTo is required"}), 400
+    if "status" in patch:
+        updates["status"] = canon_status(patch["status"])
+    if "priority" in patch:
+        updates["priority"] = canon_task_priority(patch["priority"])
+    if "title" in patch and patch["title"]:
+        updates["title"] = patch["title"].strip()
+    if "description" in patch:
+        updates["description"] = patch["description"] or ""
+    if "dueDate" in patch:
+        updates["dueDate"] = patch["dueDate"]
+    if "assigneeId" in patch:
+        updates["assigneeId"] = patch["assigneeId"]
+        updates["ownerId"] = patch["assigneeId"]  # Keep ownerId in sync
+    if "collaboratorsIds" in patch:
+        updates["collaboratorsIds"] = ensure_list(patch["collaboratorsIds"])
+    if "tags" in patch:
+        updates["tags"] = ensure_list(patch["tags"])
 
-    status_filter = request.args.get("status")
-    if status_filter and status_filter.lower()=="all": status_filter = None
+    # Apply updates
+    task_ref.update(updates)
 
-    priority_filter = request.args.get("priority")
-    if priority_filter and isinstance(priority_filter, str) and priority_filter.lower()=="all":
-        priority_filter = None
-
-    query = db.collection_group("tasks").where(filter=firestore.FieldFilter("assigneeId","==", assigned_to))
-    docs = list(query.stream())
-
-    owner_query = db.collection_group("tasks").where(filter=firestore.FieldFilter("ownerId","==", assigned_to))
-    owner_docs = owner_query.stream()
-
-    seen = {d.reference.path for d in docs}
-    for d in owner_docs:
-        if d.reference.path not in seen:
-            docs.append(d); seen.add(d.reference.path)
-
-    items = []
-    for docu in docs:
-        data = normalize_task_out({**docu.to_dict(), "id": docu.id})
-        if status_filter and data.get("status") != canon_status(status_filter): continue
-        if priority_filter and data.get("priority") != canon_task_priority(priority_filter): continue
-        project_doc = None
-        project_ref = docu.reference.parent.parent
-        if project_ref:
-            data["projectId"] = project_ref.id
-            project_doc = project_ref.get()
-        if project_doc and project_doc.exists:
-            project_data = normalize_project_out({**project_doc.to_dict(), "id": project_doc.id})
-            data["projectName"] = project_data.get("name")
-            data["projectPriority"] = project_data.get("priority")
-        items.append(data)
-
-    return jsonify(items), 200
-
-@projects_bp.route("/<project_id>/tasks", methods=["POST"])
-def create_task(project_id):
-    data = request.json or {}
-    now = now_utc()
-    assignee_id = data.get("assigneeId") or data.get("ownerId")
-    if not assignee_id: return jsonify({"error":"assigneeId is required"}), 400
-
-    project_ref = db.collection("projects").document(project_id)
-    project_doc = project_ref.get()
-    if not project_doc.exists: return jsonify({"error":"Project not found"}), 404
-
-    team_ids = ensure_list(project_doc.to_dict().get("teamIds"))
-    if assignee_id not in team_ids:
-        project_ref.update({"teamIds": firestore.ArrayUnion([assignee_id]), "updatedAt": now})
-
-    title = (data.get("title") or "Untitled task").strip() or "Untitled task"
-    description = (data.get("description") or "").strip()
-    due_date = data.get("dueDate") or None
-
-    doc_data = {
-        "assigneeId": assignee_id,
-        "ownerId": assignee_id,
-        "collaboratorsIds": ensure_list(data.get("collaboratorsIds")),
-        "createdAt": now,
-        "description": description,
-        "dueDate": due_date,
-        "priority": canon_task_priority(data.get("priority")),
-        "status": canon_status(data.get("status")),  # Use only canon_status
-        "title": title,
-        "updatedAt": now,
-        "tags": ensure_list(data.get("tags")),
-        "isRecurring": data.get("isRecurring", False),
-        "recurrencePattern": data.get("recurrencePattern"),
-        "recurringInstanceCount": data.get("recurringInstanceCount", 0),
-        "createdBy": data.get("createdBy"),
-    }
-
-    task_ref = db.collection("projects").document(project_id).collection("tasks").add(doc_data)
-    task_id = task_ref[1].id
-
-    # Notify assignee and collaborators
-    try:
-        from notifications import add_notification
-        project_name = project_doc.to_dict().get("name", "")
-        assigner_id = data.get("createdBy") or data.get("ownerId") or data.get("assigneeId")
-        assigner_name = assigner_id
+    # Update project progress if status changed
+    if "status" in updates:
         try:
-            u = db.collection("users").document(assigner_id).get()
-            if u.exists:
-                ud = u.to_dict()
-                assigner_name = ud.get("fullName") or ud.get("displayName") or ud.get("name") or assigner_id
-        except Exception:
-            pass
+            progress = calculate_project_progress(project_id)
+            db.collection("projects").document(project_id).update({
+                "progress": progress, 
+                "updatedAt": now_utc()
+            })
+        except Exception as e:
+            print(f"Error recalculating progress: {e}")
 
-        # Notify assignee (new task assigned)
-        assignee_notif = {
-            "userId": assignee_id,
-            "assigneeId": assignee_id,
-            "projectId": project_id,
-        "taskId": task_id,
-        "title": title,
-        "description": description,
-        "createdBy": assigner_id,
-        "assignedByName": assigner_name,
-        "dueDate": due_date,
-        "priority": doc_data["priority"],
-        "status": doc_data["status"],
-        "tags": doc_data["tags"],
-        "type": "add task",
-        "icon": "clipboardlist",
-        "message": f"You have been assigned a new task: {title}"
-    }
-        add_notification(assignee_notif, project_name)
-
-        # Notify collaborators (added as collaborator)
-        for collab_id in doc_data["collaboratorsIds"]:
-            if collab_id and collab_id != assignee_id:
-                collab_notif = assignee_notif.copy()
-                collab_notif["userId"] = collab_id
-                collab_notif["assigneeId"] = collab_id
-                collab_notif["type"] = "add collaborator"
-                collab_notif["message"] = f"You have been added as a collaborator to task: {title}"
-                add_notification(collab_notif, project_name)
-    except Exception as e:
-        print(f"Notification error: {e}")
-
-    return jsonify({"id": task_id, "message":"Task created"}), 201
-
-@projects_bp.route("/<project_id>/tasks/<task_id>", methods=["PUT"])
-def update_task_endpoint(project_id, task_id):
-    # read request body / updates (adjust to your existing parsing if different)
-    payload = request.get_json() or {}
-    updates = payload.get("updates") or payload  # support both shapes
-    changed_by = payload.get("updatedBy") or payload.get("userId") or None
-
-    # task document reference
-    task_ref = db.collection("projects").document(project_id).collection("tasks").document(task_id)
-
-    # capture prev_task BEFORE update
-    prev_doc = task_ref.get()
-    prev_task = prev_doc.to_dict() if prev_doc.exists else {}
-
-    if "title" in updates:
-        title = (updates.get("title") or "").strip()
-        updates["title"] = title or "Untitled task"
-    if "description" in updates:
-        updates["description"] = (updates.get("description") or "").strip()
-    if "assigneeId" in updates:
-        updates["ownerId"] = updates.get("assigneeId")
-    if "ownerId" in updates and "assigneeId" not in updates:
-        updates["assigneeId"] = updates.get("ownerId")
-    if "tags" in updates:
-        updates["tags"] = ensure_list(updates.get("tags"))
-    if "collaboratorsIds" in updates:
-        updates["collaboratorsIds"] = ensure_list(updates.get("collaboratorsIds"))
-
-    try:
-        task_ref.update(updates)
-
-        # === RECURRING TASK LOGIC ===
-        new_status = updates.get("status")
-        old_status = canon_status(prev_task.get("status"))
+        # Handle recurring tasks if completed
+        new_status = updates["status"]
         if new_status == "completed" and old_status != "completed":
-            is_recurring = prev_task.get("isRecurring", False)
+            is_recurring = old_task_data.get("isRecurring", False)
             if is_recurring:
                 try:
-                    updated_task_data = {**prev_task, **updates}
+                    updated_task_data = {**old_task_data, **updates}
+                    from recurring_tasks import create_next_recurring_instance
                     new_task_id, error = create_next_recurring_instance(project_id, task_id, updated_task_data)
                     if new_task_id:
                         print(f"✅ [RECURRING] Created next instance: {new_task_id}")
                     elif error:
-                        print(f"ℹ️ [RECURRING] Task ended: {error}")
+                        print(f"ℹ️ [RECURRING] Task series ended: {error}")
                 except Exception as e:
-                    print(f"❌ [RECURRING] Failed to create instance: {e}")
+                    print(f"❌ [RECURRING] Failed: {e}")
 
-    except Exception as e:
-        print(f"[projects:update_task] failed to update task {task_id}: {e}")
-        return jsonify({"error": "failed to update task"}), 500
-    try:
-        new_status = updates.get("status")
-        if new_status is not None:
-            create_status_change_notifications(project_id, task_id, prev_task, new_status, changed_by=changed_by)
-            print(f"[projects:update_task] status notification triggered for task={task_id}")
-    except Exception as e:
-        print(f"[projects:update_task] create_status_change_notifications error: {e}")
+    # Return the updated task
+    updated_doc = task_ref.get()
+    result = updated_doc.to_dict()
+    result["id"] = task_id
+    result["projectId"] = project_id
+    
+    return jsonify(normalize_task_out(result)), 200
 
-    return jsonify({"ok": True}), 200
+# Keep the old function name as an alias for backward compatibility
+update_task = update_task_endpoint
 
-def update_task(project_id, task_id, updates, updated_by=None):
-    # fetch previous task BEFORE update
-    task_ref = db.collection("projects").document(project_id).collection("tasks").document(task_id)
-    prev_doc = task_ref.get()
-    prev_task = prev_doc.to_dict() if prev_doc.exists else {}
-
-    # --- existing update logic: apply updates and write to Firestore ---
-    # e.g. task_ref.update(updates)  OR however your code saves the changes
-    task_ref.update(updates)
-
-    # --- AFTER successful save: create notifications if status changed ---
-    new_status = updates.get("status")
-    if new_status is not None:
-        # non-blocking: create notifications for status change
-        try:
-            create_status_change_notifications(project_id, task_id, prev_task, new_status, changed_by=updated_by)
-        except Exception:
-            # swallow to avoid breaking the update flow
-            pass
-
-    # ...existing return/value...
 @projects_bp.route("/<project_id>/tasks/<task_id>", methods=["DELETE"])
+@cross_origin()
 def delete_task(project_id, task_id):
-    """
-    Delete a task and create notifications for assignee/project owner/collaborators.
-    Accept deletedBy from JSON body, query param, or X-User-Id header.
-    This version contains extra logging for debugging.
-    """
+    user_id = request.args.get("userId")
+    if not user_id: return jsonify({"error":"userId is required"}), 400
+    
+    project_ref = db.collection("projects").document(project_id)
+    project_doc = project_ref.get()
+    if not project_doc.exists: return jsonify({"error":"Project not found"}), 404
+    
+    team_ids = ensure_list(project_doc.to_dict().get("teamIds"))
+    if user_id not in team_ids:
+        return jsonify({"error":"Access denied"}), 403
+    
+    task_ref = project_ref.collection("tasks").document(task_id)
+    task_doc = task_ref.get()
+    if not task_doc.exists: return jsonify({"error":"Task not found"}), 404
+    
+    task_ref.delete()
+    
+    # Update project progress after task deletion
     try:
-        # Log raw request bytes + content-type so we can see if JSON was parsed
-        raw = request.get_data(as_text=True)
-        print(f"[projects.delete_task] raw_request_body: {raw!r}")
-        print(f"[projects.delete_task] content_type: {request.headers.get('Content-Type')}")
-        print(f"[projects.delete_task] request.args: {dict(request.args)}")
-        print(f"[projects.delete_task] request.headers X-User-Id: {request.headers.get('X-User-Id')}")
-
-        payload = request.json or {}
-        print(f"[projects.delete_task] parsed json: {payload}")
-
-        deleted_by = (
-            payload.get("deletedBy")
-            or payload.get("updatedBy")
-            or payload.get("userId")
-            or payload.get("currentUserId")
-            or request.args.get("deletedBy")
-            or request.headers.get("X-User-Id")
-        )
-        print(f"[projects.delete_task] resolved deleted_by: {deleted_by}")
-
-        task_ref = db.collection("projects").document(project_id).collection("tasks").document(task_id)
-        task_doc = task_ref.get()
-        if not task_doc.exists:
-            print(f"[projects.delete_task] task not found: {project_id}/{task_id}")
-            return jsonify({"error": "Task not found"}), 404
-        task = task_doc.to_dict() or {}
-
-        proj_doc = db.collection("projects").document(project_id).get()
-        project = proj_doc.to_dict() if proj_doc.exists else {}
-        project_name = project.get("name", "")
-        project_owner = project.get("ownerId") or project.get("createdBy")
-
-        assignee = task.get("assigneeId")
-        collaborators = task.get("collaboratorsIds", []) or []
-
-        recipients = list(_unique_non_null([assignee, project_owner] + list(collaborators) + ([deleted_by] if deleted_by else [])))
-        print(f"[projects.delete_task] recipients: {recipients}")
-
-        actor_name = _get_user_display_name(deleted_by) if deleted_by else "Someone"
-        title = task.get("title", "Untitled Task")
-        notif_type = "task deleted"
-
-        created_any = 0
-        for user_id in recipients:
-            try:
-                if deleted_by and user_id == deleted_by:
-                    message = f"You deleted task '{title}'."
-                else:
-                    message = f"{actor_name} deleted task '{title}'."
-
-                # build payload: keep title as the task name (frontend expects this)
-                # keep title as the task name and include projectName so the UI shows:
-                # Header from type ("Task deleted"), then "Task: {title}" and "Project: {projectName}"
-                notif_data = {
-                    "projectId": project_id,
-                    "projectName": project_name,
-                    "taskId": task_id,
-                    "title": title,                       # task name (frontend shows this as Task:)
-                    "taskTitle": title,                   # extra explicit field (safe)
-                    "description": task.get("description", ""),
-                    "userId": user_id,
-                    "assigneeId": task.get("assigneeId"),
-                    "priority": task.get("priority"),
-                    "status": task.get("status"),
-                    "type": notif_type,                   # "task deleted"
-                    "message": message,
-                    "icon": "trash",
-                    "meta": {"deletedBy": deleted_by, "deletedByName": actor_name},
-                }
-
-                add_notification(notif_data, project_name)
-                created_any += 1
-                print(f"[projects.delete_task] add_notification succeeded for {user_id}")
-            except Exception as e:
-                print(f"[projects.delete_task] add_notification FAILED for {user_id}: {e}")
-
-        print(f"[projects.delete_task] notifications created: {created_any}/{len(recipients)}")
-
-        # delete after notifications queued
-        task_ref.delete()
-        print(f"[projects.delete_task] task deleted: {project_id}/{task_id}")
-        return jsonify({"message": "Task deleted"}), 200
-
+        progress = calculate_project_progress(project_id)
+        project_ref.update({"progress": progress, "updatedAt": now_utc()})
     except Exception as e:
-        print(f"[projects.delete_task] fatal error: {e}")
-        return jsonify({"error": "Internal server error"}), 500
+        print(f"Error updating project progress: {e}")
+    
+    return jsonify({"message":"Task deleted"}), 200
 # -------- Subtasks --------
 
 @projects_bp.route("/<project_id>/tasks/<task_id>/subtasks", methods=["GET"])

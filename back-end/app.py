@@ -1,4 +1,4 @@
-from flask import Flask
+from flask import Flask, jsonify
 from flask_cors import CORS
 from firebase import db
 import datetime as dt
@@ -36,6 +36,16 @@ def trigger_deadline_check():
             return {"success": False, "error": str(e)}, 500
     else:
         return {"success": False, "message": "Deadline notifications are disabled"}, 400
+    
+@app.get("/api/tasks")
+def get_tasks():
+    return jsonify([
+        {"id": "t1", "name": "Design Phase 1", "status": "In Progress", "status_color": "yellow"},
+        {"id": "t2", "name": "QA",              "status": "Blocked",     "status_tab": {"background": "red", "label": "Blocked"}},
+        {"id": "t3", "name": "Wireframes",      "status": "To Do",       "status_color": "grey"},
+        {"id": "t4", "name": "Release Note",    "status": "Completed",   "status_color": "green"},
+    ])
+
 
 # Deadline notification scheduler (only if enabled)
 if ENABLE_DEADLINE_NOTIFICATIONS:

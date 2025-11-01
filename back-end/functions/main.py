@@ -50,6 +50,25 @@ def get_task_digest(req: https_fn.Request) -> https_fn.Response:
             code=https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
             message='The userId is required to generate the task digest.'
         )
+    
+    # 1a. Fetch user email from Firestore
+    user_doc = db.collection('users').document(user_id).get()
+    
+    if not user_doc.exists:
+        raise https_fn.HttpsError(
+            code=https_fn.FunctionsErrorCode.NOT_FOUND,
+            message=f'User with userId {user_id} not found.'
+        )
+    
+    user_data = user_doc.to_dict()
+    user_email = user_data.get('email')
+    user_name = user_data.get('fullName', 'User')
+    
+    if not user_email:
+        raise https_fn.HttpsError(
+            code=https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
+            message=f'User {user_id} does not have an email address configured.'
+        )
 
     try:
         # 2. Date Calculation Setup
@@ -122,18 +141,21 @@ def get_task_digest(req: https_fn.Request) -> https_fn.Response:
                 "https://api.mailgun.net/v3/sandbox110b9105efa84fe1a5ba07a4e13452f8.mailgun.org/messages",
                 auth=("api", mailgun_key),
                 data={"from": "Mailgun Sandbox <postmaster@sandbox110b9105efa84fe1a5ba07a4e13452f8.mailgun.org>",
-                    "to": "Yong Ray <teoyongray@hotmail.com>",
+                    "to": f"{user_name} <{user_email}>",
                     "subject": "Daily Digest for TaskFlow",
                     "template": "Daily Digest for TaskFlow",
                     "h:X-Mailgun-Variables": json.dumps(mailgun_variables)
                     })
             
-            print(f"Status: {response.status_code}")
+            if response.status_code >= 400:
+                print(f"Mailgun API error: {response.text}")
+            else:
+                print("Email sent successfully.")
         except Exception as e:
-            raise https_fn.HttpsError(
-            code=https_fn.FunctionsErrorCode.INTERNAL,
-            message='Failed to send email due to a server error.'
-        )
+            # Log the error but don't fail the entire request
+            print(f"Warning: Failed to send email to {user_email}: {e}")
+            # Still return the digest data even if email fails
+            pass
 
         return https_fn.Response(
             response=json.dumps(response_data),
@@ -148,21 +170,19 @@ def get_task_digest(req: https_fn.Request) -> https_fn.Response:
             message='Failed to retrieve task data due to a server error.'
         )
 
-@scheduler_fn.on_schedule(schedule="every day 09:00", timezone="Asia/Singapore")
+@scheduler_fn.on_schedule(schedule="every day 10:00", timezone="Asia/Singapore")
 def scheduled_task_digest(event):
-    userID = "U101"
-    response = requests.post(f"https://us-central1-scrummy-be0d6.cloudfunctions.net/get_task_digest?userId={userID}") 
-    print("Triggered:", response.status_code)
-    # db: google.cloud.firestore.Client = firestore.client()
-    # users_ref = db.collection('users')
-    # users = users_ref.stream()
-    # for user_doc in users:
-    #     user_data = user_doc.to_dict()
-    #     user_id = user_data.get('userID') or user_doc.id
-    #     try:
-    #         response = requests.post(
-    #             f"https://us-central1-scrummy-be0d6.cloudfunctions.net/get_task_digest?userId={user_id}"
-    #         )
-    #         print(f"Digest sent for user {user_id}: {response.status_code}")
-    #     except Exception as e:
-    #         print(f"Failed to send digest for user {user_id}: {e}")
+    db: google.cloud.firestore.Client = firestore.client()
+    users_ref = db.collection('users')
+    users = users_ref.stream()
+    
+    for user_doc in users:
+        # Use the document ID as the user_id
+        user_id = user_doc.id
+        try:
+            response = requests.post(
+                f"https://us-central1-scrummy-be0d6.cloudfunctions.net/get_task_digest?userId={user_id}"
+            )
+            print(f"Digest sent for user {user_id}: {response.status_code}")
+        except Exception as e:
+            print(f"Failed to send digest for user {user_id}: {e}")

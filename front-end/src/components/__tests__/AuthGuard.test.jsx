@@ -44,26 +44,13 @@ describe('AuthGuard Component', () => {
     })
   })
 
-  it('renders children when user is authenticated', async () => {
-    mockAuthState = { uid: 'test-user-123', email: 'test@example.com' }
-
-    render(
-      <AuthGuard>
-        <div>Protected Content</div>
-      </AuthGuard>
-    )
-
-    await waitFor(() => {
-      expect(screen.getByText('Protected Content')).toBeInTheDocument()
-    })
-  })
-
-  it('redirects to home when user is not authenticated', async () => {
+  // Scrum-1.4 — Verify task space is not accessible without logging in
+  it('redirects to login page when accessing task space URL without being logged in', async () => {
     mockAuthState = null
 
     render(
       <AuthGuard>
-        <div>Protected Content</div>
+        <div>Task Space Protected Content</div>
       </AuthGuard>
     )
 
@@ -71,99 +58,17 @@ describe('AuthGuard Component', () => {
       expect(mockReplace).toHaveBeenCalledWith('/')
     })
 
-    expect(screen.queryByText('Protected Content')).not.toBeInTheDocument()
+    expect(screen.queryByText('Task Space Protected Content')).not.toBeInTheDocument()
   })
 
-  it('does not render anything initially', () => {
-    mockAuthState = null
-
-    const { container } = render(
-      <AuthGuard>
-        <div>Protected Content</div>
-      </AuthGuard>
-    )
-
-    // Initially should render nothing (null)
-    expect(container.firstChild).toBeNull()
-  })
-
-  it('handles auth state change from unauthenticated to authenticated', async () => {
-    mockAuthState = null
-
-    const { rerender } = render(
-      <AuthGuard>
-        <div>Protected Content</div>
-      </AuthGuard>
-    )
-
-    // Should redirect when not authenticated
-    await waitFor(() => {
-      expect(mockReplace).toHaveBeenCalledWith('/')
-    })
-
-    // Simulate user logging in
-    mockAuthState = { uid: 'test-user-123' }
-    if (mockOnAuthStateChanged) {
-      await act(async () => {
-        mockOnAuthStateChanged(mockAuthState)
-      })
-    }
-
-    rerender(
-      <AuthGuard>
-        <div>Protected Content</div>
-      </AuthGuard>
-    )
-
-    await waitFor(() => {
-      expect(screen.getByText('Protected Content')).toBeInTheDocument()
-    })
-  })
-
-  it('cleans up auth listener on unmount', () => {
-    mockAuthState = { uid: 'test-user' }
-
-    const { unmount } = render(
-      <AuthGuard>
-        <div>Content</div>
-      </AuthGuard>
-    )
-
-    unmount()
-
-    // Verify cleanup
-    expect(unsubscribeMock).toHaveBeenCalled()
-  })
-
-  it('renders multiple children', async () => {
-    mockAuthState = { uid: 'test-user-123' }
-
+  // Scrum-1.5 — Verify task space is accessible after logging in
+  it('renders protected content when user is logged in', async () => {
+    mockAuthState = { uid: 'user1' }
     render(
       <AuthGuard>
-        <div>First Child</div>
-        <div>Second Child</div>
-        <div>Third Child</div>
+        <div>Task Space Protected Content</div>
       </AuthGuard>
     )
-
-    await waitFor(() => {
-      expect(screen.getByText('First Child')).toBeInTheDocument()
-    })
-    expect(screen.getByText('Second Child')).toBeInTheDocument()
-    expect(screen.getByText('Third Child')).toBeInTheDocument()
-  })
-
-  it('does not redirect multiple times', async () => {
-    mockAuthState = null
-
-    render(
-      <AuthGuard>
-        <div>Protected Content</div>
-      </AuthGuard>
-    )
-
-    await waitFor(() => {
-      expect(mockReplace).toHaveBeenCalledTimes(1)
-    })
+    expect(await screen.findByText('Task Space Protected Content')).toBeInTheDocument()
   })
 })

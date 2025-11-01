@@ -1,14 +1,14 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, usePathname } from "next/navigation"
 import { auth } from "@/lib/firebase"
 
 
 const ROLE_PERMISSIONS = {
-  HR: ['tasks', 'projects', 'analytics', 'usermgmt'],
-  Manager: ['tasks', 'projects', 'analytics'],
-  Staff: ['tasks', 'projects', 'analytics']
+  HR: ['tasks', 'usermgmt'],
+  Manager: ['tasks', 'projects', 'analytics', 'timeline'],
+  Staff: ['tasks', 'projects', 'timeline'],
 }
 
 const fetchUserData = async (userId) => {
@@ -40,31 +40,38 @@ const fetchUserData = async (userId) => {
   }
 }
 
-export function RoleGuard({ children, allowedRoles }) {
+export function RoleGuard({children}) {
   const router = useRouter()
+  const pathname = usePathname();
+  const currentSection = pathname.split("/")[1]; // e.g. '/projects/123' → 'projects'
   const [status, setStatus] = useState("loading") // "loading" | "authorized" | "unauthorized" | "unauthenticated"
 
   useEffect(() => {
+    let isMounted = true;
+
     const checkAccess = async () => {
-      const user = auth.currentUser
-
+      const user = auth.currentUser;
       if (!user) {
-        setStatus("unauthenticated")
-        return
+        if (isMounted) setStatus("unauthent icated");
+        return;
       }
 
-      const userData = await fetchUserData(user.uid)
+      const userData = await fetchUserData(user.uid);
+      const role = userData?.role;
 
-      if (!allowedRoles.includes(userData.role)) {
-        setStatus("unauthorized")
-        return
+      if (!ROLE_PERMISSIONS[role]?.includes(currentSection)) {
+        if (isMounted) setStatus("unauthorized");
+        return;
       }
 
-      setStatus("authorized")
-    }
+      if (isMounted) setStatus("authorized");
+    };
 
-    checkAccess()
-  }, [allowedRoles])
+    checkAccess();
+    return () => {
+      isMounted = false;
+    };
+  }, [currentSection]);
 
   if (status === "loading") {
     return (

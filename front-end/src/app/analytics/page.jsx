@@ -91,7 +91,7 @@ export default function AnalyticsPage() {
         : 0;
 
   return (
-     <RoleGuard allowedRoles={["Manager"]}>
+     <RoleGuard>
         <div className="flex flex-col h-full bg-background">
           {/* Header */}
           <div className="border-b border-border bg-card p-6">

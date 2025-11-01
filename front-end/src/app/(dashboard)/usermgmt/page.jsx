@@ -88,7 +88,7 @@ export default function UserManagementPage() {
   }
 
   return (
-    <RoleGuard allowedRoles={["HR"]}>
+    <RoleGuard>
       <div className="flex-1 overflow-auto bg-white">
         <div className="max-w-5xl mx-auto p-8">
           {/* Header */}

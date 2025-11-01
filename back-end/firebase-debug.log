@@ -1,0 +1,135 @@
+[debug] [2025-11-01T11:11:27.715Z] ----------------------------------------------------------------------
+[debug] [2025-11-01T11:11:27.717Z] Command:       C:\Program Files\nodejs\node.exe C:\Users\teoyo\AppData\Roaming\npm\node_modules\firebase-tools\lib\bin\firebase.js deploy --only functions
+[debug] [2025-11-01T11:11:27.718Z] CLI Version:   14.18.0
+[debug] [2025-11-01T11:11:27.718Z] Platform:      win32
+[debug] [2025-11-01T11:11:27.718Z] Node Version:  v22.16.0
+[debug] [2025-11-01T11:11:27.718Z] Time:          Sat Nov 01 2025 19:11:27 GMT+0800 (Singapore Standard Time)
+[debug] [2025-11-01T11:11:27.718Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2025-11-01T11:11:27.878Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2025-11-01T11:11:27.879Z] > authorizing via signed-in user (jansen52x@gmail.com)
+[debug] [2025-11-01T11:11:27.879Z] [iam] checking project scrummy-be0d6 for permissions ["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","firebase.projects.get"]
+[debug] [2025-11-01T11:11:27.880Z] Checked if tokens are valid: true, expires at: 1761999059188
+[debug] [2025-11-01T11:11:27.880Z] Checked if tokens are valid: true, expires at: 1761999059188
+[debug] [2025-11-01T11:11:27.881Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/scrummy-be0d6:testIamPermissions [none]
+[debug] [2025-11-01T11:11:27.881Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/scrummy-be0d6:testIamPermissions x-goog-quota-user=projects/scrummy-be0d6
+[debug] [2025-11-01T11:11:27.881Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/scrummy-be0d6:testIamPermissions {"permissions":["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","firebase.projects.get"]}
+[debug] [2025-11-01T11:11:28.956Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/scrummy-be0d6:testIamPermissions 200
+[debug] [2025-11-01T11:11:28.957Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/scrummy-be0d6:testIamPermissions {"permissions":["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","firebase.projects.get"]}
+[debug] [2025-11-01T11:11:28.957Z] Checked if tokens are valid: true, expires at: 1761999059188
+[debug] [2025-11-01T11:11:28.957Z] Checked if tokens are valid: true, expires at: 1761999059188
+[debug] [2025-11-01T11:11:28.957Z] >>> [apiv2][query] POST https://iam.googleapis.com/v1/projects/scrummy-be0d6/serviceAccounts/scrummy-be0d6@appspot.gserviceaccount.com:testIamPermissions [none]
+[debug] [2025-11-01T11:11:28.957Z] >>> [apiv2][body] POST https://iam.googleapis.com/v1/projects/scrummy-be0d6/serviceAccounts/scrummy-be0d6@appspot.gserviceaccount.com:testIamPermissions {"permissions":["iam.serviceAccounts.actAs"]}
+[debug] [2025-11-01T11:11:30.174Z] <<< [apiv2][status] POST https://iam.googleapis.com/v1/projects/scrummy-be0d6/serviceAccounts/scrummy-be0d6@appspot.gserviceaccount.com:testIamPermissions 200
+[debug] [2025-11-01T11:11:30.174Z] <<< [apiv2][body] POST https://iam.googleapis.com/v1/projects/scrummy-be0d6/serviceAccounts/scrummy-be0d6@appspot.gserviceaccount.com:testIamPermissions {"permissions":["iam.serviceAccounts.actAs"]}
+[info] 
+[info] === Deploying to 'scrummy-be0d6'...
+[info] 
+[info] i  deploying functions 
+[debug] [2025-11-01T11:11:30.178Z] Checked if tokens are valid: true, expires at: 1761999059188
+[debug] [2025-11-01T11:11:30.178Z] Checked if tokens are valid: true, expires at: 1761999059188
+[debug] [2025-11-01T11:11:30.178Z] >>> [apiv2][query] GET https://cloudresourcemanager.googleapis.com/v1/projects/scrummy-be0d6 [none]
+[debug] [2025-11-01T11:11:30.420Z] <<< [apiv2][status] GET https://cloudresourcemanager.googleapis.com/v1/projects/scrummy-be0d6 200
+[debug] [2025-11-01T11:11:30.420Z] <<< [apiv2][body] GET https://cloudresourcemanager.googleapis.com/v1/projects/scrummy-be0d6 {"projectNumber":"309706610278","projectId":"scrummy-be0d6","lifecycleState":"ACTIVE","name":"Scrummy","labels":{"firebase":"enabled","firebase-core":"disabled"},"createTime":"2025-09-15T11:09:57.158876Z"}
+[info] i  functions: preparing codebase default for deployment 
+[info] i  functions: ensuring required API cloudfunctions.googleapis.com is enabled... 
+[info] i  functions: ensuring required API cloudbuild.googleapis.com is enabled... 
+[info] i  artifactregistry: ensuring required API artifactregistry.googleapis.com is enabled... 
+[debug] [2025-11-01T11:11:30.423Z] Checked if tokens are valid: true, expires at: 1761999059188
+[debug] [2025-11-01T11:11:30.423Z] Checked if tokens are valid: true, expires at: 1761999059188
+[debug] [2025-11-01T11:11:30.423Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/scrummy-be0d6/adminSdkConfig [none]
+[debug] [2025-11-01T11:11:31.279Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/scrummy-be0d6/adminSdkConfig 200
+[debug] [2025-11-01T11:11:31.279Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/scrummy-be0d6/adminSdkConfig {"projectId":"scrummy-be0d6","storageBucket":"scrummy-be0d6.firebasestorage.app"}
+[debug] [2025-11-01T11:11:31.280Z] Checked if tokens are valid: true, expires at: 1761999059188
+[debug] [2025-11-01T11:11:31.280Z] Checked if tokens are valid: true, expires at: 1761999059188
+[debug] [2025-11-01T11:11:31.280Z] >>> [apiv2][query] GET https://runtimeconfig.googleapis.com/v1beta1/projects/scrummy-be0d6/configs [none]
+[debug] [2025-11-01T11:11:32.363Z] <<< [apiv2][status] GET https://runtimeconfig.googleapis.com/v1beta1/projects/scrummy-be0d6/configs 200
+[debug] [2025-11-01T11:11:32.363Z] <<< [apiv2][body] GET https://runtimeconfig.googleapis.com/v1beta1/projects/scrummy-be0d6/configs {}
+[debug] [2025-11-01T11:11:32.364Z] Customer code is not Node
+[debug] [2025-11-01T11:11:32.364Z] Validating python source
+[debug] [2025-11-01T11:11:32.364Z] Building python source
+[info] i  functions: Loading and analyzing source code for codebase default to determine what to deploy 
+[debug] [2025-11-01T11:11:32.365Z] Could not find functions.yaml. Must use http discovery
+[debug] [2025-11-01T11:11:32.385Z] Running command with virtualenv: command="C:\Users\teoyo\Documents\GitHub\scrummy-spm-G4T6\back-end\functions\venv\Scripts\activate.bat", args=["","&&","python.exe","-c","\"import firebase_functions; import os; print(os.path.dirname(firebase_functions.__file__))\""]
+[debug] [2025-11-01T11:11:32.582Z] stderr: Traceback (most recent call last):
+
+[debug] [2025-11-01T11:11:32.584Z] stderr:   File "<string>", line 1, in <module>
+    import firebase_functions; import os; print(os.path.dirname(firebase_functions.__file__))
+    ^^^^^^^^^^^^^^^^^^^^^^^^^
+ModuleNotFoundError: No module named 'firebase_functions'
+
+[debug] [2025-11-01T11:11:32.595Z] Error: spawn "C:\Users\teoyo\Documents\GitHub\scrummy-spm-G4T6\back-end\functions\venv\Scripts\activate.bat" ENOENT
+    at notFoundError (C:\Users\teoyo\AppData\Roaming\npm\node_modules\firebase-tools\node_modules\cross-spawn\lib\enoent.js:6:26)
+    at verifyENOENT (C:\Users\teoyo\AppData\Roaming\npm\node_modules\firebase-tools\node_modules\cross-spawn\lib\enoent.js:40:16)
+    at cp.emit (C:\Users\teoyo\AppData\Roaming\npm\node_modules\firebase-tools\node_modules\cross-spawn\lib\enoent.js:27:25)
+    at ChildProcess._handle.onexit (node:internal/child_process:293:12)
+[error] 
+[error] Error: An unexpected error has occurred.
+[debug] [2025-11-01T11:12:15.650Z] ----------------------------------------------------------------------
+[debug] [2025-11-01T11:12:15.652Z] Command:       C:\Program Files\nodejs\node.exe C:\Users\teoyo\AppData\Roaming\npm\node_modules\firebase-tools\lib\bin\firebase.js deploy --only functions
+[debug] [2025-11-01T11:12:15.653Z] CLI Version:   14.18.0
+[debug] [2025-11-01T11:12:15.653Z] Platform:      win32
+[debug] [2025-11-01T11:12:15.653Z] Node Version:  v22.16.0
+[debug] [2025-11-01T11:12:15.653Z] Time:          Sat Nov 01 2025 19:12:15 GMT+0800 (Singapore Standard Time)
+[debug] [2025-11-01T11:12:15.653Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2025-11-01T11:12:15.819Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2025-11-01T11:12:15.820Z] > authorizing via signed-in user (jansen52x@gmail.com)
+[debug] [2025-11-01T11:12:15.820Z] [iam] checking project scrummy-be0d6 for permissions ["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","firebase.projects.get"]
+[debug] [2025-11-01T11:12:15.821Z] Checked if tokens are valid: true, expires at: 1761999059188
+[debug] [2025-11-01T11:12:15.821Z] Checked if tokens are valid: true, expires at: 1761999059188
+[debug] [2025-11-01T11:12:15.821Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/scrummy-be0d6:testIamPermissions [none]
+[debug] [2025-11-01T11:12:15.821Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/scrummy-be0d6:testIamPermissions x-goog-quota-user=projects/scrummy-be0d6
+[debug] [2025-11-01T11:12:15.821Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/scrummy-be0d6:testIamPermissions {"permissions":["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","firebase.projects.get"]}
+[debug] [2025-11-01T11:12:16.900Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/scrummy-be0d6:testIamPermissions 200
+[debug] [2025-11-01T11:12:16.900Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/scrummy-be0d6:testIamPermissions {"permissions":["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","firebase.projects.get"]}
+[debug] [2025-11-01T11:12:16.900Z] Checked if tokens are valid: true, expires at: 1761999059188
+[debug] [2025-11-01T11:12:16.900Z] Checked if tokens are valid: true, expires at: 1761999059188
+[debug] [2025-11-01T11:12:16.900Z] >>> [apiv2][query] POST https://iam.googleapis.com/v1/projects/scrummy-be0d6/serviceAccounts/scrummy-be0d6@appspot.gserviceaccount.com:testIamPermissions [none]
+[debug] [2025-11-01T11:12:16.900Z] >>> [apiv2][body] POST https://iam.googleapis.com/v1/projects/scrummy-be0d6/serviceAccounts/scrummy-be0d6@appspot.gserviceaccount.com:testIamPermissions {"permissions":["iam.serviceAccounts.actAs"]}
+[debug] [2025-11-01T11:12:18.149Z] <<< [apiv2][status] POST https://iam.googleapis.com/v1/projects/scrummy-be0d6/serviceAccounts/scrummy-be0d6@appspot.gserviceaccount.com:testIamPermissions 200
+[debug] [2025-11-01T11:12:18.150Z] <<< [apiv2][body] POST https://iam.googleapis.com/v1/projects/scrummy-be0d6/serviceAccounts/scrummy-be0d6@appspot.gserviceaccount.com:testIamPermissions {"permissions":["iam.serviceAccounts.actAs"]}
+[info] 
+[info] === Deploying to 'scrummy-be0d6'...
+[info] 
+[info] i  deploying functions 
+[debug] [2025-11-01T11:12:18.152Z] Checked if tokens are valid: true, expires at: 1761999059188
+[debug] [2025-11-01T11:12:18.152Z] Checked if tokens are valid: true, expires at: 1761999059188
+[debug] [2025-11-01T11:12:18.153Z] >>> [apiv2][query] GET https://cloudresourcemanager.googleapis.com/v1/projects/scrummy-be0d6 [none]
+[debug] [2025-11-01T11:12:18.411Z] <<< [apiv2][status] GET https://cloudresourcemanager.googleapis.com/v1/projects/scrummy-be0d6 200
+[debug] [2025-11-01T11:12:18.412Z] <<< [apiv2][body] GET https://cloudresourcemanager.googleapis.com/v1/projects/scrummy-be0d6 {"projectNumber":"309706610278","projectId":"scrummy-be0d6","lifecycleState":"ACTIVE","name":"Scrummy","labels":{"firebase":"enabled","firebase-core":"disabled"},"createTime":"2025-09-15T11:09:57.158876Z"}
+[info] i  functions: preparing codebase default for deployment 
+[info] i  functions: ensuring required API cloudfunctions.googleapis.com is enabled... 
+[info] i  functions: ensuring required API cloudbuild.googleapis.com is enabled... 
+[info] i  artifactregistry: ensuring required API artifactregistry.googleapis.com is enabled... 
+[debug] [2025-11-01T11:12:18.414Z] Checked if tokens are valid: true, expires at: 1761999059188
+[debug] [2025-11-01T11:12:18.414Z] Checked if tokens are valid: true, expires at: 1761999059188
+[debug] [2025-11-01T11:12:18.414Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/scrummy-be0d6/adminSdkConfig [none]
+[debug] [2025-11-01T11:12:19.445Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/scrummy-be0d6/adminSdkConfig 200
+[debug] [2025-11-01T11:12:19.445Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/scrummy-be0d6/adminSdkConfig {"projectId":"scrummy-be0d6","storageBucket":"scrummy-be0d6.firebasestorage.app"}
+[debug] [2025-11-01T11:12:19.445Z] Checked if tokens are valid: true, expires at: 1761999059188
+[debug] [2025-11-01T11:12:19.445Z] Checked if tokens are valid: true, expires at: 1761999059188
+[debug] [2025-11-01T11:12:19.446Z] >>> [apiv2][query] GET https://runtimeconfig.googleapis.com/v1beta1/projects/scrummy-be0d6/configs [none]
+[debug] [2025-11-01T11:12:20.530Z] <<< [apiv2][status] GET https://runtimeconfig.googleapis.com/v1beta1/projects/scrummy-be0d6/configs 200
+[debug] [2025-11-01T11:12:20.531Z] <<< [apiv2][body] GET https://runtimeconfig.googleapis.com/v1beta1/projects/scrummy-be0d6/configs {}
+[debug] [2025-11-01T11:12:20.532Z] Customer code is not Node
+[debug] [2025-11-01T11:12:20.532Z] Validating python source
+[debug] [2025-11-01T11:12:20.532Z] Building python source
+[info] i  functions: Loading and analyzing source code for codebase default to determine what to deploy 
+[debug] [2025-11-01T11:12:20.533Z] Could not find functions.yaml. Must use http discovery
+[debug] [2025-11-01T11:12:20.543Z] Running command with virtualenv: command="C:\Users\teoyo\Documents\GitHub\scrummy-spm-G4T6\back-end\functions\venv\Scripts\activate.bat", args=["","&&","python.exe","-c","\"import firebase_functions; import os; print(os.path.dirname(firebase_functions.__file__))\""]
+[debug] [2025-11-01T11:12:20.743Z] stderr: Traceback (most recent call last):
+
+[debug] [2025-11-01T11:12:20.745Z] stderr:   File "<string>", line 1, in <module>
+    import firebase_functions; import os; print(os.path.dirname(firebase_functions.__file__))
+    ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+[debug] [2025-11-01T11:12:20.745Z] stderr: ModuleNotFoundError: No module named 'firebase_functions'
+
+[debug] [2025-11-01T11:12:20.756Z] Error: spawn "C:\Users\teoyo\Documents\GitHub\scrummy-spm-G4T6\back-end\functions\venv\Scripts\activate.bat" ENOENT
+    at notFoundError (C:\Users\teoyo\AppData\Roaming\npm\node_modules\firebase-tools\node_modules\cross-spawn\lib\enoent.js:6:26)
+    at verifyENOENT (C:\Users\teoyo\AppData\Roaming\npm\node_modules\firebase-tools\node_modules\cross-spawn\lib\enoent.js:40:16)
+    at cp.emit (C:\Users\teoyo\AppData\Roaming\npm\node_modules\firebase-tools\node_modules\cross-spawn\lib\enoent.js:27:25)
+    at ChildProcess._handle.onexit (node:internal/child_process:293:12)
+[error] 
+[error] Error: An unexpected error has occurred.

@@ -1258,7 +1258,7 @@ export default function ProjectDetailPage() {
   }
 
   return (
-    <RoleGuard allowedRoles={["Staff", "Manager"]}>
+    <RoleGuard>
       <Dialog
         open={isDeleteDialogOpen}
         onOpenChange={(open) => {

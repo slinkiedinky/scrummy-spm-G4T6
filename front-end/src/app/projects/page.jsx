@@ -485,7 +485,7 @@ const selectedMemberRecords = useMemo(() => {
   }
 
   return (
-    <RoleGuard allowedRoles={["Staff", "Manager"]}>
+    <RoleGuard>
       <Dialog open={isCreateDialogOpen} onOpenChange={handleCreateDialogChange}>
         <DialogContent>
           <form onSubmit={onCreateProject} className="space-y-6">

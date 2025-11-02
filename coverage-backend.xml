@@ -3,7 +3,7 @@
 	
 	
 	<sources>
-		<source>/Users/shawn/Documents/year 4/is212 spm/scrummy-spm-G4T6/back-end</source>
+		<source>.</source>
 	</sources>
 	<packages>
 		<package name="." line-rate="0.7718" branch-rate="0" complexity="0">

@@ -82,6 +82,33 @@ echo -e "  ${GREEN}✓${NC} back-end/coverage.xml ($(wc -l < back-end/coverage.x
 cp back-end/coverage.xml coverage-backend.xml
 echo -e "  ${GREEN}✓${NC} coverage-backend.xml ($(wc -l < coverage-backend.xml) lines)"
 
+python3 <<'EOF'
+import xml.etree.ElementTree as ET
+from pathlib import Path
+
+path = Path("coverage-backend.xml")
+tree = ET.parse(path)
+root = tree.getroot()
+
+for source in root.findall(".//source"):
+    source.text = "."
+
+for cls in root.findall(".//class"):
+    filename = cls.get("filename")
+    if not filename:
+        continue
+    name = filename.replace("\\", "/")
+    if name.startswith("./"):
+        name = name[2:]
+    while name.startswith("back-end/back-end/"):
+        name = name[len("back-end/"):]
+    if not name.startswith("back-end/"):
+        name = f"back-end/{name}"
+    cls.set("filename", name)
+
+tree.write(path, encoding="utf-8", xml_declaration=True)
+EOF
+
 if [ "$FRONTEND_COVERAGE_EXISTS" = "true" ] && [ -f "front-end/coverage/lcov.info" ]; then
     echo -e "  ${GREEN}✓${NC} front-end/coverage/lcov.info ($(wc -l < front-end/coverage/lcov.info) lines)"
 elif [ "$FRONTEND_COVERAGE_EXISTS" = "true" ]; then

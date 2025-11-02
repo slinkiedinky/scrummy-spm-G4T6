@@ -46,15 +46,25 @@ jobs:
           tree = ET.parse('coverage-backend.xml')
           root = tree.getroot()
 
-          # Normalise source paths so they stay within the repo
+          # Normalise source paths so Sonar resolves them from repo root
           for source in root.findall('.//source'):
-              source.text = 'back-end'
+              source.text = '.'
 
-          # Ensure filenames remain relative to the backend folder
+          # Ensure filenames are rooted at back-end/ without duplication
           for cls in root.findall('.//class'):
               filename = cls.get('filename')
-              if filename and not filename.startswith('back-end/'):
-                  cls.set('filename', f'back-end/{filename}')
+              if not filename:
+                  continue
+
+              name = filename.replace('\\', '/')
+              if name.startswith('./'):
+                  name = name[2:]
+              while name.startswith('back-end/back-end/'):
+                  name = name[len('back-end/'):]
+              if not name.startswith('back-end/'):
+                  name = f'back-end/{name}'
+
+              cls.set('filename', name)
 
           tree.write('coverage-backend.xml', encoding='utf-8', xml_declaration=True)
           print("Fixed coverage paths")

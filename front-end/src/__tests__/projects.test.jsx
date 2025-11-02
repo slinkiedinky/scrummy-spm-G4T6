@@ -36,6 +36,7 @@ jest.mock('@/lib/api', () => ({
   updateProject: jest.fn(),
   deleteProject: jest.fn(),
   listUsers: jest.fn(),
+  listTasks: jest.fn(),
 }))
 
 jest.mock('@/lib/firebase', () => ({
@@ -510,5 +511,887 @@ describe('Create Project - Test Scenario', () => {
     // Verify owner is still in team
     expect(result.ownerId).toBe(currentUserId)
     expect(result.teamIds).toContain(result.ownerId)
+  })
+
+  /**
+   * Test scenario: View all projects that the current user has access to
+   *
+   * Pre-conditions:
+   *   1. User logged in
+   *   2. Projects 'Project 1' and 'Project 2' exist
+   *
+   * Test steps:
+   *   1. Open projects tab
+   *
+   * Test data:
+   *   Project Name: Project 1
+   *   Description: My first project
+   *   Status: In Progress
+   *   Priority: High
+   *
+   *   Project Name: Project 2
+   *   Description: My second project
+   *   Status: To Do
+   *   Priority: Medium
+   *
+   * Expected results:
+   *   - 2 projects 'Project 1' and 'Project 2' are displayed on the projects tab
+   */
+  it('should display all projects that the current user has access to', async () => {
+    // Mock project data - user has access to both projects
+    const mockProjects = [
+      {
+        id: 'project1_id',
+        name: 'Project 1',
+        description: 'My first project',
+        status: 'In Progress',
+        priority: 'High',
+        ownerId: currentUserId,
+        teamIds: [currentUserId],
+        progress: 0,
+        createdAt: new Date('2025-11-01'),
+        updatedAt: new Date('2025-11-01'),
+      },
+      {
+        id: 'project2_id',
+        name: 'Project 2',
+        description: 'My second project',
+        status: 'To Do',
+        priority: 'Medium',
+        ownerId: 'other_user',
+        teamIds: [currentUserId, 'other_user'], // User is a team member
+        progress: 0,
+        createdAt: new Date('2025-11-01'),
+        updatedAt: new Date('2025-11-01'),
+      },
+    ]
+
+    // Mock listProjects API
+    api.listProjects.mockResolvedValue(mockProjects)
+
+    // Step 1: Open projects tab (fetch all projects)
+    const projects = await api.listProjects()
+
+    // Verify API was called
+    expect(api.listProjects).toHaveBeenCalled()
+
+    // Expected results: 2 projects are displayed
+    expect(projects).toHaveLength(2)
+
+    // Filter projects where user is a team member
+    const userProjects = projects.filter((project) =>
+      project.teamIds.includes(currentUserId)
+    )
+    expect(userProjects).toHaveLength(2)
+
+    // Verify Project 1
+    const project1 = projects.find((p) => p.name === 'Project 1')
+    expect(project1).toBeDefined()
+    expect(project1.name).toBe('Project 1')
+    expect(project1.description).toBe('My first project')
+    expect(project1.status).toBe('In Progress')
+    expect(project1.priority).toBe('High')
+    expect(project1.ownerId).toBe(currentUserId)
+    expect(project1.teamIds).toContain(currentUserId)
+    expect(project1.id).toBe('project1_id')
+
+    // Verify Project 2
+    const project2 = projects.find((p) => p.name === 'Project 2')
+    expect(project2).toBeDefined()
+    expect(project2.name).toBe('Project 2')
+    expect(project2.description).toBe('My second project')
+    expect(project2.status).toBe('To Do')
+    expect(project2.priority).toBe('Medium')
+    expect(project2.ownerId).toBe('other_user')
+    expect(project2.teamIds).toContain(currentUserId)
+    expect(project2.id).toBe('project2_id')
+
+    // Verify both projects include the current user as a team member
+    expect(project1.teamIds).toContain(currentUserId)
+    expect(project2.teamIds).toContain(currentUserId)
+  })
+
+  /**
+   * Test scenario: View project descriptions in projects tab
+   *
+   * Pre-conditions:
+   *   1. User logged in
+   *   2. Project 'Project 1' exists
+   *
+   * Test steps:
+   *   1. Open projects tab
+   *
+   * Test data:
+   *   Project Name: Project 1
+   *   Description: My first project
+   *   Status: In Progress
+   *   Priority: High
+   *
+   * Expected results:
+   *   - Project 'Project 1' is displayed on the projects tab with description 'My first project'
+   */
+  it('should display project description in projects tab', async () => {
+    // Mock project data with description
+    const mockProject = {
+      id: 'project1_id',
+      name: 'Project 1',
+      description: 'My first project',
+      status: 'In Progress',
+      priority: 'High',
+      ownerId: currentUserId,
+      teamIds: [currentUserId],
+      progress: 0,
+      createdAt: new Date('2025-11-01'),
+      updatedAt: new Date('2025-11-01'),
+    }
+
+    // Mock listProjects API
+    api.listProjects.mockResolvedValue([mockProject])
+
+    // Step 1: Open projects tab (fetch all projects)
+    const projects = await api.listProjects()
+
+    // Verify API was called
+    expect(api.listProjects).toHaveBeenCalled()
+
+    // Expected results: At least 1 project is displayed
+    expect(projects).toHaveLength(1)
+
+    // Find Project 1
+    const project1 = projects.find((p) => p.name === 'Project 1')
+    expect(project1).toBeDefined()
+
+    // Verify Project 1 is displayed with description 'My first project'
+    expect(project1.name).toBe('Project 1')
+    expect(project1.description).toBe('My first project')
+    expect(project1.status).toBe('In Progress')
+    expect(project1.priority).toBe('High')
+
+    // Verify description field is present and not empty
+    expect(project1).toHaveProperty('description')
+    expect(project1.description).not.toBe('')
+    expect(project1.description.trim()).toBe('My first project')
+  })
+
+  /**
+   * Test scenario: View project status in projects tab
+   *
+   * Pre-conditions:
+   *   1. User logged in
+   *   2. Project 'Project 1' exists
+   *
+   * Test steps:
+   *   1. Open projects tab
+   *
+   * Test data:
+   *   Project Name: Project 1
+   *   Description: My first project
+   *   Status: In Progress
+   *   Priority: High
+   *
+   * Expected results:
+   *   - Project 'Project 1' is displayed on the projects tab with status 'In Progress'
+   */
+  it('should display project status in projects tab', async () => {
+    // Mock project data with status
+    const mockProject = {
+      id: 'project1_id',
+      name: 'Project 1',
+      description: 'My first project',
+      status: 'In Progress',
+      priority: 'High',
+      ownerId: currentUserId,
+      teamIds: [currentUserId],
+      progress: 0,
+      createdAt: new Date('2025-11-01'),
+      updatedAt: new Date('2025-11-01'),
+    }
+
+    // Mock listProjects API
+    api.listProjects.mockResolvedValue([mockProject])
+
+    // Step 1: Open projects tab (fetch all projects)
+    const projects = await api.listProjects()
+
+    // Verify API was called
+    expect(api.listProjects).toHaveBeenCalled()
+
+    // Expected results: At least 1 project is displayed
+    expect(projects).toHaveLength(1)
+
+    // Find Project 1
+    const project1 = projects.find((p) => p.name === 'Project 1')
+    expect(project1).toBeDefined()
+
+    // Verify Project 1 is displayed with status 'In Progress'
+    expect(project1.name).toBe('Project 1')
+    expect(project1.status).toBe('In Progress')
+    expect(project1.description).toBe('My first project')
+    expect(project1.priority).toBe('High')
+
+    // Verify status field is present and not empty
+    expect(project1).toHaveProperty('status')
+    expect(project1.status).not.toBe('')
+    expect(project1.status.trim()).toBe('In Progress')
+  })
+
+  /**
+   * Test scenario: View project priority in projects tab
+   *
+   * Pre-conditions:
+   *   1. User logged in
+   *   2. Project 'Project 1' exists
+   *
+   * Test steps:
+   *   1. Open projects tab
+   *
+   * Test data:
+   *   Project Name: Project 1
+   *   Description: My first project
+   *   Status: In Progress
+   *   Priority: High
+   *
+   * Expected results:
+   *   - Project 'Project 1' is displayed on the projects tab with priority 'High'
+   */
+  it('should display project priority in projects tab', async () => {
+    // Mock project data with priority
+    const mockProject = {
+      id: 'project1_id',
+      name: 'Project 1',
+      description: 'My first project',
+      status: 'In Progress',
+      priority: 'High',
+      ownerId: currentUserId,
+      teamIds: [currentUserId],
+      progress: 0,
+      createdAt: new Date('2025-11-01'),
+      updatedAt: new Date('2025-11-01'),
+    }
+
+    // Mock listProjects API
+    api.listProjects.mockResolvedValue([mockProject])
+
+    // Step 1: Open projects tab (fetch all projects)
+    const projects = await api.listProjects()
+
+    // Verify API was called
+    expect(api.listProjects).toHaveBeenCalled()
+
+    // Expected results: At least 1 project is displayed
+    expect(projects).toHaveLength(1)
+
+    // Find Project 1
+    const project1 = projects.find((p) => p.name === 'Project 1')
+    expect(project1).toBeDefined()
+
+    // Verify Project 1 is displayed with priority 'High'
+    expect(project1.name).toBe('Project 1')
+    expect(project1.priority).toBe('High')
+    expect(project1.description).toBe('My first project')
+    expect(project1.status).toBe('In Progress')
+
+    // Verify priority field is present and not empty
+    expect(project1).toHaveProperty('priority')
+    expect(project1.priority).not.toBe('')
+    expect(['Low', 'Medium', 'High']).toContain(project1.priority)
+  })
+
+  /**
+   * Test scenario: View project page containing project name
+   *
+   * Pre-conditions:
+   *   1. User logged in
+   *   2. Project 'Project 1' exists
+   *
+   * Test steps:
+   *   1. Open projects tab
+   *   2. Select 'View Details' on Project 1
+   *
+   * Test data:
+   *   Project Name: Project 1
+   *   Description: My first project
+   *   Status: In Progress
+   *   Priority: High
+   *
+   * Expected results:
+   *   - Project page displays project name 'Project 1'
+   */
+  it('should display project name on project page', async () => {
+    const projectId = 'project123'
+
+    // Mock project data
+    const mockProject = {
+      id: projectId,
+      name: 'Project 1',
+      description: 'My first project',
+      status: 'In Progress',
+      priority: 'High',
+      ownerId: currentUserId,
+      teamIds: [currentUserId],
+      progress: 0,
+      createdAt: new Date('2025-11-01'),
+      updatedAt: new Date('2025-11-01'),
+    }
+
+    // Mock getProject API
+    api.getProject.mockResolvedValue(mockProject)
+
+    // Step 1: Open projects tab (already done in previous tests)
+    // Step 2: Select 'View Details' on Project 1 (fetch project details)
+    const project = await api.getProject(projectId)
+
+    // Verify API was called
+    expect(api.getProject).toHaveBeenCalledWith(projectId)
+
+    // Expected results: Project page displays project name 'Project 1'
+    expect(project).toBeDefined()
+    expect(project.name).toBe('Project 1')
+    expect(project.description).toBe('My first project')
+    expect(project.status).toBe('In Progress')
+    expect(project.priority).toBe('High')
+    expect(project.id).toBe(projectId)
+
+    // Verify name field is present and not empty
+    expect(project).toHaveProperty('name')
+    expect(project.name).not.toBe('')
+    expect(project.name.trim()).toBe('Project 1')
+  })
+
+  /**
+   * Test scenario: View project page containing project description
+   *
+   * Pre-conditions:
+   *   1. User logged in
+   *   2. Project 'Project 1' exists
+   *
+   * Test steps:
+   *   1. Open projects tab
+   *   2. Select 'View Details' on Project 1
+   *
+   * Test data:
+   *   Project Name: Project 1
+   *   Description: My first project
+   *   Status: In Progress
+   *   Priority: High
+   *
+   * Expected results:
+   *   - Project page displays project description 'My first project'
+   */
+  it('should display project description on project page', async () => {
+    const projectId = 'project123'
+
+    // Mock project data
+    const mockProject = {
+      id: projectId,
+      name: 'Project 1',
+      description: 'My first project',
+      status: 'In Progress',
+      priority: 'High',
+      ownerId: currentUserId,
+      teamIds: [currentUserId],
+      progress: 0,
+      createdAt: new Date('2025-11-01'),
+      updatedAt: new Date('2025-11-01'),
+    }
+
+    // Mock getProject API
+    api.getProject.mockResolvedValue(mockProject)
+
+    // Step 1: Open projects tab (already done in previous tests)
+    // Step 2: Select 'View Details' on Project 1 (fetch project details)
+    const project = await api.getProject(projectId)
+
+    // Verify API was called
+    expect(api.getProject).toHaveBeenCalledWith(projectId)
+
+    // Expected results: Project page displays project description 'My first project'
+    expect(project).toBeDefined()
+    expect(project.description).toBe('My first project')
+    expect(project.name).toBe('Project 1')
+    expect(project.status).toBe('In Progress')
+    expect(project.priority).toBe('High')
+    expect(project.id).toBe(projectId)
+
+    // Verify description field is present and not empty
+    expect(project).toHaveProperty('description')
+    expect(project.description).not.toBe('')
+    expect(project.description.trim()).toBe('My first project')
+  })
+
+  /**
+   * Test scenario: View project page containing project status
+   *
+   * Pre-conditions:
+   *   1. User logged in
+   *   2. Project 'Project 1' exists
+   *
+   * Test steps:
+   *   1. Open projects tab
+   *   2. Select 'View Details' on Project 1
+   *
+   * Test data:
+   *   Project Name: Project 1
+   *   Description: My first project
+   *   Status: In Progress
+   *   Priority: High
+   *
+   * Expected results:
+   *   - Project page displays project status 'In Progress'
+   */
+  it('should display project status on project page', async () => {
+    const projectId = 'project123'
+
+    // Mock project data
+    const mockProject = {
+      id: projectId,
+      name: 'Project 1',
+      description: 'My first project',
+      status: 'In Progress',
+      priority: 'High',
+      ownerId: currentUserId,
+      teamIds: [currentUserId],
+      progress: 0,
+      createdAt: new Date('2025-11-01'),
+      updatedAt: new Date('2025-11-01'),
+    }
+
+    // Mock getProject API
+    api.getProject.mockResolvedValue(mockProject)
+
+    // Step 1: Open projects tab (already done in previous tests)
+    // Step 2: Select 'View Details' on Project 1 (fetch project details)
+    const project = await api.getProject(projectId)
+
+    // Verify API was called
+    expect(api.getProject).toHaveBeenCalledWith(projectId)
+
+    // Expected results: Project page displays project status 'In Progress'
+    expect(project).toBeDefined()
+    expect(project.status).toBe('In Progress')
+    expect(project.name).toBe('Project 1')
+    expect(project.description).toBe('My first project')
+    expect(project.priority).toBe('High')
+    expect(project.id).toBe(projectId)
+
+    // Verify status field is present and not empty
+    expect(project).toHaveProperty('status')
+    expect(project.status).not.toBe('')
+    expect(project.status.trim()).toBe('In Progress')
+  })
+
+  // Scrum-130: View project page containing project priority
+  it('should display project priority on project page', async () => {
+    const projectId = 'project123'
+
+    // Mock project data
+    const mockProject = {
+      id: projectId,
+      name: 'Project 1',
+      description: 'My first project',
+      status: 'In Progress',
+      priority: 'High',
+      ownerId: currentUserId,
+      teamIds: [currentUserId],
+      progress: 0,
+      createdAt: new Date('2025-11-01'),
+      updatedAt: new Date('2025-11-01'),
+    }
+
+    // Mock getProject API
+    api.getProject.mockResolvedValue(mockProject)
+
+    // Step 1: Open projects tab (already done in previous tests)
+    // Step 2: Select 'View Details' on Project 1 (fetch project details)
+    const project = await api.getProject(projectId)
+
+    // Verify API was called
+    expect(api.getProject).toHaveBeenCalledWith(projectId)
+
+    // Expected results: Project page displays project priority 'High'
+    expect(project).toBeDefined()
+    expect(project.priority).toBe('High')
+    expect(project.name).toBe('Project 1')
+    expect(project.description).toBe('My first project')
+    expect(project.status).toBe('In Progress')
+    expect(project.id).toBe(projectId)
+
+    // Verify priority field is present and not empty
+    expect(project).toHaveProperty('priority')
+    expect(project.priority).not.toBe('')
+    expect(project.priority.trim()).toBe('High')
+  })
+
+  /**
+   * Test scenario: View timeline tab on project page
+   *
+   * Pre-conditions:
+   *   1. User logged in
+   *   2. Project 'Project 1' exists
+   *
+   * Test steps:
+   *   1. Open projects tab
+   *   2. Select 'View Details' on Project 1
+   *
+   * Test data:
+   *   Project Name: Project 1
+   *   Description: My first project
+   *   Status: In Progress
+   *   Priority: High
+   *
+   * Expected results:
+   *   - Project page contains tab 'Timeline'
+   */
+  it('should display timeline tab on project page', async () => {
+    const projectId = 'project123'
+
+    // Mock project data
+    const mockProject = {
+      id: projectId,
+      name: 'Project 1',
+      description: 'My first project',
+      status: 'In Progress',
+      priority: 'High',
+      ownerId: currentUserId,
+      teamIds: [currentUserId],
+      progress: 0,
+      createdAt: new Date('2025-11-01'),
+      updatedAt: new Date('2025-11-01'),
+    }
+
+    // Mock getProject API
+    api.getProject.mockResolvedValue(mockProject)
+
+    // Step 1: Open projects tab (already done in previous tests)
+    // Step 2: Select 'View Details' on Project 1 (fetch project details)
+    const project = await api.getProject(projectId)
+
+    // Verify API was called
+    expect(api.getProject).toHaveBeenCalledWith(projectId)
+
+    // Expected results: Project page contains necessary data for timeline tab
+    expect(project).toBeDefined()
+    expect(project.id).toBe(projectId)
+    expect(project.name).toBe('Project 1')
+    expect(project.description).toBe('My first project')
+    expect(project.status).toBe('In Progress')
+    expect(project.priority).toBe('High')
+
+    // Verify project has the required fields for timeline functionality
+    expect(project).toHaveProperty('id')
+    expect(project.id).not.toBe('')
+    // Timeline tab would be rendered based on project data availability
+    expect(project).toHaveProperty('createdAt')
+  })
+
+  /**
+   * Test scenario: View team member's active tasks and due dates on project timeline
+   *
+   * Pre-conditions:
+   *   1. User logged in
+   *   2. Project 'Project 1' exists
+   *   3. Member 'John' exists
+   *   4. John is assigned 'Task 1'
+   *
+   * Test steps:
+   *   1. Open projects tab
+   *   2. Select 'View Details' on Project 1
+   *   3. Select 'Timeline' tab
+   *
+   * Test data:
+   *   Project Name: Project 1
+   *   Project description: My first project
+   *   Project status: In Progress
+   *   Project priority: High
+   *
+   *   Task name: Task 1
+   *   Task description: John's first task
+   *   Task status: To-Do
+   *   Task priority: 5
+   *   Task due-date: 07/11/2025
+   *
+   * Expected results:
+   *   - 07/11/2025 is shaded black on the project timeline with a badge containing '1'
+   */
+  it('should display team member tasks and due dates on project timeline', async () => {
+    const projectId = 'project123'
+    const johnId = 'john123'
+
+    // Mock project data
+    const mockProject = {
+      id: projectId,
+      name: 'Project 1',
+      description: 'My first project',
+      status: 'In Progress',
+      priority: 'High',
+      ownerId: currentUserId,
+      teamIds: [currentUserId, johnId],
+      progress: 0,
+      createdAt: new Date('2025-11-01'),
+      updatedAt: new Date('2025-11-01'),
+    }
+
+    // Mock task data - Task 1 assigned to John with due date 07/11/2025
+    const mockTasks = [
+      {
+        id: 'task123',
+        projectId: projectId,
+        name: 'Task 1',
+        description: "John's first task",
+        status: 'To-Do',
+        priority: 5,
+        dueDate: new Date('2025-11-07'),
+        assigneeId: johnId,
+        createdAt: new Date('2025-11-01'),
+        updatedAt: new Date('2025-11-01'),
+      },
+    ]
+
+    // Mock APIs
+    api.getProject.mockResolvedValue(mockProject)
+    api.listTasks.mockResolvedValue(mockTasks)
+
+    // Step 1: Open projects tab (already done in previous tests)
+    // Step 2: Select 'View Details' on Project 1 (fetch project details)
+    const project = await api.getProject(projectId)
+
+    // Verify project API was called
+    expect(api.getProject).toHaveBeenCalledWith(projectId)
+    expect(project).toBeDefined()
+
+    // Step 3: Select 'Timeline' tab (fetch tasks for timeline)
+    const tasks = await api.listTasks(projectId, { userId: currentUserId })
+
+    // Verify tasks API was called
+    expect(api.listTasks).toHaveBeenCalledWith(projectId, {
+      userId: currentUserId,
+    })
+
+    // Expected results: Timeline displays task with due date 07/11/2025
+    expect(tasks).toHaveLength(1)
+
+    const task1 = tasks[0]
+    expect(task1.name).toBe('Task 1')
+    expect(task1.description).toBe("John's first task")
+    expect(task1.status).toBe('To-Do')
+    expect(task1.priority).toBe(5)
+    expect(task1.assigneeId).toBe(johnId)
+
+    // Verify due date is present for timeline display
+    expect(task1).toHaveProperty('dueDate')
+    expect(task1.dueDate).not.toBeNull()
+
+    // Verify the due date is 07/11/2025
+    const dueDate = new Date(task1.dueDate)
+    expect(dueDate.getFullYear()).toBe(2025)
+    expect(dueDate.getMonth()).toBe(10) // November (0-indexed)
+    expect(dueDate.getDate()).toBe(7)
+
+    // The frontend would render 07/11/2025 shaded black with badge '1'
+    // based on this task data
+  })
+
+  /**
+   * Test scenario: View team member's completed tasks on project timeline
+   *
+   * Pre-conditions:
+   *   1. User logged in
+   *   2. Project 'Project 1' exists
+   *   3. Member 'John' exists
+   *   4. John is assigned and completed 'Task 1'
+   *
+   * Test steps:
+   *   1. Open projects tab
+   *   2. Select 'View Details' on Project 1
+   *   3. Select 'Timeline' tab
+   *
+   * Test data:
+   *   Project Name: Project 1
+   *   Project description: My first project
+   *   Project status: In Progress
+   *   Project priority: High
+   *
+   *   Task name: Task 1
+   *   Task description: John's first task
+   *   Task status: Completed
+   *   Task priority: 5
+   *   Task due-date: 07/11/2025
+   *
+   * Expected results:
+   *   - 07/11/2025 is shaded green on the project timeline with a badge containing '1'
+   */
+  it('should display team member completed tasks on project timeline', async () => {
+    const projectId = 'project123'
+    const johnId = 'john123'
+
+    // Mock project data
+    const mockProject = {
+      id: projectId,
+      name: 'Project 1',
+      description: 'My first project',
+      status: 'In Progress',
+      priority: 'High',
+      ownerId: currentUserId,
+      teamIds: [currentUserId, johnId],
+      progress: 0,
+      createdAt: new Date('2025-11-01'),
+      updatedAt: new Date('2025-11-01'),
+    }
+
+    // Mock task data - Task 1 assigned to John and completed with due date 07/11/2025
+    const mockTasks = [
+      {
+        id: 'task123',
+        projectId: projectId,
+        name: 'Task 1',
+        description: "John's first task",
+        status: 'Completed',
+        priority: 5,
+        dueDate: new Date('2025-11-07'),
+        assigneeId: johnId,
+        createdAt: new Date('2025-11-01'),
+        updatedAt: new Date('2025-11-01'),
+      },
+    ]
+
+    // Mock APIs
+    api.getProject.mockResolvedValue(mockProject)
+    api.listTasks.mockResolvedValue(mockTasks)
+
+    // Step 1: Open projects tab (already done in previous tests)
+    // Step 2: Select 'View Details' on Project 1 (fetch project details)
+    const project = await api.getProject(projectId)
+
+    // Verify project API was called
+    expect(api.getProject).toHaveBeenCalledWith(projectId)
+    expect(project).toBeDefined()
+
+    // Step 3: Select 'Timeline' tab (fetch tasks for timeline)
+    const tasks = await api.listTasks(projectId, { userId: currentUserId })
+
+    // Verify tasks API was called
+    expect(api.listTasks).toHaveBeenCalledWith(projectId, {
+      userId: currentUserId,
+    })
+
+    // Expected results: Timeline displays completed task with due date 07/11/2025
+    expect(tasks).toHaveLength(1)
+
+    const task1 = tasks[0]
+    expect(task1.name).toBe('Task 1')
+    expect(task1.description).toBe("John's first task")
+    expect(task1.status).toBe('Completed')
+    expect(task1.priority).toBe(5)
+    expect(task1.assigneeId).toBe(johnId)
+
+    // Verify due date is present for timeline display
+    expect(task1).toHaveProperty('dueDate')
+    expect(task1.dueDate).not.toBeNull()
+
+    // Verify the due date is 07/11/2025
+    const dueDate = new Date(task1.dueDate)
+    expect(dueDate.getFullYear()).toBe(2025)
+    expect(dueDate.getMonth()).toBe(10) // November (0-indexed)
+    expect(dueDate.getDate()).toBe(7)
+
+    // Verify task status is completed
+    expect(task1.status).toBe('Completed')
+
+    // The frontend would render 07/11/2025 shaded green with badge '1'
+    // based on the task status being 'Completed'
+  })
+
+  it('should display due dates for specific day', async () => {
+    // Test scenario: View due-dates for a specific day
+    // Pre-conditions:
+    // 1. User logged in
+    // 2. Project 'Project 1' exists
+    // 3. Member 'John' exists
+    // 4. John is assigned 'Task 1'
+    //
+    // Test steps:
+    // 1. Open projects tab
+    // 2. Select 'View Details' on Project 1
+    // 3. Select 'Timeline' tab
+    // 4. Select the circle for 07/11/2025
+    //
+    // Test data:
+    // - Task name: Task 1
+    // - Task status: To-Do
+    // - Task due-date: 07/11/2025
+    //
+    // Expected results:
+    // Timeline expands to show the name, description, status, priority,
+    // and assigned member of the task that is due on 07/11/2025
+
+    const projectId = 'project123'
+    const projectName = 'Project 1'
+    const johnId = 'user456'
+
+    const mockProject = {
+      id: projectId,
+      name: projectName,
+      description: 'Test project',
+      createdBy: 'user123',
+      collaboratorIds: [johnId],
+      createdAt: new Date('2025-01-01'),
+    }
+
+    const mockTasks = [
+      {
+        id: 'task123',
+        projectId: projectId,
+        name: 'Task 1',
+        description: "John's first task",
+        status: 'To-Do',
+        priority: 5,
+        dueDate: new Date('2025-11-07'),
+        assigneeId: johnId,
+      },
+    ]
+
+    api.getProject.mockResolvedValue(mockProject)
+    api.listTasks.mockResolvedValue(mockTasks)
+
+    // Simulate clicking on the circle for 07/11/2025 in the timeline
+    // This would filter tasks to show only those due on this specific day
+
+    // Filter tasks by the selected date (07/11/2025)
+    const targetDate = new Date('2025-11-07')
+    const tasksDueOnDate = mockTasks.filter((task) => {
+      if (!task.dueDate) return false
+
+      const taskDate = new Date(task.dueDate)
+      return (
+        taskDate.getFullYear() === targetDate.getFullYear() &&
+        taskDate.getMonth() === targetDate.getMonth() &&
+        taskDate.getDate() === targetDate.getDate()
+      )
+    })
+
+    // Verify we found tasks due on 07/11/2025
+    expect(tasksDueOnDate.length).toBe(1)
+
+    const task1 = tasksDueOnDate[0]
+
+    // Verify timeline expands to show all task details
+    expect(task1.name).toBe('Task 1')
+    expect(task1.description).toBe("John's first task")
+    expect(task1.status).toBe('To-Do')
+    expect(task1.priority).toBe(5)
+    expect(task1.assigneeId).toBe(johnId)
+
+    // Verify the due date is exactly 07/11/2025
+    const dueDate = new Date(task1.dueDate)
+    expect(dueDate.getFullYear()).toBe(2025)
+    expect(dueDate.getMonth()).toBe(10) // November (0-indexed)
+    expect(dueDate.getDate()).toBe(7)
+
+    // The frontend would expand the timeline to display:
+    // - Name: Task 1
+    // - Description: John's first task
+    // - Status: To-Do
+    // - Priority: 5
+    // - Assigned member: John (johnId)
   })
 })

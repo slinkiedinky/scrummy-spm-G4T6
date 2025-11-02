@@ -202,10 +202,21 @@ export async function createProject(payload) {
 }
 
 export async function updateProject(id, patch) {
+  // Add current user ID for backend authorization
+  const payload = { ...patch };
+  try {
+    const user = auth?.currentUser;
+    if (user && !payload.userId) {
+      payload.userId = user.uid;
+    }
+  } catch (e) {
+    /* best-effort */
+  }
+
   const r = await fetch(`${API}/projects/${id}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(patch),
+    body: JSON.stringify(payload),
   });
   if (!r.ok) throw new Error(`Update failed (${r.status})`);
   return r.json();

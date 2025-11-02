@@ -118,8 +118,9 @@ def normalize_task_out(task: dict) -> dict:
 @projects_bp.route("/", methods=["GET"])
 @cross_origin()
 def get_projects():
-    user_id = request.args.get("userId")
-    if not user_id: return jsonify({"error":"userId is required"}), 400
+    # Accept both userId and assignedTo for compatibility
+    user_id = request.args.get("userId") or request.args.get("assignedTo")
+    if not user_id: return jsonify({"error":"userId or assignedTo is required"}), 400
     docs = db.collection("projects").where("teamIds", "array_contains", user_id).stream()
     result = []
     for doc in docs:
@@ -209,34 +210,78 @@ def update_project(project_id):
 
 # -------- Tasks --------
 
+@projects_bp.route("/assigned/tasks", methods=["GET"])
+@cross_origin()
+def get_assigned_tasks():
+    """Get all tasks assigned to a specific user across all projects"""
+    assigned_to = request.args.get("assignedTo")
+    if not assigned_to:
+        return jsonify({"error": "assignedTo parameter is required"}), 400
+
+    # Get all projects the user is part of
+    projects_query = db.collection("projects").where("teamIds", "array_contains", assigned_to)
+    projects = projects_query.stream()
+
+    all_tasks = []
+    for project_doc in projects:
+        project_id = project_doc.id
+        project_data = project_doc.to_dict()
+
+        # Get tasks assigned to this user in this project
+        tasks_ref = db.collection("projects").document(project_id).collection("tasks")
+        tasks = tasks_ref.where("assigneeId", "==", assigned_to).stream()
+
+        for task_doc in tasks:
+            task_data = normalize_task_out({
+                **task_doc.to_dict(),
+                "id": task_doc.id,
+                "projectId": project_id,
+                "projectName": project_data.get("name", "")
+            })
+            all_tasks.append(task_data)
+
+    # Also get standalone tasks assigned to this user
+    standalone_tasks = db.collection("tasks").where("assigneeId", "==", assigned_to).stream()
+    for task_doc in standalone_tasks:
+        task_data = normalize_task_out({
+            **task_doc.to_dict(),
+            "id": task_doc.id,
+            "projectId": None,
+            "projectName": "Personal"
+        })
+        all_tasks.append(task_data)
+
+    return jsonify(all_tasks), 200
+
 @projects_bp.route("/<project_id>/tasks", methods=["GET"])
 @cross_origin()
 def get_tasks(project_id):
-    user_id = request.args.get("userId")
-    if not user_id: return jsonify({"error":"userId is required"}), 400
-    
+    # Accept both userId and assigneeId for compatibility
+    user_id = request.args.get("userId") or request.args.get("assigneeId")
+    if not user_id: return jsonify({"error":"userId or assigneeId is required"}), 400
+
     project_ref = db.collection("projects").document(project_id)
     project_doc = project_ref.get()
     if not project_doc.exists: return jsonify({"error":"Project not found"}), 404
-    
+
     team_ids = ensure_list(project_doc.to_dict().get("teamIds"))
     if user_id not in team_ids:
         return jsonify({"error":"Access denied"}), 403
-    
+
     tasks_ref = project_ref.collection("tasks")
-    
-    # Filter by assigneeId if provided
-    assignee_id = request.args.get("assigneeId")
-    if assignee_id:
-        tasks = tasks_ref.where("assigneeId", "==", assignee_id).stream()
+
+    # Filter by assigneeId if provided as a separate filter parameter
+    filter_assignee_id = request.args.get("assigneeId")
+    if filter_assignee_id:
+        tasks = tasks_ref.where("assigneeId", "==", filter_assignee_id).stream()
     else:
         tasks = tasks_ref.stream()
-    
+
     result = []
     for task_doc in tasks:
         task_data = normalize_task_out({**task_doc.to_dict(), "id": task_doc.id, "projectId": project_id})
         result.append(task_data)
-    
+
     return jsonify(result), 200
 
 @projects_bp.route("/<project_id>/tasks", methods=["POST"])

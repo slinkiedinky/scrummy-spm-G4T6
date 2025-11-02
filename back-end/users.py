@@ -1,4 +1,5 @@
 from flask import Blueprint, request, jsonify
+from flask_cors import cross_origin
 from firebase_admin import firestore
 from datetime import datetime
 
@@ -35,6 +36,7 @@ def normalize_user(doc):
 
 # Create user
 @users_bp.route("/", methods=["POST"])
+@cross_origin()
 def create_user():
     data = request.json
     doc_ref = db.collection("users").add(data)
@@ -42,6 +44,7 @@ def create_user():
 
 # Read all users
 @users_bp.route("/", methods=["GET"])
+@cross_origin()
 def get_users():
     docs = db.collection("users").stream()
     users = [normalize_user({**doc.to_dict(), "id": doc.id}) for doc in docs]
@@ -49,6 +52,7 @@ def get_users():
 
 # Read one user
 @users_bp.route("/<user_id>", methods=["GET"])
+@cross_origin()
 def get_user(user_id):
     doc = db.collection("users").document(user_id).get()
     if not doc.exists:
@@ -58,6 +62,7 @@ def get_user(user_id):
 
 # Update user
 @users_bp.route("/<user_id>", methods=["PUT"])
+@cross_origin()
 def update_user(user_id):
     data = request.json
     db.collection("users").document(user_id).update(data)
@@ -65,6 +70,7 @@ def update_user(user_id):
 
 # Delete user
 @users_bp.route("/<user_id>", methods=["DELETE"])
+@cross_origin()
 def delete_user(user_id):
     db.collection("users").document(user_id).delete()
     return jsonify({"message": "User deleted"}), 200

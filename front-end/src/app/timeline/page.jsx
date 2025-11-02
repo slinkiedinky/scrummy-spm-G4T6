@@ -6,6 +6,6 @@ import { RoleGuard } from "@/components/RoleGuard";
 
 export default function TimelinePage() {
   return <RoleGuard>
-    <Timeline />;
-  </RoleGuard>;
+    <Timeline />
+  </RoleGuard>
 }

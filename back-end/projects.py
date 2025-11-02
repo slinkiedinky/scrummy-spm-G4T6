@@ -9,6 +9,7 @@ from google.cloud import firestore  # for FieldFilter, ArrayUnion
 from status_notifications import create_status_change_notifications, _get_user_display_name, _unique_non_null
 from notifications import add_notification
 from recurring_tasks import create_next_recurring_instance, create_next_standalone_recurring_instance
+from deadline_notifications import check_task_deadline_immediate
 
 projects_bp = Blueprint("projects", __name__)
 
@@ -333,6 +334,13 @@ def create_task(project_id):
         except Exception as e:
             print(f"Error updating project progress: {e}")
 
+        # Check for immediate deadline notifications
+        try:
+            project_name = project_doc.to_dict().get("name", "Unknown Project")
+            check_task_deadline_immediate(project_id, task_id, doc_data, project_name)
+        except Exception as e:
+            print(f"Error checking task deadline: {e}")
+
         return jsonify({"id": task_id, "message":"Task created"}), 201
     
     except Exception as e:
@@ -557,6 +565,13 @@ def create_subtask(project_id, task_id):
     subtask_id = ref[1].id
     update_parent_task_progress(project_id, task_id)
 
+    # Check for immediate deadline notifications
+    try:
+        project_name = project_doc.to_dict().get("name", "Unknown Project")
+        check_task_deadline_immediate(project_id, subtask_id, doc, project_name)
+    except Exception as e:
+        print(f"Error checking subtask deadline: {e}")
+
     # Notify subtask assignee and collaborators
     try:
         from notifications import add_notification
@@ -650,7 +665,13 @@ def create_standalone_task():
     # Create task in top-level tasks collection
     task_ref = db.collection("tasks").document()
     task_ref.set(task_data)
-    
+
+    # Check for immediate deadline notifications
+    try:
+        check_task_deadline_immediate(None, task_ref.id, task_data, "Personal Tasks")
+    except Exception as e:
+        print(f"Error checking task deadline: {e}")
+
     result = {**task_data, "id": task_ref.id}
     return jsonify(normalize_task_out(result)), 201
 
@@ -810,10 +831,16 @@ def create_standalone_subtask(task_id):
     
     subtask_ref = task_ref.collection("subtasks").document()
     subtask_ref.set(subtask_data)
-    
+
     # Update parent task progress
     update_standalone_task_progress(task_id)
-    
+
+    # Check for immediate deadline notifications
+    try:
+        check_task_deadline_immediate(None, subtask_ref.id, subtask_data, "Personal Tasks")
+    except Exception as e:
+        print(f"Error checking subtask deadline: {e}")
+
     result = {**subtask_data, "id": subtask_ref.id}
     return jsonify(normalize_task_out(result)), 201
 

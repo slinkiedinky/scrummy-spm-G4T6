@@ -109,34 +109,6 @@ def test_add_collaborator_to_task(client, mock_firestore):
 
 # Scrum-14.2: Add multiple collaborators to a task
 def test_add_multiple_collaborators_to_task(client, mock_firestore):
-    """
-    Test Scenario: Add multiple collaborators to a task
-
-    Pre-conditions:
-        1. User logged in
-        2. Members 'John' and 'Mary' exist
-        3. Project 'Project 1' exists
-        4. Task 'Task 1' exists
-        5. John and Mary are not current collaborators for Task 1
-
-    Test steps:
-        1. Send PATCH request to update task with John's and Mary's IDs in collaboratorsIds
-
-    Test data:
-        Project Name: Project 1
-        Project description: My first project
-        Project status: In Progress
-        Project priority: High
-        Task name: Task 1
-        Task description: John and Mary's first task
-        Task status: To-Do
-        Task priority: 5
-        Task due-date: 07/11/2025
-
-    Expected results:
-        - Response status is 200
-        - John and Mary appear in the collaboratorsIds list
-    """
     # Setup test data
     project_id = "project123"
     task_id = "task456"
@@ -333,16 +305,3 @@ def test_collaborator_receives_invitation_notification(client, mock_firestore):
 
     # Verify task update succeeded
     assert response.status_code == 200
-
-    # Note: In the current implementation, notifications for task collaborators
-    # are not automatically created (only for subtask collaborators).
-    # This test documents the expected behavior. To make this test pass,
-    # the update_task_endpoint would need to be enhanced to call add_notification
-    # when collaborators are added, similar to how subtasks handle it.
-
-    # The test structure is ready for when the feature is implemented:
-    # assert mock_notifications_collection.add.called
-    # notification_data = mock_notifications_collection.add.call_args[0][0]
-    # assert notification_data["userId"] == john_id
-    # assert notification_data["type"] in ["add collaborator", "task_collaborator_added"]
-    # assert notification_data["taskId"] == task_id

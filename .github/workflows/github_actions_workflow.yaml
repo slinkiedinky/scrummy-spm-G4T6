@@ -46,11 +46,11 @@ jobs:
           tree = ET.parse('coverage-backend.xml')
           root = tree.getroot()
 
-          # Fix source path to be relative to project root
+          # Normalise source paths so they stay within the repo
           for source in root.findall('.//source'):
-              source.text = '${{ github.workspace }}/back-end'
+              source.text = 'back-end'
 
-          # Fix filename paths to be relative to project root
+          # Ensure filenames remain relative to the backend folder
           for cls in root.findall('.//class'):
               filename = cls.get('filename')
               if filename and not filename.startswith('back-end/'):

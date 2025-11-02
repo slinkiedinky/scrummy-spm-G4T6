@@ -78,6 +78,10 @@ fi
 echo -e "${BLUE}Coverage files ready:${NC}"
 echo -e "  ${GREEN}✓${NC} back-end/coverage.xml ($(wc -l < back-end/coverage.xml) lines)"
 
+# Normalise backend coverage path expected by SonarQube
+cp back-end/coverage.xml coverage-backend.xml
+echo -e "  ${GREEN}✓${NC} coverage-backend.xml ($(wc -l < coverage-backend.xml) lines)"
+
 if [ "$FRONTEND_COVERAGE_EXISTS" = "true" ] && [ -f "front-end/coverage/lcov.info" ]; then
     echo -e "  ${GREEN}✓${NC} front-end/coverage/lcov.info ($(wc -l < front-end/coverage/lcov.info) lines)"
 elif [ "$FRONTEND_COVERAGE_EXISTS" = "true" ]; then

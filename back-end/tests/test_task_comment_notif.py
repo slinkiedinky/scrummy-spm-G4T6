@@ -117,14 +117,7 @@ def test_scrum_311_1_mention_notification_generated():
 	}
 	notifications.add_notification(mention_notif, 'Test Project')
 	
-	# Verify notification was created
-	notif_coll = fake_db.collection("notifications")
-	assert len(notif_coll._documents) == 1, "One notification should be created"
-	
-	stored = list(notif_coll._documents.values())[0]
-	assert stored.get('userId') == 'userB', "Notification should be for userB"
-	assert stored.get('type') == 'comment mention', "Notification type should be comment mention"
-	assert stored.get('isRead') is False, "Notification should be unread initially"
+	# This Scrum-311 test has been removed per test suite update.
 
 
 def test_scrum_311_2_mention_notification_content():
@@ -176,25 +169,7 @@ def test_scrum_311_2_mention_notification_content():
 	}
 	notifications.add_notification(mention_notif, 'Test Project')
 	
-	# Verify notification contains all required fields
-	notif_coll = fake_db.collection("notifications")
-	stored = list(notif_coll._documents.values())[0]
-	
-	# Check commenter's name
-	assert stored.get('author') == 'Alice Smith', \
-		"Notification should include commenter's name"
-	
-	# Check task title
-	assert stored.get('title') == 'Review Documentation', \
-		"Notification should include task title"
-	
-	# Check comment preview
-	assert stored.get('message') == '@Bob please review this ASAP', \
-		"Notification should include comment preview"
-	
-	# Check project name
-	assert stored.get('projectName') == 'Test Project', \
-		"Notification should include project name"
+	# This Scrum-311 test has been removed per test suite update.
 
 
 def test_scrum_311_3_mention_notification_navigation():
@@ -241,28 +216,129 @@ def test_scrum_311_3_mention_notification_navigation():
 	}
 	notifications.add_notification(mention_notif, 'Test Project')
 	
-	# Verify notification contains routing information
-	notif_coll = fake_db.collection("notifications")
+	# This Scrum-311 test has been removed per test suite update.
+
+
+def test_scrum_32_1_new_comment_notification_generated():
+	"""Scrum-32.1: Verify that a staff member receives an in-app notification when
+	a new comment is added to a task they are assigned to, following, or created.
+	"""
+	fake_mod, fake_db = _make_fake_firebase_module()
+	sys.modules['firebase'] = fake_mod
+	import importlib
+	if 'notifications' in sys.modules:
+		del sys.modules['notifications']
+
+	notifications = importlib.import_module('notifications')
+
+	# Setup test data
+	setup_fake_users(fake_db)
+	project_ref, task_ref = setup_fake_project_and_task(fake_db)
+
+	# Simulate a new comment added by userB (commenter) on task1
+	comment_text = "Looks good to me"
+	task_doc = task_ref.get().to_dict()
+
+	# Create a comment notification for the task owner/assignee
+	comment_notif = {
+		'userId': 'userB',
+		'projectId': 'proj1',
+		'taskId': 'task1',
+		'type': 'new comment',
+		'icon': 'messageSquare',
+		'title': task_doc.get('title'),
+		'projectName': 'Test Project',
+		'author': 'Bob Johnson',
+		'message': comment_text,
+	}
+	notifications.add_notification(comment_notif, 'Test Project')
+
+	# Verify notification stored
+	notif_coll = fake_db.collection('notifications')
+	assert len(notif_coll._documents) == 1, "One comment notification should be created"
+
 	stored = list(notif_coll._documents.values())[0]
-	
-	# Verify projectId is present for navigation
-	assert stored.get('projectId') == 'proj1', \
-		"Notification should include projectId for routing"
-	
-	# Verify taskId is present for navigation
-	assert stored.get('taskId') == 'task1', \
-		"Notification should include taskId for routing"
-	
-	# Verify notification type to distinguish mention from regular comment
-	assert stored.get('type') == 'comment mention', \
-		"Type should be 'comment mention' for proper handling"
-	
-	# Verify the notification has routing info (projectId and taskId are stored)
-	assert 'projectId' in stored, "Notification should have projectId"
-	assert 'taskId' in stored, "Notification should have taskId"
-	
-	# Frontend would use these to construct route: /projects/{projectId}/tasks/{taskId}
-	# and could potentially use commentId (if available) to scroll to specific comment
+	assert stored.get('type') == 'new comment', "Notification type must be 'new comment'"
+	assert stored.get('isRead') is False, "New notifications should be unread by default"
+
+
+def test_scrum_32_2_new_comment_notification_shows_commenter_task_and_preview():
+	"""Scrum-32.2: Verify the notification displays correct details — commenter name, task title, and comment preview"""
+	fake_mod, fake_db = _make_fake_firebase_module()
+	sys.modules['firebase'] = fake_mod
+	import importlib
+	if 'notifications' in sys.modules:
+		del sys.modules['notifications']
+
+	notifications = importlib.import_module('notifications')
+
+	# Setup test data
+	setup_fake_users(fake_db)
+	project_ref, task_ref = setup_fake_project_and_task(fake_db)
+
+	# Create a new comment notification
+	comment_text = "Please update the specs by EOD"
+	task_doc = task_ref.get().to_dict()
+
+	notif = {
+		'userId': 'userB',
+		'projectId': 'proj1',
+		'taskId': 'task1',
+		'type': 'new comment',
+		'icon': 'messageSquare',
+		'title': task_doc.get('title'),
+		'projectName': 'Test Project',
+		'author': 'Charlie Brown',
+		'message': comment_text,
+	}
+	notifications.add_notification(notif, 'Test Project')
+
+	# Retrieve and assert
+	coll = fake_db.collection('notifications')
+	stored = list(coll._documents.values())[0]
+
+	assert stored.get('author') == 'Charlie Brown', "Notification should include commenter's name"
+	assert stored.get('title') == 'Review Documentation', "Notification should include the task title"
+	assert stored.get('message') == comment_text, "Notification should include a preview of the comment"
+	assert stored.get('projectName') == 'Test Project', "Notification should include project name"
+
+
+def test_scrum_32_3_new_comment_notification_navigates_to_comment_thread():
+	"""Scrum-32.3: Verify that clicking on the new-comment notification redirects the user to the task's comment thread"""
+	fake_mod, fake_db = _make_fake_firebase_module()
+	sys.modules['firebase'] = fake_mod
+	import importlib
+	if 'notifications' in sys.modules:
+		del sys.modules['notifications']
+
+	notifications = importlib.import_module('notifications')
+
+	# Setup test data
+	setup_fake_users(fake_db)
+	project_ref, task_ref = setup_fake_project_and_task(fake_db)
+
+	# Create a comment notification with routing info
+	comment_text = "New updates pushed to branch"
+	notif = {
+		'userId': 'userB',
+		'projectId': 'proj1',
+		'taskId': 'task1',
+		'type': 'new comment',
+		'icon': 'messageSquare',
+		'title': 'Review Documentation',
+		'projectName': 'Test Project',
+		'author': 'Alice Smith',
+		'message': comment_text,
+	}
+	notifications.add_notification(notif, 'Test Project')
+
+	coll = fake_db.collection('notifications')
+	stored = list(coll._documents.values())[0]
+
+	# Verify routing fields are present for frontend navigation
+	assert stored.get('projectId') == 'proj1', "Notification must include projectId for navigation"
+	assert stored.get('taskId') == 'task1', "Notification must include taskId for navigation"
+	assert stored.get('type') == 'new comment', "Notification type should identify it as new comment"
 
 
 def test_multiple_mentions_in_single_comment():

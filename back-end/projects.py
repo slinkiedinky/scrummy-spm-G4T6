@@ -48,12 +48,12 @@ def canon_project_priority(v) -> str:
 
 def canon_task_priority(p) -> int:
   if p is None: return DEFAULT_TASK_PRIORITY
-  if isinstance(p, (int, float)): val = int(round(p))
+  if isinstance(p, (int, float)): val = int(p)
   else:
     s = str(p).strip().lower()
     if not s: return DEFAULT_TASK_PRIORITY
     if s in LEGACY_PRIORITY_MAP: return LEGACY_PRIORITY_MAP[s]
-    try: val = int(round(float(s)))
+    try: val = int(float(s))
     except Exception: return DEFAULT_TASK_PRIORITY
   return max(PRIORITY_RANGE[0], min(PRIORITY_RANGE[-1], val))
 
@@ -243,7 +243,7 @@ def list_tasks(project_id):
             return jsonify(items), 200
     return jsonify([]), 200
 @projects_bp.route("/assigned/tasks", methods=["GET"])
-def list_tasks_across_projects():
+def get_assigned_tasks():
     """Get all tasks where user is assignee, owner, or collaborator"""
     assigned_to = request.args.get("assignedTo") or request.args.get("assigneeId")
     if not assigned_to:
@@ -267,6 +267,14 @@ def list_tasks_across_projects():
         if d.reference.path not in seen:
             docs.append(d); seen.add(d.reference.path)
 
+    collab_query = db.collection_group("tasks").where(filter=firestore.FieldFilter("collaboratorsIds", "array_contains", assigned_to))
+    collab_docs = collab_query.stream()
+    
+    for d in collab_docs:
+        if d.reference.path not in seen:
+            docs.append(d)
+            seen.add(d.reference.path)
+            
     items = []
     for docu in docs:
         data = normalize_task_out({**docu.to_dict(), "id": docu.id})
@@ -373,11 +381,10 @@ def create_task(project_id):
 
     return jsonify({"id": task_id, "message":"Task created"}), 201
 
-@projects_bp.route("/<project_id>/tasks/<task_id>", methods=["PUT"])
+@projects_bp.route("/<project_id>/tasks/<task_id>", methods=["PUT", "PATCH"])
 def update_task_endpoint(project_id, task_id):
-    # read request body / updates (adjust to your existing parsing if different)
     payload = request.get_json() or {}
-    updates = payload.get("updates") or payload  # support both shapes
+    updates = payload 
     changed_by = payload.get("updatedBy") or payload.get("userId") or None
 
     # task document reference
@@ -386,6 +393,9 @@ def update_task_endpoint(project_id, task_id):
     # capture prev_task BEFORE update
     prev_doc = task_ref.get()
     prev_task = prev_doc.to_dict() if prev_doc.exists else {}
+
+    if not prev_doc.exists:
+        return jsonify({"error": "Task not found"}), 404
 
     if "title" in updates:
         title = (updates.get("title") or "").strip()
@@ -400,7 +410,10 @@ def update_task_endpoint(project_id, task_id):
         updates["tags"] = ensure_list(updates.get("tags"))
     if "collaboratorsIds" in updates:
         updates["collaboratorsIds"] = ensure_list(updates.get("collaboratorsIds"))
-
+    if "priority" in updates:
+        updates["priority"] = canon_task_priority(updates.get("priority"))
+    
+    updates["updatedAt"] = now_utc()
     try:
         task_ref.update(updates)
 
@@ -438,22 +451,14 @@ def update_task(project_id, task_id, updates, updated_by=None):
     task_ref = db.collection("projects").document(project_id).collection("tasks").document(task_id)
     prev_doc = task_ref.get()
     prev_task = prev_doc.to_dict() if prev_doc.exists else {}
-
-    # --- existing update logic: apply updates and write to Firestore ---
-    # e.g. task_ref.update(updates)  OR however your code saves the changes
     task_ref.update(updates)
-
-    # --- AFTER successful save: create notifications if status changed ---
     new_status = updates.get("status")
     if new_status is not None:
-        # non-blocking: create notifications for status change
         try:
             create_status_change_notifications(project_id, task_id, prev_task, new_status, changed_by=updated_by)
         except Exception:
-            # swallow to avoid breaking the update flow
             pass
-
-    # ...existing return/value...
+        return jsonify({"ok": True}), 200
 @projects_bp.route("/<project_id>/tasks/<task_id>", methods=["DELETE"])
 def delete_task(project_id, task_id):
     """
@@ -1163,124 +1168,4 @@ def update_parent_task_progress(project_id, task_id):
                 print(f"❌ [RECURRING] Failed to create instance: {e}")
                 import traceback
                 traceback.print_exc()
-@projects_bp.route("/<project_id>/report", methods=["GET"])
-def project_report(project_id):
-    """Generate a report for a project"""
-    overdue_threshold = 20  # percent
-    report = generate_project_report(project_id, overdue_threshold)
-    if report is None:
-        return jsonify({"error": "Project not found"}), 404
-    return jsonify(report), 200
-
-def generate_project_report(project_id, overdue_threshold=20):
-    """
-    Returns a dict with keys:
-      - project_id
-      - overdue_pct (float)
-      - median_overdue_days (int|None)
-      - workload (dict assignee -> count)
-      - deadlines {overdue:[], today:[], next_7:[]}
-      - at_risk (bool)
-    Defensive: works with MagicMock snapshots and several due_date formats.
-    """
-    proj_doc = db.collection("projects").document(project_id).get()
-    if not getattr(proj_doc, "exists", False):
-        return None
-
-    # gather task snapshots (prefer project subcollection; fallback to top-level tasks query)
-    task_snaps = []
-    try:
-        task_coll = proj_doc.collection("tasks")
-        task_snaps = list(task_coll.stream())
-    except Exception:
-        try:
-            task_snaps = list(db.collection("tasks").where("project_id", "==", project_id).stream())
-        except Exception:
-            task_snaps = []
-    # obtain document reference and snapshot
-    doc_ref = db.collection("projects").document(project_id)
-    proj_doc = doc_ref.get()
-    if not getattr(proj_doc, "exists", False):
-        return None
-
-    # gather task snapshots (prefer project subcollection; fallback to top-level tasks query)
-    task_snaps = []
-    try:
-        task_coll = doc_ref.collection("tasks")
-        task_snaps = list(task_coll.stream())
-    except Exception:
-        try:
-            task_snaps = list(db.collection("tasks").where("project_id", "==", project_id).stream())
-        except Exception:
-            task_snaps = []
-
-    today = datetime.date.today()
-    tasks = []
-    for snap in task_snaps:
-        try:
-            data = snap.to_dict() or {}
-        except Exception:
-            data = {}
-        tid = data.get("id", getattr(snap, "id", None))
-        due_raw = data.get("due_date") or data.get("dueDate")  # accept both styles
-        due = None
-        if due_raw:
-            try:
-                if isinstance(due_raw, str):
-                    try:
-                        due = datetime.date.fromisoformat(due_raw)
-                    except Exception:
-                        due = datetime.datetime.fromisoformat(due_raw).date()
-                elif isinstance(due_raw, datetime.datetime):
-                    due = due_raw.date()
-                elif isinstance(due_raw, datetime.date):
-                    due = due_raw
-            except Exception:
-                due = None
-        # accept assigned key variants used in tests
-        assignee = data.get("assigned_to") or data.get("assignedTo") or data.get("assigneeId") or data.get("assignee")
-        tasks.append({
-            "id": tid,
-            "title": data.get("title"),
-            "due_date": due,
-            "assigned_to": assignee,
-        })
-
-    total = len(tasks)
-    overdue_list, today_list, next_7_list = [], [], []
-    workload = {}
-
-    for t in tasks:
-        due = t["due_date"]
-        if due:
-            delta = (today - due).days
-            if delta > 0:
-                overdue_list.append({"id": t["id"], "days_overdue": delta, "assigned_to": t["assigned_to"], "title": t.get("title")})
-            elif delta == 0:
-                today_list.append({"id": t["id"], "assigned_to": t["assigned_to"], "title": t.get("title")})
-            else:
-                ahead = (due - today).days
-                if 1 <= ahead <= 7:
-                    next_7_list.append({"id": t["id"], "assigned_to": t["assigned_to"], "title": t.get("title")})
-        if t["assigned_to"]:
-            workload[t["assigned_to"]] = workload.get(t["assigned_to"], 0) + 1
-
-    overdue_pct = 0 if total == 0 else (len(overdue_list) / total) * 100
-
-    median_overdue_days = None
-    if overdue_list:
-        try:
-            median_overdue_days = int(statistics.median([o["days_overdue"] for o in overdue_list]))
-        except Exception:
-            median_overdue_days = None
-
-    at_risk = overdue_pct > overdue_threshold
-
-    return {
-        "project_id": project_id,
-        "overdue_pct": overdue_pct,
-        "median_overdue_days": median_overdue_days,
-        "workload": workload,
-        "deadlines": {"overdue": overdue_list, "today": today_list, "next_7": next_7_list},
-        "at_risk": at_risk,
-    }
+        

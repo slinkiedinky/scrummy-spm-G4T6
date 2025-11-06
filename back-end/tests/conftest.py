@@ -5,6 +5,7 @@ import pytest
 from unittest.mock import Mock, patch, MagicMock
 import sys
 import os
+import json
 
 # Add the back-end directory to the Python path
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -61,7 +62,7 @@ def mock_auth_for_tests():
         # Mock any auth decorators or middleware that might exist
         try:
             # Try to mock common auth patterns
-            with patch('functools.wraps', side_effect=lambda f: lambda wrapper: wrapper):
+            with patch('functools.wraps', side_effect=lambda f, *args, **kwargs: lambda wrapper: wrapper):
                 yield
         except Exception:
             # If that fails, just yield without the wraps patch
@@ -231,6 +232,33 @@ def mock_timeline_data():
             }
         ]
     }
+
+def make_response(func_result):
+    """
+    Convert function return value to Response object.
+    Handles both tuple returns (jsonify_obj, status_code) and Response objects.
+    """
+    if isinstance(func_result, tuple):
+        response_obj, status_code = func_result
+        
+        class MockResponse:
+            def __init__(self, json_response, code):
+                self.status_code = code
+                # Extract JSON data from Flask jsonify response
+                if hasattr(json_response, 'get_json'):
+                    self._json = json_response.get_json()
+                elif hasattr(json_response, 'json'):
+                    self._json = json_response.json
+                else:
+                    self._json = json_response
+                # Add .data attribute (JSON string bytes)
+                self.data = json.dumps(self._json).encode('utf-8') if self._json else b'{}'
+            
+            def get_json(self):
+                return self._json
+        
+        return MockResponse(response_obj, status_code)
+    return func_result
 
 from pytest import fixture
 

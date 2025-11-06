@@ -442,11 +442,10 @@ export default function TasksPage() {
           listAssignedTasks({ assignedTo: uid }),
           listStandaloneTasks(uid),
         ]);
-        const projectTasks = (projectTasksData || []).map((t) => {
-          const projectId = t.projectId || "unassigned";
-          const projectName =
-            t.projectName ||
-            (projectId === "unassigned" ? "Unassigned Project" : projectId);
+        const projectTasks = projectTasksData.map((t) => {
+          const projectId = t.projectId || "standalone";
+          const projectName = t.projectName || "Standalone";
+
           const priorityNumber = Number(t.priority);
           const priority = Number.isFinite(priorityNumber)
             ? String(priorityNumber)

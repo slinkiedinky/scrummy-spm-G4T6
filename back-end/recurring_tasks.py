@@ -231,11 +231,17 @@ def create_next_recurring_instance(project_id, task_id, completed_task_data):
     }
     
     # Create the new task
-    new_task_ref = db.collection("projects").document(project_id).collection("tasks").add(new_instance)
-    new_task_id = new_task_ref[1].id
+    new_task_result = db.collection("projects").document(project_id).collection("tasks").add(new_instance)
+    new_task_id = new_task_result[1].id
+    new_task_doc_ref = new_task_result[1]  # This is the DocumentReference
     
     # Copy subtasks
     copy_subtasks(project_id, task_id, project_id, new_task_id)
+    subtasks_query = new_task_doc_ref.collection("subtasks").stream()
+    subtask_count = sum(1 for _ in subtasks_query)
+    
+    if subtask_count > 0:
+        new_task_doc_ref.update({"subtaskCount": subtask_count})
     
     # Send notification to creator
     try:
@@ -253,7 +259,6 @@ def create_next_recurring_instance(project_id, task_id, completed_task_data):
         print(f"Failed to send notification: {e}")
     
     return new_task_id, None
-
 
 def create_next_standalone_recurring_instance(task_id, completed_task_data):
     """Create next recurring instance for standalone task"""

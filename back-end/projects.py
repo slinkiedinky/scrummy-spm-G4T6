@@ -46,12 +46,12 @@ def canon_project_priority(v) -> str:
 
 def canon_task_priority(p) -> int:
   if p is None: return DEFAULT_TASK_PRIORITY
-  if isinstance(p, (int, float)): val = int(round(p))
+  if isinstance(p, (int, float)): val = int(p)
   else:
     s = str(p).strip().lower()
     if not s: return DEFAULT_TASK_PRIORITY
     if s in LEGACY_PRIORITY_MAP: return LEGACY_PRIORITY_MAP[s]
-    try: val = int(round(float(s)))
+    try: val = int(float(s))
     except Exception: return DEFAULT_TASK_PRIORITY
   return max(PRIORITY_RANGE[0], min(PRIORITY_RANGE[-1], val))
 
@@ -202,7 +202,7 @@ def list_tasks(project_id):
             return jsonify(items), 200
     return jsonify([]), 200
 @projects_bp.route("/assigned/tasks", methods=["GET"])
-def list_tasks_across_projects():
+def get_assigned_tasks():
     """Get all tasks where user is assignee, owner, or collaborator"""
     assigned_to = request.args.get("assignedTo") or request.args.get("assigneeId")
     if not assigned_to:
@@ -332,11 +332,10 @@ def create_task(project_id):
 
     return jsonify({"id": task_id, "message":"Task created"}), 201
 
-@projects_bp.route("/<project_id>/tasks/<task_id>", methods=["PUT"])
+@projects_bp.route("/<project_id>/tasks/<task_id>", methods=["PUT", "PATCH"])
 def update_task_endpoint(project_id, task_id):
-    # read request body / updates (adjust to your existing parsing if different)
     payload = request.get_json() or {}
-    updates = payload.get("updates") or payload  # support both shapes
+    updates = payload 
     changed_by = payload.get("updatedBy") or payload.get("userId") or None
 
     # task document reference
@@ -345,6 +344,9 @@ def update_task_endpoint(project_id, task_id):
     # capture prev_task BEFORE update
     prev_doc = task_ref.get()
     prev_task = prev_doc.to_dict() if prev_doc.exists else {}
+
+    if not prev_doc.exists:
+        return jsonify({"error": "Task not found"}), 404
 
     if "title" in updates:
         title = (updates.get("title") or "").strip()
@@ -359,7 +361,10 @@ def update_task_endpoint(project_id, task_id):
         updates["tags"] = ensure_list(updates.get("tags"))
     if "collaboratorsIds" in updates:
         updates["collaboratorsIds"] = ensure_list(updates.get("collaboratorsIds"))
-
+    if "priority" in updates:
+        updates["priority"] = canon_task_priority(updates.get("priority"))
+    
+    updates["updatedAt"] = now_utc()
     try:
         task_ref.update(updates)
 
@@ -397,22 +402,14 @@ def update_task(project_id, task_id, updates, updated_by=None):
     task_ref = db.collection("projects").document(project_id).collection("tasks").document(task_id)
     prev_doc = task_ref.get()
     prev_task = prev_doc.to_dict() if prev_doc.exists else {}
-
-    # --- existing update logic: apply updates and write to Firestore ---
-    # e.g. task_ref.update(updates)  OR however your code saves the changes
     task_ref.update(updates)
-
-    # --- AFTER successful save: create notifications if status changed ---
     new_status = updates.get("status")
     if new_status is not None:
-        # non-blocking: create notifications for status change
         try:
             create_status_change_notifications(project_id, task_id, prev_task, new_status, changed_by=updated_by)
         except Exception:
-            # swallow to avoid breaking the update flow
             pass
-
-    # ...existing return/value...
+        return jsonify({"ok": True}), 200
 @projects_bp.route("/<project_id>/tasks/<task_id>", methods=["DELETE"])
 def delete_task(project_id, task_id):
     """
@@ -1122,4 +1119,3 @@ def update_parent_task_progress(project_id, task_id):
                 print(f"❌ [RECURRING] Failed to create instance: {e}")
                 import traceback
                 traceback.print_exc()
-        

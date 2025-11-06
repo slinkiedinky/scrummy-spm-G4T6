@@ -40,6 +40,7 @@ def mock_firebase_setup():
             "ownerId": "user123",
             "teamIds": ["user123"]
         }
+        mock_project_doc.id = "project123"
         
         mock_project_ref = MagicMock()
         mock_project_ref.get.return_value = mock_project_doc

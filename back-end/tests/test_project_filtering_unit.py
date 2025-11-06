@@ -38,7 +38,8 @@ def test_search_projects_by_name_case_insensitive(client, mock_firestore):
     doc3 = _make_project_doc("p3", p3)
 
     mock_projects_collection = MagicMock()
-    mock_projects_collection.where.return_value.stream.return_value = [doc1, doc3]
+    mock_projects_collection.where.return_value = mock_projects_collection
+    mock_projects_collection.stream.return_value = [doc1, doc3]
     mock_firestore.collection.return_value = mock_projects_collection
 
     resp = client.get('/api/projects/', query_string={'q': 'alpha', 'userId': 'user123'})
@@ -82,7 +83,8 @@ def test_filter_by_completion_bucket_min_progress(client, mock_firestore):
     doc_high = _make_project_doc("c1", p_high)
 
     mock_projects_collection = MagicMock()
-    mock_projects_collection.where.return_value.stream.return_value = [doc_high]
+    mock_projects_collection.where.return_value = mock_projects_collection
+    mock_projects_collection.stream.return_value = [doc_high]
     mock_firestore.collection.return_value = mock_projects_collection
 
     resp = client.get('/api/projects/', query_string={'minProgress': '50', 'userId': 'user123'})
@@ -97,14 +99,15 @@ def test_filter_by_priority_numeric(client, mock_firestore):
     doc_high = _make_project_doc("p_high", p_high)
 
     mock_projects_collection = MagicMock()
-    mock_projects_collection.where.return_value.stream.return_value = [doc_high]
+    mock_projects_collection.where.return_value = mock_projects_collection
+    mock_projects_collection.stream.return_value = [doc_high]
     mock_firestore.collection.return_value = mock_projects_collection
 
     resp = client.get('/api/projects/', query_string={'priority': '1', 'userId': 'user123'})
     assert resp.status_code == 200
     assert {p.get("id") for p in resp.get_json()} == {"p_high"}
 
-    mock_projects_collection.where.return_value.stream.return_value = [doc_high]
+    mock_projects_collection.stream.return_value = [doc_high]
     resp2 = client.get('/api/projects/', query_string={'priority': '01', 'userId': 'user123'})
     assert resp2.status_code == 200
     assert {p.get("id") for p in resp2.get_json()} == {"p_high"}
@@ -116,7 +119,8 @@ def test_combine_multiple_filters_status_completion_priority(client, mock_firest
     doc = _make_project_doc("m1", p)
 
     mock_projects_collection = MagicMock()
-    mock_projects_collection.where.return_value.stream.return_value = [doc]
+    mock_projects_collection.where.return_value = mock_projects_collection
+    mock_projects_collection.stream.return_value = [doc]
     mock_firestore.collection.return_value = mock_projects_collection
 
     resp = client.get('/api/projects/', query_string={'status': 'in-progress', 'priority': '1', 'minProgress': '50', 'userId': 'user123'})
@@ -130,7 +134,8 @@ def test_realtime_new_project_that_matches_filter_appears(client, mock_firestore
     doc_new = _make_project_doc("r1", new_proj)
 
     mock_projects_collection = MagicMock()
-    mock_projects_collection.where.return_value.stream.side_effect = [[], [doc_new]]
+    mock_projects_collection.where.return_value = mock_projects_collection
+    mock_projects_collection.stream.side_effect = [[], [doc_new]]
     mock_new_ref = MagicMock()
     mock_new_ref.id = "r1"
     mock_projects_collection.add.return_value = (None, mock_new_ref)

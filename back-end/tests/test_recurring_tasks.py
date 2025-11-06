@@ -6,6 +6,55 @@ from types import SimpleNamespace
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from conftest import make_response
 
+def _prepare_update_task_mocks(mock_db, *, project_id="p1", task_id="task1", task_payload=None, project_payload=None):
+    """Configure nested Firestore mocks for update_task_endpoint tests."""
+    project_payload = project_payload or {
+        "name": "Project",
+        "ownerId": "owner1",
+        "teamIds": ["owner1"],
+        "status": "to-do",
+    }
+    task_payload = task_payload or {
+        "title": "Task",
+        "status": "to-do",
+        "assigneeId": "owner1",
+        "ownerId": "owner1",
+        "isRecurring": True,
+        "recurrencePattern": {"interval": "daily", "frequency": 1},
+    }
+
+    projects_collection = MagicMock()
+    project_ref = MagicMock()
+    project_snapshot = MagicMock()
+    project_snapshot.exists = True
+    project_snapshot.id = project_id
+    project_snapshot.to_dict.return_value = project_payload
+    project_ref.get.return_value = project_snapshot
+
+    tasks_collection = MagicMock()
+    task_ref = MagicMock()
+    task_snapshot = MagicMock()
+    task_snapshot.exists = True
+    task_snapshot.id = task_id
+    task_snapshot.to_dict.return_value = task_payload
+    task_ref.get.return_value = task_snapshot
+
+    tasks_collection.document.return_value = task_ref
+    project_ref.collection.side_effect = lambda name: tasks_collection if name == "tasks" else MagicMock()
+    projects_collection.document.return_value = project_ref
+
+    def collection_router(name):
+        if name == "projects":
+            return projects_collection
+        if name == "notifications":
+            notifications_collection = MagicMock()
+            notifications_collection.add.return_value = (None, SimpleNamespace(id="notif1"))
+            return notifications_collection
+        return MagicMock()
+
+    mock_db.collection.side_effect = collection_router
+    return task_ref, task_snapshot
+
 class Test_310_AC1_FixedInterval:
     def test_310_1_1_set_daily_recurrence(self):
         """SCRUM-367: Set task to repeat at fixed interval - daily"""
@@ -107,29 +156,31 @@ class Test_310_AC3_AutoCreateNext:
         """SCRUM-369: Completing recurring task creates next instance"""
         from flask import Flask
         app = Flask(__name__)
-        with patch('projects.db') as m, patch('projects.now_utc') as n:
+        with patch('projects.db') as m, \
+             patch('projects.now_utc') as n, \
+             patch('projects.create_next_recurring_instance', return_value=("newtask", None)), \
+             patch('projects.update_project_status_from_tasks'), \
+             patch('projects.create_status_change_notifications'):
             from projects import update_task_endpoint
             n.return_value = "2025-11-03T00:00:00Z"
-            
-            # Mock existing recurring task
-            task_doc = MagicMock()
-            task_doc.exists = True
-            task_doc.to_dict.return_value = {
-                "title": "Recurring Task",
-                "status": "to-do",
-                "isRecurring": True,
-                "recurrencePattern": {"interval": "daily", "frequency": 1}
-            }
-            task_ref = MagicMock()
-            task_ref.get.return_value = task_doc
-            
-            # Mock new task creation
-            mock_coll = MagicMock()
-            mock_coll.add.return_value = (None, SimpleNamespace(id="newtask"))
-            
-            m.collection.return_value.document.return_value.collection.side_effect = lambda name: mock_coll if name == "tasks" else MagicMock()
-            m.collection.return_value.document.return_value = task_ref
-            
+            _prepare_update_task_mocks(
+                m,
+                task_payload={
+                    "title": "Recurring Task",
+                    "status": "to-do",
+                    "assigneeId": "u1",
+                    "ownerId": "u1",
+                    "isRecurring": True,
+                    "recurrencePattern": {"interval": "daily", "frequency": 1},
+                },
+                project_payload={
+                    "name": "Recurring Project",
+                    "ownerId": "u1",
+                    "teamIds": ["u1"],
+                    "status": "to-do",
+                },
+            )
+
             with app.test_request_context(json={"status": "done"}):
                 result = update_task_endpoint("p1", "task1")
                 resp = make_response(result)
@@ -303,23 +354,29 @@ class Test_310_AC9_ModifySettings:
         """SCRUM-377: Change recurrence by updating task"""
         from flask import Flask
         app = Flask(__name__)
-        with patch('projects.db') as m, patch('projects.now_utc') as n:
+        with patch('projects.db') as m, \
+             patch('projects.now_utc') as n, \
+             patch('projects.create_next_recurring_instance', return_value=(None, None)), \
+             patch('projects.update_project_status_from_tasks'), \
+             patch('projects.create_status_change_notifications'):
             from projects import update_task_endpoint
             n.return_value = "2025-11-03T00:00:00Z"
-            
-            task_doc = MagicMock()
-            task_doc.exists = True
-            task_doc.to_dict.return_value = {
+            task_ref, _ = _prepare_update_task_mocks(
+                m,
+                task_payload={
                 "title": "Task",
                 "status": "to-do",
                 "isRecurring": True,
                 "recurrencePattern": {"interval": "daily"}
-            }
-            task_ref = MagicMock()
-            task_ref.get.return_value = task_doc
-            
-            m.collection.return_value.document.return_value.collection.return_value.document.return_value = task_ref
-            
+                },
+                project_payload={
+                    "name": "Project",
+                    "ownerId": "u1",
+                    "teamIds": ["u1"],
+                    "status": "to-do",
+                },
+            )
+
             with app.test_request_context(json={
                 "isRecurring": True,
                 "recurrencePattern": {"interval": "weekly", "frequency": 2}

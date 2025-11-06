@@ -3,6 +3,8 @@ from flask import Blueprint, request, jsonify, current_app
 from flask_cors import cross_origin
 from firebase_admin import firestore
 from datetime import datetime, timezone
+import datetime
+import statistics
 
 from firebase import db
 from google.cloud import firestore  # for FieldFilter, ArrayUnion
@@ -1161,4 +1163,124 @@ def update_parent_task_progress(project_id, task_id):
                 print(f"❌ [RECURRING] Failed to create instance: {e}")
                 import traceback
                 traceback.print_exc()
-        
+@projects_bp.route("/<project_id>/report", methods=["GET"])
+def project_report(project_id):
+    """Generate a report for a project"""
+    overdue_threshold = 20  # percent
+    report = generate_project_report(project_id, overdue_threshold)
+    if report is None:
+        return jsonify({"error": "Project not found"}), 404
+    return jsonify(report), 200
+
+def generate_project_report(project_id, overdue_threshold=20):
+    """
+    Returns a dict with keys:
+      - project_id
+      - overdue_pct (float)
+      - median_overdue_days (int|None)
+      - workload (dict assignee -> count)
+      - deadlines {overdue:[], today:[], next_7:[]}
+      - at_risk (bool)
+    Defensive: works with MagicMock snapshots and several due_date formats.
+    """
+    proj_doc = db.collection("projects").document(project_id).get()
+    if not getattr(proj_doc, "exists", False):
+        return None
+
+    # gather task snapshots (prefer project subcollection; fallback to top-level tasks query)
+    task_snaps = []
+    try:
+        task_coll = proj_doc.collection("tasks")
+        task_snaps = list(task_coll.stream())
+    except Exception:
+        try:
+            task_snaps = list(db.collection("tasks").where("project_id", "==", project_id).stream())
+        except Exception:
+            task_snaps = []
+    # obtain document reference and snapshot
+    doc_ref = db.collection("projects").document(project_id)
+    proj_doc = doc_ref.get()
+    if not getattr(proj_doc, "exists", False):
+        return None
+
+    # gather task snapshots (prefer project subcollection; fallback to top-level tasks query)
+    task_snaps = []
+    try:
+        task_coll = doc_ref.collection("tasks")
+        task_snaps = list(task_coll.stream())
+    except Exception:
+        try:
+            task_snaps = list(db.collection("tasks").where("project_id", "==", project_id).stream())
+        except Exception:
+            task_snaps = []
+
+    today = datetime.date.today()
+    tasks = []
+    for snap in task_snaps:
+        try:
+            data = snap.to_dict() or {}
+        except Exception:
+            data = {}
+        tid = data.get("id", getattr(snap, "id", None))
+        due_raw = data.get("due_date") or data.get("dueDate")  # accept both styles
+        due = None
+        if due_raw:
+            try:
+                if isinstance(due_raw, str):
+                    try:
+                        due = datetime.date.fromisoformat(due_raw)
+                    except Exception:
+                        due = datetime.datetime.fromisoformat(due_raw).date()
+                elif isinstance(due_raw, datetime.datetime):
+                    due = due_raw.date()
+                elif isinstance(due_raw, datetime.date):
+                    due = due_raw
+            except Exception:
+                due = None
+        # accept assigned key variants used in tests
+        assignee = data.get("assigned_to") or data.get("assignedTo") or data.get("assigneeId") or data.get("assignee")
+        tasks.append({
+            "id": tid,
+            "title": data.get("title"),
+            "due_date": due,
+            "assigned_to": assignee,
+        })
+
+    total = len(tasks)
+    overdue_list, today_list, next_7_list = [], [], []
+    workload = {}
+
+    for t in tasks:
+        due = t["due_date"]
+        if due:
+            delta = (today - due).days
+            if delta > 0:
+                overdue_list.append({"id": t["id"], "days_overdue": delta, "assigned_to": t["assigned_to"], "title": t.get("title")})
+            elif delta == 0:
+                today_list.append({"id": t["id"], "assigned_to": t["assigned_to"], "title": t.get("title")})
+            else:
+                ahead = (due - today).days
+                if 1 <= ahead <= 7:
+                    next_7_list.append({"id": t["id"], "assigned_to": t["assigned_to"], "title": t.get("title")})
+        if t["assigned_to"]:
+            workload[t["assigned_to"]] = workload.get(t["assigned_to"], 0) + 1
+
+    overdue_pct = 0 if total == 0 else (len(overdue_list) / total) * 100
+
+    median_overdue_days = None
+    if overdue_list:
+        try:
+            median_overdue_days = int(statistics.median([o["days_overdue"] for o in overdue_list]))
+        except Exception:
+            median_overdue_days = None
+
+    at_risk = overdue_pct > overdue_threshold
+
+    return {
+        "project_id": project_id,
+        "overdue_pct": overdue_pct,
+        "median_overdue_days": median_overdue_days,
+        "workload": workload,
+        "deadlines": {"overdue": overdue_list, "today": today_list, "next_7": next_7_list},
+        "at_risk": at_risk,
+    }

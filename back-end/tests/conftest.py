@@ -231,3 +231,10 @@ def mock_timeline_data():
             }
         ]
     }
+
+from pytest import fixture
+
+@fixture
+def mock_firestore(mock_firebase):
+    """Backward-compatible alias: some tests expect 'mock_firestore'."""
+    return mock_firebase

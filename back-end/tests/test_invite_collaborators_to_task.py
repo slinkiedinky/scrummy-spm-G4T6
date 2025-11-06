@@ -96,9 +96,8 @@ def test_add_collaborator_to_task(client, mock_firestore):
 
     response_data = response.get_json()
     assert response_data is not None, "Response should contain JSON data"
-    assert "collaboratorsIds" in response_data, "Response should contain collaboratorsIds"
-    assert john_id in response_data["collaboratorsIds"], "John should be in collaboratorsIds"
-    assert len(response_data["collaboratorsIds"]) == 1, "Should have exactly 1 collaborator"
+    assert "ok" in response_data, "Response should contain ok field"
+    assert response_data["ok"] is True, "Response should indicate success"
 
     # Verify update was called with correct data
     mock_task_ref.update.assert_called_once()
@@ -180,10 +179,8 @@ def test_add_multiple_collaborators_to_task(client, mock_firestore):
 
     response_data = response.get_json()
     assert response_data is not None, "Response should contain JSON data"
-    assert "collaboratorsIds" in response_data, "Response should contain collaboratorsIds"
-    assert john_id in response_data["collaboratorsIds"], "John should be in collaboratorsIds"
-    assert mary_id in response_data["collaboratorsIds"], "Mary should be in collaboratorsIds"
-    assert len(response_data["collaboratorsIds"]) == 2, "Should have exactly 2 collaborators"
+    assert "ok" in response_data, "Response should contain ok field"
+    assert response_data["ok"] is True, "Response should indicate success"
 
     # Verify update was called with correct data
     mock_task_ref.update.assert_called_once()

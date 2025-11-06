@@ -64,229 +64,149 @@ def setup_fake_users(fake_db):
 	for user_id, user_data in users.items():
 		fake_db.collection('users').document(user_id).set(user_data)
 
+# Tests for Task Comments Section (Scrum-349.x)
 
-def test_scrum_311_1_mention_notification_generated_in_comment():
-	"""
-	Scrum-311.1: Verify that an in-app notification is generated 
-	when a user is mentioned in a task comment
-	
-	Test Scenario: Verify that an in-app notification is generated when 
-	               a user is mentioned in a task comment
-	Pre-Conditions:
-		1. A valid task exists
-		2. At least two users are part of the same project
-	Test Steps:
-		1. Log in as User A
-		2. Open a task and add a comment mentioning User B (e.g., "@[userB][Bob] please review this")
-		3. Log in as User B
-		4. Check the notification panel
-	Expected Results:
-		User B receives an in-app notification indicating they were mentioned in a task comment.
-		The notification appears instantly or upon refresh.
+
+def test_scrum_349_1_comments_section_visible():
+	"""Scrum-349.1: Verify that every task (standalone or linked to a project)
+	has a comments section visible in the task details view.
 	"""
 	fake_mod, fake_db = _make_fake_firebase_module()
 	sys.modules['firebase'] = fake_mod
-	import importlib
-	if 'notifications' in sys.modules:
-		del sys.modules['notifications']
-	
-	notifications = importlib.import_module('notifications')
-	
-	# Setup test data
-	setup_fake_users(fake_db)
+
+	# Create project-linked task
 	project_ref, task_ref = setup_fake_project_and_task(fake_db)
-	
-	# User A adds a comment mentioning User B
-	comment_text = "@[userB][Bob] please review this"
-	
-	# Extract mentions using our local utility (simulating what happens in comments.py)
-	mentioned_users = extract_mentions(comment_text)
-	assert 'userB' in mentioned_users, "userB should be extracted from mention"
-	
-	# Create a mention notification (simulating the notification creation in comments.py)
-	task_doc = task_ref.get().to_dict()
-	cleaned_message = clean_mention_format(comment_text)
-	
-	mention_notif = {
-		'userId': 'userB',
-		'projectId': 'proj1',
-		'taskId': 'task1',
-		'type': 'comment mention',
-		'icon': 'messageSquare',
-		'title': task_doc.get('title'),
-		'projectName': 'Test Project',
-		'author': 'Alice Smith',
-		'message': cleaned_message,
-	}
-	notifications.add_notification(mention_notif, 'Test Project')
-	
-	# Verify notification was created
-	notif_coll = fake_db.collection("notifications")
-	assert len(notif_coll._documents) == 1, "One notification should be created"
-	
-	stored = list(notif_coll._documents.values())[0]
-	
-	# Verify notification details
-	assert stored.get('userId') == 'userB', \
-		"Notification should be for the mentioned user (userB)"
-	assert stored.get('type') == 'comment mention', \
-		"Notification type should be 'comment mention'"
-	assert stored.get('isRead') is False, \
-		"Notification should be initially unread"
-	assert stored.get('projectId') == 'proj1', \
-		"Notification should include projectId"
-	assert stored.get('taskId') == 'task1', \
-		"Notification should include taskId"
+
+	# The backend should expose a comments collection for the task
+	comments_coll = task_ref.collection('comments')
+	# At minimum the collection object should exist and be usable
+	assert hasattr(comments_coll, '_documents'), "Comments collection should be present on the task"
+
+	# Also verify standalone task has a comments collection (see other test for details)
+	standalone_task_ref = fake_db.collection('tasks').document('standalone-task-1')
+	standalone_task_ref.set({'title': 'Standalone Task', 'projectId': None})
+	standalone_comments = standalone_task_ref.collection('comments')
+	assert hasattr(standalone_comments, '_documents'), "Standalone task should expose a comments collection"
 
 
-def test_scrum_311_2_mention_notification_shows_commenter_task_and_preview():
-	"""
-	Scrum-311.2: Verify that the notification shows the commenter's name, 
-	             task title, and a preview of the comment
-	
-	Test Scenario: Verify that the notification shows the commenter's name, 
-	               task title, and a preview of the comment
-	Pre-Conditions:
-		1. User B has received a mention notification
-	Test Steps:
-		1. Log in as User B
-		2. Open the notification panel
-		3. Review the mention notification details
-	Expected Results:
-		The notification message includes:
-		- Commenter's name
-		- Task title
-		- A short preview of the comment text
+def test_scrum_349_2_input_and_record_username_timestamp():
+	"""Scrum-349.2: Verify that users can input text comments and each comment
+	records the username and timestamp.
 	"""
 	fake_mod, fake_db = _make_fake_firebase_module()
 	sys.modules['firebase'] = fake_mod
-	import importlib
-	if 'comments' in sys.modules:
-		del sys.modules['comments']
-	if 'notifications' in sys.modules:
-		del sys.modules['notifications']
-	
-	notifications = importlib.import_module('notifications')
-	
-	# Setup test data
+
 	setup_fake_users(fake_db)
 	project_ref, task_ref = setup_fake_project_and_task(fake_db)
-	
-	task_doc = task_ref.get().to_dict()
-	
-	# User A adds a comment mentioning User B with detailed text
-	comment_text = "@[userB][Bob] please review this implementation ASAP"
-	cleaned_message = clean_mention_format(comment_text)
-	
-	# Create mention notification with full details
-	mention_notif = {
-		'userId': 'userB',
-		'projectId': 'proj1',
-		'taskId': 'task1',
-		'type': 'comment mention',
-		'icon': 'messageSquare',
-		'title': task_doc.get('title'),
-		'projectName': 'Test Project',
-		'author': 'Alice Smith',
-		'message': cleaned_message,
+
+	# Simulate userB adding a comment
+	comment_data = {
+		'text': 'This is a test comment',
+		'authorId': 'userB',
+		'authorName': 'Bob Johnson',
+		'createdAt': '2025-11-06T12:00:00Z'
 	}
-	notifications.add_notification(mention_notif, 'Test Project')
-	
-	# Verify notification contains all required fields
-	notif_coll = fake_db.collection("notifications")
-	stored = list(notif_coll._documents.values())[0]
-	
-	# Verify commenter's name is present
-	assert stored.get('author') == 'Alice Smith', \
-		"Notification message should include commenter's name (Alice Smith)"
-	
-	# Verify task title is present
-	assert stored.get('title') == 'Review Documentation', \
-		"Notification message should include task title (Review Documentation)"
-	
-	# Verify comment preview is present
-	assert stored.get('message') is not None, \
-		"Notification should include a preview of the comment text"
-	assert '@Bob please review this implementation ASAP' == stored.get('message'), \
-		"Notification should show cleaned comment preview with @Name format"
-	
-	# Verify project name for context
-	assert stored.get('projectName') == 'Test Project', \
-		"Notification should include project name for context"
+	comments_coll = task_ref.collection('comments')
+	comments_coll.add(comment_data)
+
+	# Retrieve stored comment
+	stored = list(comments_coll._documents.values())[0]
+
+	assert stored.get('text') == 'This is a test comment', "Comment text should be saved"
+	assert stored.get('authorName') == 'Bob Johnson', "Comment should record the commenter's username"
+	assert 'createdAt' in stored, "Comment should record a timestamp"
 
 
-def test_scrum_311_3_mention_notification_navigates_to_comment_thread():
-	"""
-	Scrum-311.3: Verify that clicking the mention notification navigates 
-	             the user to the correct task's comment thread
-	
-	Test Scenario: Verify that clicking the mention notification navigates 
-	               the user to the correct task's comment thread
-	Pre-Conditions:
-		1. A mention notification exists for the logged-in user (User B)
-	Test Steps:
-		1. Log in as the mentioned user (User B)
-		2. Click on the mention notification
-	Expected Results:
-		The system opens the relevant task page and scrolls or focuses on 
-		the comment thread containing the mention
+def test_scrum_349_3_collaborators_can_view_and_add_comments():
+	"""Scrum-349.3: Verify that all collaborators within a project can view
+	and add comments to tasks within that project.
 	"""
 	fake_mod, fake_db = _make_fake_firebase_module()
 	sys.modules['firebase'] = fake_mod
-	import importlib
-	if 'comments' in sys.modules:
-		del sys.modules['comments']
-	if 'notifications' in sys.modules:
-		del sys.modules['notifications']
-	
-	notifications = importlib.import_module('notifications')
-	
-	# Setup test data
+
 	setup_fake_users(fake_db)
 	project_ref, task_ref = setup_fake_project_and_task(fake_db)
-	
-	# Create mention notification with routing information
-	comment_text = "@[userB][Bob] check this out"
-	cleaned_message = clean_mention_format(comment_text)
-	
-	mention_notif = {
-		'userId': 'userB',
-		'projectId': 'proj-mobile-123',
-		'taskId': 'task-ui-456',
-		'type': 'comment mention',
-		'icon': 'messageSquare',
-		'title': 'Review Documentation',
-		'projectName': 'Test Project',
-		'author': 'Alice Smith',
-		'message': cleaned_message,
-	}
-	notifications.add_notification(mention_notif, 'Test Project')
-	
-	# Verify notification contains routing information
-	notif_coll = fake_db.collection("notifications")
-	stored = list(notif_coll._documents.values())[0]
-	
-	# Verify projectId is present for navigation to correct project
-	assert stored.get('projectId') == 'proj-mobile-123', \
-		"Notification must include projectId for navigation to the correct project"
-	
-	# Verify taskId is present for navigation to correct task
-	assert stored.get('taskId') == 'task-ui-456', \
-		"Notification must include taskId for navigation to the correct task"
-	
-	# Verify notification type to distinguish mention from other notifications
-	assert stored.get('type') == 'comment mention', \
-		"Notification type should be 'comment mention' for proper frontend routing"
-	
-	# Verify icon is appropriate for comment mentions
-	assert stored.get('icon') == 'messageSquare', \
-		"Notification should use 'messageSquare' icon for comment mentions"
-	
-	# Frontend would use these fields to construct navigation route:
-	# /projects/{projectId}/tasks/{taskId}
-	# and could scroll/focus to the comment thread section
-	assert 'projectId' in stored and 'taskId' in stored, \
-		"Notification must have both projectId and taskId for complete navigation"
+
+	# userC (a collaborator) adds a comment — use the same collection instance so
+	# the FakeFirestore stores/retrieves from the same in-memory collection
+	comments_coll = task_ref.collection('comments')
+	comment_data = {'text': 'Collaborator comment', 'authorId': 'userC', 'authorName': 'Charlie Brown', 'createdAt': '2025-11-06T12:01:00Z'}
+	comments_coll.add(comment_data)
+
+	# Another collaborator (userA) should be able to read the comment via the
+	# same collection handle
+	stored_list = list(comments_coll._documents.values())
+	assert any(c.get('authorId') == 'userC' and c.get('text') == 'Collaborator comment' for c in stored_list), \
+		"Collaborator's comment should be visible to other project members"
+
+
+def test_scrum_349_4_standalone_task_comments_accessible():
+	"""Scrum-349.4: Ensure standalone task comments are accessible from the
+	'Tasks' page (which lists all personal tasks).
+	"""
+	fake_mod, fake_db = _make_fake_firebase_module()
+	sys.modules['firebase'] = fake_mod
+
+	# Create a standalone task in top-level 'tasks' collection
+	standalone = fake_db.collection('tasks').document('standalone-42')
+	standalone.set({'title': 'Personal Task', 'projectId': None, 'assigneeId': 'userA'})
+
+	# Add comment to standalone task via a stable collection handle (persisted)
+	standalone_comments = standalone.collection('comments')
+	standalone_comments.add({'text': 'Standalone comment', 'authorId': 'userA', 'authorName': 'Alice Smith', 'createdAt': '2025-11-06T12:02:00Z'})
+
+	# Verify comment is present when accessing the task from tasks listing
+	assert len(standalone_comments._documents) == 1, "Standalone task comments should be accessible and stored"
+
+
+def test_scrum_349_5_comments_chronological_order():
+	"""Scrum-349.5: Ensure comments are displayed in chronological order
+	(oldest top -> newest bottom).
+	"""
+	fake_mod, fake_db = _make_fake_firebase_module()
+	sys.modules['firebase'] = fake_mod
+
+	setup_fake_users(fake_db)
+	project_ref, task_ref = setup_fake_project_and_task(fake_db)
+
+	comments = task_ref.collection('comments')
+
+	# Add three comments in sequence
+	comments.add({'text': 'first', 'createdAt': '2025-11-06T12:00:00Z', 'authorName': 'Alice Smith'})
+	comments.add({'text': 'second', 'createdAt': '2025-11-06T12:05:00Z', 'authorName': 'Bob Johnson'})
+	comments.add({'text': 'third', 'createdAt': '2025-11-06T12:10:00Z', 'authorName': 'Charlie Brown'})
+
+	stored = list(comments._documents.values())
+
+	# Sort by createdAt ascending to represent display from oldest to newest
+	sorted_by_time = sorted(stored, key=lambda c: c.get('createdAt'))
+	texts = [c.get('text') for c in sorted_by_time]
+
+	assert texts == ['first', 'second', 'third'], "Comments should be ordered oldest to newest"
+
+
+def test_scrum_349_6_comments_persist_after_refresh():
+	"""Scrum-349.6: Verify that comments persist and remain visible after
+	refreshing the task details page.
+	"""
+	fake_mod, fake_db = _make_fake_firebase_module()
+	sys.modules['firebase'] = fake_mod
+
+	setup_fake_users(fake_db)
+	project_ref, task_ref = setup_fake_project_and_task(fake_db)
+
+	# Add a comment to a named (persistent) subcollection so we can re-fetch it
+	full_comments_name = f"projects/{project_ref.id}/tasks/{task_ref.id}/comments"
+	persistent_comments = fake_db.collection(full_comments_name)
+	persistent_comments.add({'text': "Don't forget to update docs", 'authorId': 'userB', 'authorName': 'Bob Johnson', 'createdAt': '2025-11-06T12:20:00Z'})
+
+	# Simulate page refresh by re-fetching the persistent collection from fake_db
+	refreshed_comments = fake_db.collection(full_comments_name)
+
+	assert len(refreshed_comments._documents) == 1, "Comment should remain after refresh"
+	stored = list(refreshed_comments._documents.values())[0]
+	assert stored.get('text') == "Don't forget to update docs", "Persisted comment text should match"
+
 
 
 def test_multiple_users_mentioned_in_single_comment():

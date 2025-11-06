@@ -104,7 +104,12 @@ const PROJECT_PRIORITY_LABELS = PROJECT_PRIORITIES.reduce((acc, option) => {
 export const inferProjectStatus = (arr) => {
   const list = Array.isArray(arr) ? arr : [];
   if (list.length === 0) return "to-do";
+
   const statuses = list.map((t) => (t?.status || "").toLowerCase());
+
+  if (statuses.some((s) => s === "blocked")) {
+    return "blocked";
+  }
   if (statuses.length > 0 && statuses.every((s) => s === "completed")) {
     return "completed";
   }
@@ -113,6 +118,7 @@ export const inferProjectStatus = (arr) => {
   }
   return "to-do";
 };
+
 
 const projectPriorityOrder = { low: 1, medium: 2, high: 3 };
 
@@ -249,7 +255,9 @@ export default function ProjectDetailPage() {
       const prev = pStatus;
       setPStatus(next);
       try {
-        await updateProject(id, { status: next }); // persist
+        // removed: manual updateProject call; project status is driven by backend
+        // await updateProject(id, { status: next }); // persist
+        // instead rely on backend update and refresh project
         setProject((prevProject) =>
           prevProject ? { ...prevProject, status: next } : prevProject
         );
@@ -509,15 +517,30 @@ export default function ProjectDetailPage() {
     [id]
   );
 
-  const handleStatusChange = async (value) => {
-    const prevValue = pStatus;
-    setPStatus(value);
-    try {
-      await applyProjectUpdates({ status: value });
-    } catch (error) {
-      setPStatus(prevValue);
+
+
+  async function handleTaskStatus(taskId, status) {
+  try {
+    await updateTask(id, taskId, {
+      status,
+      updatedBy: auth.currentUser?.uid || "",
+    });
+
+    // Backend has now recomputed project.status.
+    // Reload project + tasks from API so UI stays in sync.
+    if (currentUser?.uid) {
+      await load(currentUser.uid);
+    } else {
+      // Fallback: at least update local tasks
+      setTasks((prev) =>
+        prev.map((t) => (t.id === taskId ? { ...t, status } : t))
+      );
     }
-  };
+  } catch (err) {
+    console.error("Failed to update task status:", err);
+    toast.error("Failed to update task status");
+  }
+}
 
   const handlePriorityChange = async (value) => {
     const prevValue = pPriority;
@@ -979,25 +1002,7 @@ export default function ProjectDetailPage() {
       setSavingTask(false);
     }
   }
-  async function handleTaskStatus(taskId, status) {
-    if (isEditingTask && editingTaskId) {
-      payload.updatedBy = auth.currentUser?.uid || ""; // ← add this
-      await updateTask(id, editingTaskId, payload);
-    }
-
-    await updateTask(id, taskId, {
-      status,
-      updatedBy: auth.currentUser?.uid || "",
-    });
-
-    setTasks((prev) =>
-      prev.map((t) => (t.id === taskId ? { ...t, status } : t))
-    );
-    // TODO: Auto-sync disabled - causes filter confusion
-    // When re-enabling, separate project status from task filter state
-    // to avoid unexpected filter changes when updating task status
-    // await syncProjectStatusWithTasks(updated);
-  }
+  
 
   const requestDeleteTask = (task) => {
     if (!task) return;
@@ -1664,38 +1669,6 @@ export default function ProjectDetailPage() {
                     disabled={metaSaving}
                   >
                     <span>
-                      Project Status: {STATUS_LABELS[pStatus] || "Select"}
-                    </span>
-                    <ChevronDown className="ml-1 h-3 w-3" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start">
-                  <DropdownMenuRadioGroup
-                    value={pStatus}
-                    onValueChange={(value) => {
-                      if (value && value !== pStatus) {
-                        handleStatusChange(value);
-                      }
-                    }}
-                  >
-                    {STATUS.map((s) => (
-                      <DropdownMenuRadioItem key={s} value={s}>
-                        {STATUS_LABELS[s]}
-                      </DropdownMenuRadioItem>
-                    ))}
-                  </DropdownMenuRadioGroup>
-                </DropdownMenuContent>
-              </DropdownMenu>
-
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="h-8 rounded-full border border-border bg-muted/70 px-3 text-xs font-medium capitalize"
-                    disabled={metaSaving}
-                  >
-                    <span>
                       Project Priority:{" "}
                       {PROJECT_PRIORITY_LABELS[pPriority] || "Select"}
                     </span>
@@ -1722,6 +1695,9 @@ export default function ProjectDetailPage() {
                   </DropdownMenuRadioGroup>
                 </DropdownMenuContent>
               </DropdownMenu>
+              <Badge variant="outline">
+                    Project Status: {STATUS_LABELS[pStatus] || STATUS_LABELS["to-do"]}
+              </Badge>
 
               {project.dueDate && (
                 <Badge variant="secondary">
@@ -1956,8 +1932,7 @@ export default function ProjectDetailPage() {
                   );
                   updatedTask.projectId = project.id;
 
-                  const assigneeId =
-                    updatedTask.assigneeId || updatedTask.ownerId;
+                  const assigneeId = updatedTask.assigneeId || updatedTask.ownerId;
                   const assigneeInfo = users.find((u) => u?.id === assigneeId);
                   if (assigneeInfo) {
                     updatedTask.assigneeSummary = {

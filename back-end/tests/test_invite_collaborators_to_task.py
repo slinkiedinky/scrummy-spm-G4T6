@@ -43,15 +43,15 @@ def test_add_collaborator_to_task(client, mock_firestore):
         "collaboratorsIds": [],  # Empty - John is not a collaborator
         "tags": [],
         "dueDate": "2025-11-10T00:00:00.000Z",
-        "createdAt": datetime.now(timezone.utc),
-        "updatedAt": datetime.now(timezone.utc),
+        "createdAt": datetime.now(timezone.utc).isoformat(),
+        "updatedAt": datetime.now(timezone.utc).isoformat(),
     }
 
     # Expected task data after adding John as collaborator
     expected_task_with_john = {
         **existing_task,
         "collaboratorsIds": [john_id],
-        "updatedAt": datetime.now(timezone.utc),
+        "updatedAt": datetime.now(timezone.utc).isoformat(),
     }
 
     # Setup mock Firestore responses
@@ -76,6 +76,18 @@ def test_add_collaborator_to_task(client, mock_firestore):
 
     mock_project_ref = MagicMock()
     mock_project_ref.collection.return_value = mock_collection
+
+    # Mock project document for the return value
+    mock_project_doc_return = MagicMock()
+    mock_project_doc_return.exists = True
+    mock_project_doc_return.id = project_id
+    mock_project_doc_return.to_dict.return_value = {
+        "name": "Project 1",
+        "status": "in progress",
+        "ownerId": user_id,
+        "teamIds": [user_id, john_id]
+    }
+    mock_project_ref.get.return_value = mock_project_doc_return
 
     mock_firestore.collection.return_value.document.return_value = mock_project_ref
 
@@ -126,15 +138,15 @@ def test_add_multiple_collaborators_to_task(client, mock_firestore):
         "collaboratorsIds": [],  # Empty - no collaborators yet
         "tags": [],
         "dueDate": "2025-11-07T00:00:00.000Z",
-        "createdAt": datetime.now(timezone.utc),
-        "updatedAt": datetime.now(timezone.utc),
+        "createdAt": datetime.now(timezone.utc).isoformat(),
+        "updatedAt": datetime.now(timezone.utc).isoformat(),
     }
 
     # Expected task data after adding John and Mary as collaborators
     expected_task_with_collaborators = {
         **existing_task,
         "collaboratorsIds": [john_id, mary_id],
-        "updatedAt": datetime.now(timezone.utc),
+        "updatedAt": datetime.now(timezone.utc).isoformat(),
     }
 
     # Setup mock Firestore responses
@@ -159,6 +171,18 @@ def test_add_multiple_collaborators_to_task(client, mock_firestore):
 
     mock_project_ref = MagicMock()
     mock_project_ref.collection.return_value = mock_collection
+
+    # Mock project document for the return value
+    mock_project_doc_return = MagicMock()
+    mock_project_doc_return.exists = True
+    mock_project_doc_return.id = project_id
+    mock_project_doc_return.to_dict.return_value = {
+        "name": "Project 1",
+        "status": "in progress",
+        "ownerId": user_id,
+        "teamIds": [user_id, john_id, mary_id]
+    }
+    mock_project_ref.get.return_value = mock_project_doc_return
 
     mock_firestore.collection.return_value.document.return_value = mock_project_ref
 
@@ -235,15 +259,15 @@ def test_collaborator_receives_invitation_notification(client, mock_firestore):
         "collaboratorsIds": [],
         "tags": [],
         "dueDate": "2025-11-10T00:00:00.000Z",
-        "createdAt": datetime.now(timezone.utc),
-        "updatedAt": datetime.now(timezone.utc),
+        "createdAt": datetime.now(timezone.utc).isoformat(),
+        "updatedAt": datetime.now(timezone.utc).isoformat(),
     }
 
     # Expected task data after adding John
     updated_task = {
         **existing_task,
         "collaboratorsIds": [john_id],
-        "updatedAt": datetime.now(timezone.utc),
+        "updatedAt": datetime.now(timezone.utc).isoformat(),
     }
 
     # Setup mock Firestore responses
@@ -277,12 +301,30 @@ def test_collaborator_receives_invitation_notification(client, mock_firestore):
     # Configure add() to return a tuple with (timestamp, document_reference)
     mock_notifications_collection.add.return_value = (None, mock_notification_ref)
 
+    # Mock project document for the return value
+    mock_project_doc_return = MagicMock()
+    mock_project_doc_return.exists = True
+    mock_project_doc_return.id = project_id
+    mock_project_doc_return.to_dict.return_value = {
+        "name": "Project 1",
+        "status": "in progress",
+        "ownerId": user_id,
+        "teamIds": [user_id, john_id]
+    }
+
+    # Create mock projects collection for routing
+    mock_projects_collection_route = MagicMock()
+    mock_project_ref_for_get = MagicMock()
+    mock_project_ref_for_get.get.return_value = mock_project_doc_return
+    mock_project_ref_for_get.collection.return_value.document.return_value = mock_task_ref
+    mock_projects_collection_route.document.return_value = mock_project_ref_for_get
+
     # Setup firestore collection routing
     def collection_router(collection_name):
         if collection_name == "notifications":
             return mock_notifications_collection
         elif collection_name == "projects":
-            return MagicMock(document=lambda _: mock_project_ref)
+            return mock_projects_collection_route
         return MagicMock()
 
     mock_firestore.collection.side_effect = collection_router

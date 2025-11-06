@@ -278,8 +278,18 @@ class Test_325_AC3_PriorityEditable:
         
         mock_task_ref = MagicMock()
         mock_task_ref.get.return_value = mock_task_doc
-        mock_db.collection.return_value.document.return_value.collection.return_value.document.return_value = mock_task_ref
-        
+
+        # Mock project document
+        mock_project_doc = MagicMock()
+        mock_project_doc.exists = True
+        mock_project_doc.id = "project123"
+        mock_project_doc.to_dict.return_value = {"name": "Project 1", "status": "in progress"}
+        mock_project_ref = MagicMock()
+        mock_project_ref.get.return_value = mock_project_doc
+        mock_project_ref.collection.return_value.document.return_value = mock_task_ref
+
+        mock_db.collection.return_value.document.return_value = mock_project_ref
+
         with app.test_request_context(
             json={"priority": 9}  # Updating priority from 5 to 9
         ):
@@ -311,7 +321,17 @@ class Test_325_AC3_PriorityEditable:
         
         mock_task_ref = MagicMock()
         mock_task_ref.get.return_value = mock_task_doc
-        mock_db.collection.return_value.document.return_value.collection.return_value.document.return_value = mock_task_ref
+
+        # Mock project document
+        mock_project_doc = MagicMock()
+        mock_project_doc.exists = True
+        mock_project_doc.id = "project123"
+        mock_project_doc.to_dict.return_value = {"name": "Project 1", "status": "in progress"}
+        mock_project_ref = MagicMock()
+        mock_project_ref.get.return_value = mock_project_doc
+        mock_project_ref.collection.return_value.document.return_value = mock_task_ref
+
+        mock_db.collection.return_value.document.return_value = mock_project_ref
         
         with app.test_request_context(
             json={"priority": 20}  # Invalid priority above 10
@@ -344,7 +364,17 @@ class Test_325_AC3_PriorityEditable:
         
         mock_task_ref = MagicMock()
         mock_task_ref.get.return_value = mock_task_doc
-        mock_db.collection.return_value.document.return_value.collection.return_value.document.return_value = mock_task_ref
+
+        # Mock project document
+        mock_project_doc = MagicMock()
+        mock_project_doc.exists = True
+        mock_project_doc.id = "project123"
+        mock_project_doc.to_dict.return_value = {"name": "Project 1", "status": "in progress"}
+        mock_project_ref = MagicMock()
+        mock_project_ref.get.return_value = mock_project_doc
+        mock_project_ref.collection.return_value.document.return_value = mock_task_ref
+
+        mock_db.collection.return_value.document.return_value = mock_project_ref
         
         with app.test_request_context(
             json={"priority": 9}  # Updating to high priority
@@ -380,7 +410,17 @@ class Test_325_AC3_PriorityEditable:
         
         mock_task_ref = MagicMock()
         mock_task_ref.get.return_value = mock_task_doc
-        mock_db.collection.return_value.document.return_value.collection.return_value.document.return_value = mock_task_ref
+
+        # Mock project document
+        mock_project_doc = MagicMock()
+        mock_project_doc.exists = True
+        mock_project_doc.id = "project123"
+        mock_project_doc.to_dict.return_value = {"name": "Project 1", "status": "in progress"}
+        mock_project_ref = MagicMock()
+        mock_project_ref.get.return_value = mock_project_doc
+        mock_project_ref.collection.return_value.document.return_value = mock_task_ref
+
+        mock_db.collection.return_value.document.return_value = mock_project_ref
         
         with app.test_request_context(
             json={"priority": 8}  # Only updating priority
@@ -416,7 +456,17 @@ class Test_325_AC3_PriorityEditable:
         
         mock_task_ref = MagicMock()
         mock_task_ref.get.return_value = mock_task_doc
-        mock_db.collection.return_value.document.return_value.collection.return_value.document.return_value = mock_task_ref
+
+        # Mock project document
+        mock_project_doc = MagicMock()
+        mock_project_doc.exists = True
+        mock_project_doc.id = "project123"
+        mock_project_doc.to_dict.return_value = {"name": "Project 1", "status": "in progress"}
+        mock_project_ref = MagicMock()
+        mock_project_ref.get.return_value = mock_project_doc
+        mock_project_ref.collection.return_value.document.return_value = mock_task_ref
+
+        mock_db.collection.return_value.document.return_value = mock_project_ref
         
         with app.test_request_context(
             json={"priority": "7"}  # String value

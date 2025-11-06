@@ -17,7 +17,17 @@ class Test_18_UpdateTask_Unit:
             doc.to_dict.return_value = {"title": "Old", "status": "to-do"}
             ref = MagicMock()
             ref.get.return_value = doc
-            m.collection.return_value.document.return_value.collection.return_value.document.return_value = ref
+
+            # Mock project document
+            proj_doc = MagicMock()
+            proj_doc.exists = True
+            proj_doc.id = "p1"
+            proj_doc.to_dict.return_value = {"name": "Project 1", "status": "in progress"}
+            proj_ref = MagicMock()
+            proj_ref.get.return_value = proj_doc
+            proj_ref.collection.return_value.document.return_value = ref
+
+            m.collection.return_value.document.return_value = proj_ref
             with app.test_request_context(json={"title": "New Title"}):
                 result = update_task_endpoint("p1", "t1")
                 resp = make_response(result)
@@ -37,7 +47,17 @@ class Test_18_UpdateTask_Unit:
             doc.to_dict.return_value = {"description": "Old", "status": "to-do"}
             ref = MagicMock()
             ref.get.return_value = doc
-            m.collection.return_value.document.return_value.collection.return_value.document.return_value = ref
+
+            # Mock project document
+            proj_doc = MagicMock()
+            proj_doc.exists = True
+            proj_doc.id = "p1"
+            proj_doc.to_dict.return_value = {"name": "Project 1", "status": "in progress"}
+            proj_ref = MagicMock()
+            proj_ref.get.return_value = proj_doc
+            proj_ref.collection.return_value.document.return_value = ref
+
+            m.collection.return_value.document.return_value = proj_ref
             with app.test_request_context(json={"description": "New Desc"}):
                 result = update_task_endpoint("p1", "t1")
                 resp = make_response(result)
@@ -56,7 +76,17 @@ class Test_18_UpdateTask_Unit:
             doc.to_dict.return_value = {"status": "to-do"}
             ref = MagicMock()
             ref.get.return_value = doc
-            m.collection.return_value.document.return_value.collection.return_value.document.return_value = ref
+
+            # Mock project document
+            proj_doc = MagicMock()
+            proj_doc.exists = True
+            proj_doc.id = "p1"
+            proj_doc.to_dict.return_value = {"name": "Project 1", "status": "in progress"}
+            proj_ref = MagicMock()
+            proj_ref.get.return_value = proj_doc
+            proj_ref.collection.return_value.document.return_value = ref
+
+            m.collection.return_value.document.return_value = proj_ref
             with app.test_request_context(json={"status": "in-progress"}):
                 result = update_task_endpoint("p1", "t1")
                 resp = make_response(result)
@@ -75,7 +105,17 @@ class Test_18_UpdateTask_Unit:
             doc.to_dict.return_value = {"dueDate": "2025-01-01", "status": "to-do"}
             ref = MagicMock()
             ref.get.return_value = doc
-            m.collection.return_value.document.return_value.collection.return_value.document.return_value = ref
+
+            # Mock project document
+            proj_doc = MagicMock()
+            proj_doc.exists = True
+            proj_doc.id = "p1"
+            proj_doc.to_dict.return_value = {"name": "Project 1", "status": "in progress"}
+            proj_ref = MagicMock()
+            proj_ref.get.return_value = proj_doc
+            proj_ref.collection.return_value.document.return_value = ref
+
+            m.collection.return_value.document.return_value = proj_ref
             with app.test_request_context(json={"dueDate": "2025-12-31"}):
                 result = update_task_endpoint("p1", "t1")
                 resp = make_response(result)
@@ -94,7 +134,17 @@ class Test_18_UpdateTask_Unit:
             doc.to_dict.return_value = {"priority": 5, "status": "to-do"}
             ref = MagicMock()
             ref.get.return_value = doc
-            m.collection.return_value.document.return_value.collection.return_value.document.return_value = ref
+
+            # Mock project document
+            proj_doc = MagicMock()
+            proj_doc.exists = True
+            proj_doc.id = "p1"
+            proj_doc.to_dict.return_value = {"name": "Project 1", "status": "in progress"}
+            proj_ref = MagicMock()
+            proj_ref.get.return_value = proj_doc
+            proj_ref.collection.return_value.document.return_value = ref
+
+            m.collection.return_value.document.return_value = proj_ref
             with app.test_request_context(json={"priority": 8}):
                 result = update_task_endpoint("p1", "t1")
                 resp = make_response(result)
@@ -130,7 +180,17 @@ class Test_18_UpdateTask_Integration:
             doc.to_dict.return_value = {"title": "Old", "status": "to-do", "priority": 5}
             ref = MagicMock()
             ref.get.return_value = doc
-            m.collection.return_value.document.return_value.collection.return_value.document.return_value = ref
+
+            # Mock project document
+            proj_doc = MagicMock()
+            proj_doc.exists = True
+            proj_doc.id = "p1"
+            proj_doc.to_dict.return_value = {"name": "Project 1", "status": "in progress"}
+            proj_ref = MagicMock()
+            proj_ref.get.return_value = proj_doc
+            proj_ref.collection.return_value.document.return_value = ref
+
+            m.collection.return_value.document.return_value = proj_ref
             with app.test_client() as c:
                 resp = c.put('/projects/p1/tasks/t1', json={"title": "Updated", "priority": 9})
                 assert resp.status_code == 200

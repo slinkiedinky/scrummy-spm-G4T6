@@ -34,7 +34,9 @@ jobs:
       - name: Run backend tests with coverage
         run: |
           cd back-end
-          pytest tests/ --cov=. --cov-report=xml:../coverage-backend.xml --cov-report=term -v
+          pytest tests/ --cov=. --cov-report=xml --cov-report=term -v
+          # Move coverage file to root with proper name
+          mv coverage.xml ../coverage-backend.xml
         continue-on-error: true
 
       - name: Fix backend coverage report paths
@@ -46,23 +48,32 @@ jobs:
           tree = ET.parse('coverage-backend.xml')
           root = tree.getroot()
 
-          # Fix source path to be relative to project root
+          # Remove the absolute source path - let SonarQube use relative paths
           for source in root.findall('.//source'):
-              source.text = '${{ github.workspace }}/back-end'
+              source.text = '.'
 
-          # Fix filename paths to be relative to project root
+          # Ensure all filename paths are relative to project root with back-end/ prefix
           for cls in root.findall('.//class'):
               filename = cls.get('filename')
-              if filename and not filename.startswith('back-end/'):
-                  cls.set('filename', f'back-end/{filename}')
+              if filename:
+                  # Remove any leading slashes or absolute paths
+                  filename = filename.lstrip('/')
+                  # Ensure it starts with back-end/
+                  if not filename.startswith('back-end/'):
+                      cls.set('filename', f'back-end/{filename}')
 
           tree.write('coverage-backend.xml', encoding='utf-8', xml_declaration=True)
-          print("Fixed coverage paths")
+          print("✓ Fixed coverage paths")
 
-          # Debug: print first few lines
-          with open('coverage-backend.xml', 'r') as f:
-              lines = f.readlines()[:20]
-              print(''.join(lines))
+          # Debug: print coverage statistics and sample paths
+          print(f"✓ Line coverage: {root.get('line-rate')}")
+          print(f"✓ Total lines: {root.get('lines-valid')}")
+          print(f"✓ Covered lines: {root.get('lines-covered')}")
+
+          # Print sample file paths
+          print("\n✓ Sample file paths in coverage report:")
+          for i, cls in enumerate(root.findall('.//class')[:5]):
+              print(f"  - {cls.get('filename')}")
           EOF
 
       - name: Set up Node.js
@@ -85,6 +96,28 @@ jobs:
         working-directory: ./front-end
         run: npm run test:coverage
         continue-on-error: true
+
+      - name: Verify coverage files exist
+        run: |
+          echo "✓ Checking for coverage files..."
+          if [ -f "coverage-backend.xml" ]; then
+            echo "✓ Backend coverage file exists ($(wc -l < coverage-backend.xml) lines)"
+            echo "  Path: coverage-backend.xml"
+          else
+            echo "✗ Backend coverage file NOT FOUND"
+            exit 1
+          fi
+
+          if [ -f "front-end/coverage/lcov.info" ]; then
+            echo "✓ Frontend coverage file exists ($(wc -l < front-end/coverage/lcov.info) lines)"
+            echo "  Path: front-end/coverage/lcov.info"
+          else
+            echo "✗ Frontend coverage file NOT FOUND"
+            exit 1
+          fi
+
+          echo ""
+          echo "✓ All coverage files ready for SonarQube"
 
       - name: SonarQube Scan
         uses: SonarSource/sonarqube-scan-action@v3

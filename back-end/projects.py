@@ -265,6 +265,14 @@ def get_assigned_tasks():
         if d.reference.path not in seen:
             docs.append(d); seen.add(d.reference.path)
 
+    collab_query = db.collection_group("tasks").where(filter=firestore.FieldFilter("collaboratorsIds", "array_contains", assigned_to))
+    collab_docs = collab_query.stream()
+    
+    for d in collab_docs:
+        if d.reference.path not in seen:
+            docs.append(d)
+            seen.add(d.reference.path)
+            
     items = []
     for docu in docs:
         data = normalize_task_out({**docu.to_dict(), "id": docu.id})

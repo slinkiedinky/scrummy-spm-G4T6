@@ -156,7 +156,7 @@ def get_project(project_id):
 @projects_bp.route("/<project_id>", methods=["PUT"])
 def update_project(project_id):
   patch = request.json or {}
-  if "status" in patch: patch["status"] = canon_status(patch["status"])
+  if "status" in patch: del patch["status"]
   if "priority" in patch: patch["priority"] = canon_project_priority(patch["priority"])
   if "teamIds" in patch: patch["teamIds"] = ensure_list(patch["teamIds"])
   if "tags" in patch: patch["tags"] = ensure_list(patch["tags"])
@@ -168,6 +168,45 @@ def update_project(project_id):
 def delete_project(project_id):
   db.collection("projects").document(project_id).delete()
   return jsonify({"message":"Project deleted"}), 200
+
+def update_project_status_from_tasks(project_id):
+    """
+    Compute project status from statuses of tasks under the project.
+    Priority rules:
+      - if any task is 'blocked' -> project 'blocked'
+      - else if all tasks are 'completed' -> project 'completed'
+      - else if any task is 'in progress' -> project 'in progress'
+      - else -> 'to-do'
+    """
+    try:
+        proj_ref = db.collection("projects").document(project_id)
+        proj_doc = proj_ref.get()
+        if not proj_doc.exists:
+            return None
+        task_docs = list(proj_ref.collection("tasks").stream())
+        # no tasks => to-do
+        if not task_docs:
+            desired = "to-do"
+        else:
+            statuses = [canon_status(d.to_dict().get("status")) for d in task_docs]
+            if any(s == "blocked" for s in statuses):
+                desired = "blocked"
+            elif all(s == "completed" for s in statuses):
+                desired = "completed"
+            elif any(s == "in progress" for s in statuses):
+                desired = "in progress"
+            else:
+                desired = "to-do"
+
+        current = canon_status(proj_doc.to_dict().get("status"))
+        if desired != current:
+            proj_ref.update({"status": desired, "updatedAt": now_utc()})
+            print(f"[update_project_status_from_tasks] project={project_id} status {current} -> {desired}")
+        return desired
+    except Exception as e:
+        print(f"[update_project_status_from_tasks] error: {e}")
+        return None
+
 
 # -------- Tasks (under a project) --------
 @projects_bp.route("/<project_id>/tasks/<task_id>", methods=["GET"])

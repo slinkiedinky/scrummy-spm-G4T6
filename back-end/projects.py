@@ -3,7 +3,6 @@ from flask import Blueprint, request, jsonify, current_app
 from flask_cors import cross_origin
 from firebase_admin import firestore
 from datetime import datetime, timezone
-import datetime
 import statistics
 
 from firebase import db
@@ -147,8 +146,18 @@ def create_project():
 
 @projects_bp.route("/<project_id>", methods=["GET"])
 def get_project(project_id):
-  doc = db.collection("projects").document(project_id).get()
+  doc_ref = db.collection("projects").document(project_id)
+  doc = doc_ref.get()
   if not doc.exists: return jsonify({"error":"Not found"}), 404
+
+  try:
+    # recalc project status after update
+    update_project_status_from_tasks(project_id)
+  except Exception as e:
+    print(f"[projects:get_project] update_project_status_from_tasks failed: {e}")
+
+  # Re-fetch after recompute so returned project reflects the new status
+  doc = doc_ref.get()
   data = normalize_project_out({**doc.to_dict(), "id": doc.id})
   assigned_to = request.args.get("assignedTo") or request.args.get("assigneeId")
   if assigned_to and assigned_to not in data.get("teamIds", []):
@@ -333,6 +342,12 @@ def create_task(project_id):
     task_ref = db.collection("projects").document(project_id).collection("tasks").add(doc_data)
     task_id = task_ref[1].id
 
+    try:
+        # recalc project status after update
+        update_project_status_from_tasks(project_id)
+    except Exception as e:
+        print(f"[projects:update_task] update_project_status_from_tasks failed: {e}")
+
     # Notify assignee and collaborators
     try:
         from notifications import add_notification
@@ -444,7 +459,20 @@ def update_task_endpoint(project_id, task_id):
     except Exception as e:
         print(f"[projects:update_task] create_status_change_notifications error: {e}")
 
-    return jsonify({"ok": True}), 200
+    # Ensure project status is recalculated after a task update
+    try:
+        update_project_status_from_tasks(project_id)
+    except Exception as e:
+        print(f"[projects:update_task] update_project_status_from_tasks failed: {e}")
+
+    # Return updated project (best-effort) to avoid frontend race conditions
+    try:
+        proj_doc = db.collection("projects").document(project_id).get()
+        proj_data = normalize_project_out({**proj_doc.to_dict(), "id": proj_doc.id}) if proj_doc.exists else None
+    except Exception:
+        proj_data = None
+
+    return jsonify({"ok": True, "project": proj_data}), 200
 
 def update_task(project_id, task_id, updates, updated_by=None):
     # fetch previous task BEFORE update
@@ -459,6 +487,8 @@ def update_task(project_id, task_id, updates, updated_by=None):
         except Exception:
             pass
         return jsonify({"ok": True}), 200
+
+
 @projects_bp.route("/<project_id>/tasks/<task_id>", methods=["DELETE"])
 def delete_task(project_id, task_id):
     """
@@ -547,6 +577,7 @@ def delete_task(project_id, task_id):
 
         # delete after notifications queued
         task_ref.delete()
+
         print(f"[projects.delete_task] task deleted: {project_id}/{task_id}")
         return jsonify({"message": "Task deleted"}), 200
 
@@ -1152,6 +1183,12 @@ def update_parent_task_progress(project_id, task_id):
     new_status = updates.get("status")
     print(f"🔍 [DEBUG] Task {task_id}: new_status={new_status}, checking recurring...")
     
+    # Recalculate project status because parent task changed
+    try:
+        update_project_status_from_tasks(project_id)
+    except Exception as e:
+        print(f"[update_parent_task_progress] update_project_status_from_tasks failed: {e}")
+    
     if new_status == "completed" and old_status != "completed":
         is_recurring = parent_task_data.get("isRecurring", False)
         print(f"🔍 [DEBUG] Task {task_id}: Triggering recurring check. isRecurring={is_recurring}")
@@ -1168,4 +1205,3 @@ def update_parent_task_progress(project_id, task_id):
                 print(f"❌ [RECURRING] Failed to create instance: {e}")
                 import traceback
                 traceback.print_exc()
-        

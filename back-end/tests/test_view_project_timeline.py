@@ -25,7 +25,7 @@ def mock_firestore():
         yield mock_db
 
 
-# Scrum-131: View timeline tab on project page
+# Scrum-137.1: View timeline tab on project page
 def test_view_timeline_tab_on_project_page(client, mock_firestore):
     # Setup test data
     project_id = "project123"
@@ -79,7 +79,7 @@ def test_view_timeline_tab_on_project_page(client, mock_firestore):
     assert "createdAt" in response_data or response_data.get("id"), "Project should support timeline tracking"
 
 
-# Scrum-132: View team member's active tasks and due dates on project timeline
+# Scrum-137.2: View team member's active tasks and due dates on project timeline
 def test_view_team_member_tasks_on_project_timeline(client, mock_firestore):
     # Setup test data
     project_id = "project123"
@@ -181,7 +181,7 @@ def test_view_team_member_tasks_on_project_timeline(client, mock_firestore):
     assert task_due_date.day == 7, "Due date day should be 7"
 
 
-# Scrum-133: View team member's completed tasks on project timeline
+# Scrum-137.3: View team member's completed tasks on project timeline
 def test_view_team_member_completed_tasks_on_project_timeline(client, mock_firestore):
     # Setup test data
     project_id = "project123"
@@ -283,7 +283,7 @@ def test_view_team_member_completed_tasks_on_project_timeline(client, mock_fires
     assert task_due_date.day == 7, "Due date day should be 7"
 
 
-# Scrum-134: View due dates for a specific day
+# Scrum-137.4: View due dates for a specific day
 def test_view_due_dates_for_specific_day(client, mock_firestore):
     # Setup test data
     project_id = "project123"

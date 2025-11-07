@@ -25,7 +25,7 @@ def mock_firestore():
         yield mock_db
 
 
-# Scrum-123: View all projects that the current user has access to
+# Scrum-136.1: View all projects that the current user has access to
 def test_view_all_projects_user_has_access_to(client, mock_firestore):
     # Setup test data
     user_id = "user123"
@@ -110,7 +110,7 @@ def test_view_all_projects_user_has_access_to(client, mock_firestore):
     assert "id" in project2_data, "Project should have an id field"
 
 
-# Scrum-124: View project descriptions in projects tab
+# Scrum-136.2: View project descriptions in projects tab
 def test_view_project_description_in_projects_tab(client, mock_firestore):
     # Setup test data
     user_id = "user123"
@@ -169,7 +169,7 @@ def test_view_project_description_in_projects_tab(client, mock_firestore):
     assert project1_data["description"].strip() != "", "Description should not be empty"
 
 
-# Scrum-125: View project status in projects tab
+# Scrum-136.3: View project status in projects tab
 def test_view_project_status_in_projects_tab(client, mock_firestore):
     # Setup test data
     user_id = "user123"
@@ -228,7 +228,7 @@ def test_view_project_status_in_projects_tab(client, mock_firestore):
     assert project1_data["status"].strip() != "", "Status should not be empty"
 
 
-# Scrum-126: View project priority in projects tab
+# Scrum-136.4: View project priority in projects tab
 def test_view_project_priority_in_projects_tab(client, mock_firestore):
     # Setup test data
     user_id = "user123"
@@ -287,7 +287,7 @@ def test_view_project_priority_in_projects_tab(client, mock_firestore):
     assert project1_data["priority"] in ["low", "medium", "high"], "Priority should be valid"
 
 
-# Scrum-127: View project page containing project name
+# Scrum-136.5: View project page containing project name
 def test_view_project_page_with_project_name(client, mock_firestore):
     # Setup test data
     project_id = "project123"
@@ -340,7 +340,7 @@ def test_view_project_page_with_project_name(client, mock_firestore):
     assert response_data["name"].strip() != "", "Project name should not be empty"
 
 
-# Scrum-128: View project page containing project description
+# Scrum-136.6: View project page containing project description
 def test_view_project_page_with_project_description(client, mock_firestore):
     # Setup test data
     project_id = "project123"
@@ -393,7 +393,7 @@ def test_view_project_page_with_project_description(client, mock_firestore):
     assert response_data["description"].strip() != "", "Project description should not be empty"
 
 
-# Scrum-129: View project page containing project status
+# Scrum-136.7: View project page containing project status
 def test_view_project_page_with_project_status(client, mock_firestore):
     # Setup test data
     project_id = "project123"
@@ -446,7 +446,7 @@ def test_view_project_page_with_project_status(client, mock_firestore):
     assert response_data["status"].strip() != "", "Project status should not be empty"
 
 
-# Scrum-130: View project page containing project priority
+# Scrum-136.8: View project page containing project priority
 def test_view_project_page_with_project_priority(client, mock_firestore):
     # Setup test data
     project_id = "project123"

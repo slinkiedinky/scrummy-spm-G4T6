@@ -174,10 +174,9 @@ For SonarQube setup instructions, see [docs/SONARQUBE_SETUP.md](docs/SONARQUBE_S
 
 ### Coverage
 
-Current test coverage:
-- 43% (390 tests)
-- Backend: 82% (41 tests)
-- Frontend: Comprehensive test suite with 100+ tests
+Current test coverage: - 21.7% 
+- Backend: 43% (390 tests) 
+- Frontend: 33 tests
 
 ## Tech Stack
 

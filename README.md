@@ -52,6 +52,14 @@ The entire Scrum process (user story definitions, playbook, sprint planning, rev
 5. **Jira Sprint Retro:** https://scrummy-spm-g4t6.atlassian.net/wiki/spaces/S/pages/2392066/Retrospectives?atlOrigin=eyJpIjoiY2QzN2U2NWU2M2JkNGI0OWJkNmU2YzRjMjYzNjFiYmEiLCJwIjoiYyJ9
 6. **Github Repo:** https://github.com/slinkiedinky/scrummy-spm-G4T6
 
+For Sprint 3, attached are the youtube links to the relevant videos:
+Backlog Refinement:  https://youtu.be/vbvBmt_OZjA 
+Sprint Planning: https://youtu.be/xkEVTiy62R4 
+Daily Standup: https://youtu.be/UzJFDxcGh2o
+Sprint Review:  https://youtu.be/tsbCQvC7CXM 
+Sprint Retro: https://youtu.be/qIttG_cIi3I 
+
+
 ## Project Structure
 
 ```

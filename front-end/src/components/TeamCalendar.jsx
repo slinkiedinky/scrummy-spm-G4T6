@@ -300,10 +300,13 @@ function MemberScheduleView({ memberId, memberName, projectId, currentUser, onBa
 
     const dates = [];
     const current = new Date(startDate);
-    while (current <= lastDay || dates.length % 7 !== 0) {
+    
+    // Generate 6 weeks (42 days) to ensure we have a complete calendar grid
+    for (let i = 0; i < 42; i++) {
       dates.push(new Date(current));
       current.setDate(current.getDate() + 1);
     }
+    
     return dates;
   };
 

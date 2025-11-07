@@ -135,6 +135,11 @@ python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 python app.py
+
+# OR
+
+cd back-end
+flask run
 ```
 
 ### Frontend Setup

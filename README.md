@@ -53,11 +53,11 @@ The entire Scrum process (user story definitions, playbook, sprint planning, rev
 6. **Github Repo:** https://github.com/slinkiedinky/scrummy-spm-G4T6
 
 For Sprint 3, attached are the youtube links to the relevant videos:
-Backlog Refinement:  https://youtu.be/vbvBmt_OZjA 
-Sprint Planning: https://youtu.be/xkEVTiy62R4 
-Daily Standup: https://youtu.be/UzJFDxcGh2o
-Sprint Review:  https://youtu.be/tsbCQvC7CXM 
-Sprint Retro: https://youtu.be/qIttG_cIi3I 
+1. Backlog Refinement:  https://youtu.be/vbvBmt_OZjA
+2. Sprint Planning: https://youtu.be/xkEVTiy62R4
+3. Daily Standup: https://youtu.be/UzJFDxcGh2o
+4. Sprint Review:  https://youtu.be/tsbCQvC7CXM
+5. Sprint Retro: https://youtu.be/qIttG_cIi3I 
 
 
 ## Project Structure

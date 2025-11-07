@@ -94,7 +94,7 @@ def _invoke_delete_notify(module, db, project_id, task_id, deleter):
         "projectTitle": proj_data.get("title"),
         "taskTitle": task_data.get("title"),
         "deletedBy": deleter,
-        "timestamp": datetime.datetime.utcnow().isoformat(),
+        "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
     }
 
     if recipients:

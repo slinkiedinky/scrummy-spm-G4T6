@@ -8,8 +8,8 @@ def check_and_create_deadline_notifications():
     - 1 day before the deadline
     - On the deadline day
     """
-    now = dt.datetime.utcnow()
-    today = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    now = dt.datetime.now(dt.timezone.utc)
+    today = now.replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=None)
     tomorrow = today + dt.timedelta(days=1)
     day_after_tomorrow = today + dt.timedelta(days=2)
 

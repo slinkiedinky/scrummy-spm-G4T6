@@ -1,6 +1,6 @@
 
 from flask import Blueprint, request, jsonify
-from datetime import datetime
+from datetime import datetime, timezone
 import pytz
 import uuid
 import re
@@ -65,7 +65,7 @@ def standalone_comments_collection(task_id):
                 author = user_data.get('fullName') or user_data.get('name')
             else:
                 author = None
-        utc_now = datetime.utcnow()
+        utc_now = datetime.now(timezone.utc)
         sgt = pytz.timezone('Asia/Singapore')
         sgt_now = pytz.utc.localize(utc_now).astimezone(sgt)
         
@@ -165,7 +165,7 @@ def standalone_comment_item(task_id, comment_id):
         comment['text'] = data.get('text', comment.get('text'))
         comment['edited'] = True
         # Format edited_timestamp in SGT and ISO format
-        utc_now = datetime.utcnow()
+        utc_now = datetime.now(timezone.utc)
         sgt = pytz.timezone('Asia/Singapore')
         sgt_now = pytz.utc.localize(utc_now).astimezone(sgt)
         comment['edited_timestamp'] = sgt_now.isoformat()
@@ -254,7 +254,7 @@ def comments_collection(task_id):
             else:
                 author = None
         # Use pytz to convert UTC to Singapore Time (SGT, UTC+8)
-        utc_now = datetime.utcnow()
+        utc_now = datetime.now(timezone.utc)
         sgt = pytz.timezone('Asia/Singapore')
         sgt_now = pytz.utc.localize(utc_now).astimezone(sgt)
         
@@ -360,7 +360,7 @@ def comment_item(task_id, comment_id):
         comment['text'] = data.get('text', comment.get('text'))
         comment['edited'] = True
         # Format edited_timestamp in SGT and ISO format
-        utc_now = datetime.utcnow()
+        utc_now = datetime.now(timezone.utc)
         sgt = pytz.timezone('Asia/Singapore')
         sgt_now = pytz.utc.localize(utc_now).astimezone(sgt)
         comment['edited_timestamp'] = sgt_now.isoformat()
@@ -433,7 +433,7 @@ def subtask_comments_collection(task_id, subtask_id):
                 author = user_data.get('fullName') or user_data.get('name')
             else:
                 author = None
-        utc_now = datetime.utcnow()
+        utc_now = datetime.now(timezone.utc)
         sgt = pytz.timezone('Asia/Singapore')
         sgt_now = pytz.utc.localize(utc_now).astimezone(sgt)
         
@@ -549,7 +549,7 @@ def subtask_comment_item(task_id, subtask_id, comment_id):
         comment['text'] = data.get('text', comment.get('text'))
         comment['edited'] = True
         # Format edited_timestamp in SGT and ISO format
-        utc_now = datetime.utcnow()
+        utc_now = datetime.now(timezone.utc)
         sgt = pytz.timezone('Asia/Singapore')
         sgt_now = pytz.utc.localize(utc_now).astimezone(sgt)
         comment['edited_timestamp'] = sgt_now.isoformat()

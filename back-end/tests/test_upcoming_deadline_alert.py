@@ -60,8 +60,8 @@ def test_upcoming_deadline_alert_24h_before_due_date(client, mock_firestore, moc
 
     # Create task with due date 1 day from now (tomorrow)
     # Use datetime without timezone to match deadline_notifications.py implementation
-    tomorrow = datetime.utcnow() + timedelta(days=1)
-    tomorrow = tomorrow.replace(hour=0, minute=0, second=0, microsecond=0)
+    tomorrow = datetime.now(timezone.utc) + timedelta(days=1)
+    tomorrow = tomorrow.replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=None)
     tomorrow_str = tomorrow.isoformat()
 
     task_data = {
@@ -168,8 +168,8 @@ def test_upcoming_deadline_alert_not_shown_for_completed_tasks(client, mock_fire
     project_name = "Project 1"
 
     # Create COMPLETED task with due date 1 day from now
-    tomorrow = datetime.utcnow() + timedelta(days=1)
-    tomorrow = tomorrow.replace(hour=0, minute=0, second=0, microsecond=0)
+    tomorrow = datetime.now(timezone.utc) + timedelta(days=1)
+    tomorrow = tomorrow.replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=None)
     tomorrow_str = tomorrow.isoformat()
 
     task_data = {
@@ -252,8 +252,8 @@ def test_upcoming_deadline_alert_multiple_tasks(client, mock_firestore, mock_add
     project_id = "project123"
     project_name = "Project 1"
 
-    tomorrow = datetime.utcnow() + timedelta(days=1)
-    tomorrow = tomorrow.replace(hour=0, minute=0, second=0, microsecond=0)
+    tomorrow = datetime.now(timezone.utc) + timedelta(days=1)
+    tomorrow = tomorrow.replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=None)
     tomorrow_str = tomorrow.isoformat()
 
     # Create multiple tasks due tomorrow

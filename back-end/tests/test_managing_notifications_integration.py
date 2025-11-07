@@ -140,7 +140,7 @@ def _dismiss_notification(module, db, notification_id, user):
 def test_notifications_appear_positive(monkeypatch, mock_firestore):
     import notifications
     user_id = "user-A"
-    now = datetime.datetime.utcnow()
+    now = datetime.datetime.now(datetime.timezone.utc)
     notifs = [
         {"id": "n1", "to_user": user_id, "title": "A", "read": False, "timestamp": (now - datetime.timedelta(minutes=1)).isoformat()},
         {"id": "n2", "to_user": user_id, "title": "B", "read": False, "timestamp": now.isoformat()},
@@ -168,7 +168,7 @@ def test_notifications_empty_state(monkeypatch, mock_firestore):
 def test_notifications_mark_unread_until_viewed_positive(monkeypatch, mock_firestore):
     import notifications
     user_id = "u1"
-    now = datetime.datetime.utcnow()
+    now = datetime.datetime.now(datetime.timezone.utc)
     notif = {"id": "n-read", "to_user": user_id, "title": "Click me", "read": False, "timestamp": now.isoformat()}
     snaps = _setup_notifications(mock_firestore, user_id=user_id, notifications=[notif])
     monkeypatch.setattr(notifications, "db", mock_firestore)
@@ -187,7 +187,7 @@ def test_notifications_mark_unread_until_viewed_positive(monkeypatch, mock_fires
 def test_mark_as_read_updates_and_remains_in_list_positive(monkeypatch, mock_firestore):
     import notifications
     user = "u_mark"
-    now = datetime.datetime.utcnow()
+    now = datetime.datetime.now(datetime.timezone.utc)
     notif = {"id": "nmark", "to_user": user, "title": "Mark me", "read": False, "timestamp": now.isoformat()}
     snaps = _setup_notifications(mock_firestore, user_id=user, notifications=[notif])
     # snaps[0] is the MagicMock snapshot; we'll mutate its to_dict return to simulate update later
@@ -210,7 +210,7 @@ def test_mark_as_read_updates_and_remains_in_list_positive(monkeypatch, mock_fir
 def test_notifications_ordering_positive(monkeypatch, mock_firestore):
     import notifications
     user = "ordUser"
-    now = datetime.datetime.utcnow()
+    now = datetime.datetime.now(datetime.timezone.utc)
     notifs = [
         {"id": "a", "to_user": user, "title": "old", "timestamp": (now - datetime.timedelta(minutes=5)).isoformat()},
         {"id": "b", "to_user": user, "title": "mid", "timestamp": (now - datetime.timedelta(minutes=2)).isoformat()},
@@ -228,7 +228,7 @@ def test_notifications_ordering_positive(monkeypatch, mock_firestore):
 def test_notifications_order_stability_negative(monkeypatch, mock_firestore):
     import notifications
     user = "stableUser"
-    now = datetime.datetime.utcnow()
+    now = datetime.datetime.now(datetime.timezone.utc)
     notifs = [
         {"id": "1", "to_user": user, "title": "one", "timestamp": (now - datetime.timedelta(minutes=3)).isoformat()},
         {"id": "2", "to_user": user, "title": "two", "timestamp": (now - datetime.timedelta(minutes=1)).isoformat()},

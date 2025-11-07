@@ -7,17 +7,14 @@ The internal Smart Task Management system supports the following six core functi
 
 | Area | Description |
 | --- | --- |
-| **User Authorisation & Authentication** | Role-based access (employee, manager, admin) ensures the right data reaches the right people. |
+| **User Authorisation & Authentication** | Role-based access (employee, manager, HR) ensures the right data reaches the right people. |
 | **Task Management** | Create, view, update, and complete tasks with metadata like deadlines, notes, assignees, and status. |
 | **Task Grouping & Organisation** | Cluster work by project, department, or theme to maintain focus and context. |
-| **Activity Tracking & History** | Full audit trail of updates for accountability and conflict resolution. |
 | **User Roles & Management** | Invite users, assign teams, and govern permissions across the organisation. |
 | **Dashboard & Insights** | Visualise progress, identify blockers, and surface team metrics for better decision-making. |
 | **Deadline & Schedule Tracking** | Attach due dates, trigger reminders, and expose overdue work for follow-up. |
-| **Calendar Integration** | Calendar view (with potential drag-and-drop) to plan workload across days/weeks/months. |
-| **Focus Timer & Time Logging** | Built-in timer (e.g., Pomodoro) plus optional time tracking for self/manager insights. |
+| **Calendar Integration** | Calendar view to see schedules of different members of a project. |
 | **Notification System** | In-app or email alerts for comments, updates, approvals, and deadlines. |
-| **User Personalisation** | Customise interface preferences such as light/dark mode and task list layouts. |
 | **Report Generation & Exporting** | Produce shareable summaries (PDF, spreadsheet) for meetings and reviews. |
 
 ## Users

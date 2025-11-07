@@ -311,15 +311,28 @@ def create_next_standalone_recurring_instance(task_id, completed_task_data):
     try:
         creator_id = completed_task_data.get("createdBy")
         if creator_id:
-            add_notification(
-                user_id=creator_id,
-                notification_type="recurring_task_created",
-                message=f"New recurring task instance created: {new_instance['title']}",
-                related_entity_type="task",
-                related_entity_id=new_task_id
-            )
+            # Build task_data dict
+            task_data = {
+                "author": creator_id,
+                "userId": creator_id,
+                "assigneeId": new_instance.get("assigneeId"),
+                "projectId": project_id,
+                "taskId": new_task_id,
+                "title": new_instance.get("title"),
+                "description": new_instance.get("description", ""),
+                "dueDate": new_instance.get("dueDate"),
+            }
+            
+            # Get project name
+            project_ref = db.collection("projects").document(project_id)
+            project_doc = project_ref.get()
+            project_name = project_doc.to_dict().get("name", "Unknown Project") if project_doc.exists else "Unknown Project"
+            
+            # Call with correct signature
+            add_notification(task_data, project_name)
     except Exception as e:
         print(f"Failed to send notification: {e}")
+
     
     return new_task_id, None
 

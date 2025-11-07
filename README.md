@@ -21,11 +21,10 @@ The internal Smart Task Management system supports the following six core functi
 
 ### Staff
 - Securely log in and manage a personal task space.
-- Create/update tasks and subtasks with deadlines, notes, and ownership.
+- Create/update tasks and subtasks with deadlines, descriptions, and ownership.
 - Group tasks under projects or categories for clarity.
 - Track schedules via calendar views and receive alerts for upcoming or overdue work.
-- Leverage productivity tools (timers, reminders) to stay focused when unsupervised.
-- Collaborate through shared tasks, comments, and personalised UI (e.g., dark mode).
+- Collaborate through shared tasks and comments.
 
 ### Managers & Directors
 - Oversee team workload, schedules, and deadlines at a glance.

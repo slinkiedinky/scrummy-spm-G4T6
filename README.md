@@ -9,7 +9,7 @@ The internal Smart Task Management system supports the following six core functi
 | --- | --- |
 | **User Authorisation & Authentication** | Role-based access (employee, manager, HR) ensures the right data reaches the right people. |
 | **Task Management** | Create, view, update, and complete tasks with metadata like deadlines, notes, assignees, and status. |
-| **Task Grouping & Organisation** | Cluster work by project, department, or theme to maintain focus and context. |
+| **Task Grouping & Organisation** | Cluster work by project to maintain focus and context. |
 | **User Roles & Management** | Invite users, assign teams, and govern permissions across the organisation. |
 | **Dashboard & Insights** | Visualise progress, identify blockers, and surface team metrics for better decision-making. |
 | **Deadline & Schedule Tracking** | Attach due dates, trigger reminders, and expose overdue work for follow-up. |
@@ -22,7 +22,7 @@ The internal Smart Task Management system supports the following six core functi
 ### Staff
 - Securely log in and manage a personal task space.
 - Create/update tasks and subtasks with deadlines, descriptions, and ownership.
-- Group tasks under projects or categories for clarity.
+- Group tasks under projects for clarity.
 - Track schedules via calendar views and receive alerts for upcoming or overdue work.
 - Collaborate through shared tasks and comments.
 
